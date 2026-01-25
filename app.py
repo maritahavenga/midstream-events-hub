@@ -26,9 +26,12 @@ st.markdown("""<style>
 .res-box{background:#e6f4ea; padding:10px; border-radius:8px; margin:5px 0; border:1px solid #1e7e34; color: #1e7e34; font-weight:bold; text-align:center;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
-.res-btn { background:#1e7e34!important; border: 2px solid #ffffff !important; }
 #back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
-h2 { color: white !important; text-align: center; margin-top: -10px; text-transform: uppercase; letter-spacing: 1px; }
+h2 { color: white !important; text-align: center; margin-top: -10px; text-transform: uppercase; }
+div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
+div[data-baseweb="select"] * { color:white !important; }
+label { color:white !important; font-weight:bold; }
+.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
 </style>
 <div id="top"></div>
 <a href="#top" id="back-to-top">↑</a>
@@ -65,12 +68,39 @@ tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 RESULTS"])
 with tab_up:
     st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
     if not df_all.empty:
-        df_up = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
-        search_up = st.text_input("🔍 Search Upcoming:", placeholder="U13B, Hockey...", key="search_up")
-        s = search_up.lower().replace(" ","")
-        if not df_up.empty:
-            if s: df_up = df_up[df_up.apply(lambda r: s in str(r).lower().replace(" ",""), axis=1)]
-            for _, r in df_up.iterrows():
+        df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
+        
+        # 1. Refresh Button
+        if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
+            st.cache_data.clear()
+            st.rerun()
+
+        # 2. View Toggle
+        view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="v_up")
+        
+        # 3. Search Bar with Auto-Conversion (Meisies/Seuns -> G/B)
+        raw_s = st.text_input("🔍 Search:", placeholder="U13B, Hockey...", key="search_up")
+        s = raw_s.lower().replace("seuns","b").replace("boys","b").replace("girls","g").replace("dogters","g").replace("meisies","g").replace("o/","u/").replace(" ","")
+        
+        # 4. Dropdown Filters
+        c = st.columns([1, 1, 1])
+        with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
+        
+        f_df = df_up_raw if cat == "All" else df_up_raw[df_up_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+        if view_opt == "Next 7 Days":
+            f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+
+        with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
+        with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
+
+        # Apply final filtering
+        df = f_df
+        if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
+        if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
+        if s: df = df[df.apply(lambda r: s in str(r).lower().replace("o/","u/").replace(" ",""), axis=1)]
+
+        if not df.empty:
+            for _, r in df.iterrows():
                 age_val = str(r.iloc[2]).strip()
                 title = f"{r.iloc[1]} {age_val}" if (age_val and age_val.lower() != 'nan') else str(r.iloc[1])
                 ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
@@ -88,7 +118,7 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("No upcoming events found.")
+            st.info("No matching upcoming events found.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
@@ -106,7 +136,7 @@ with tab_res:
                 title_res = f"{r.iloc[1]} {age_res}" if (age_res and age_res.lower() != 'nan') else str(r.iloc[1])
                 res_disp = ""
                 if res_link:
-                    res_disp = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn">🏆 VIEW FULL RESULTS</a></div>'
+                    res_disp = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn" style="background:#1e7e34!important;">🏆 VIEW FULL RESULTS</a></div>'
                 elif res_raw.lower() != 'nan' and res_raw != "":
                     res_disp = f'<div class="res-box">🏆 RESULT: {res_raw}</div>'
                 else:
