@@ -26,9 +26,10 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
-/* Clearer Refresh Button Styling */
-.stButton>button { width: 100%; background-color: #800000; color: white; border: 1px solid white; font-size: 0.75rem; margin-bottom: 20px;}
-.update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 10px; opacity: 0.8; }
+/* Bottom Sync Button Styling */
+.sync-container {margin-top: 30px; padding-bottom: 50px;}
+.stButton>button { width: 100%; background-color: rgba(128, 0, 0, 0.8); color: white; border: 1px solid rgba(255,255,255,0.3); font-size: 0.75rem; border-radius: 10px;}
+.update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 10px; opacity: 0.7; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
@@ -36,10 +37,9 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=2) # Very short TTL for live editing
-def load(timestamp):
-    # The 'timestamp' argument forces the cache to invalidate whenever we change it
-    response = requests.get(f"{U}&t={timestamp}")
+@st.cache_data(ttl=5) 
+def load(cb):
+    response = requests.get(f"{U}&cachebust={cb}")
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
     def parse_dt(x):
@@ -55,20 +55,16 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Handle Persistant URL Parameters
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
 if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
 
 try:
-    # We pass a rounded timestamp to the loader to ensure fresh data
     df_raw, update_time = load(int(time.time() / 5)) 
     
-    # Manual Refresh Button at the TOP for you to use during editing
-    if st.button("🔄 Sync with Google Sheets Now"):
-        st.cache_data.clear()
-        st.rerun()
+    st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
+    st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
 
     c = st.columns([1, 1, 1])
     with c[0]:
@@ -115,6 +111,12 @@ try:
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
             {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
-    st.markdown(f'<div class="update-ts">Last Sync: {update_time.strftime("%H:%M:%S")}</div>', unsafe_allow_html=True)
+    # REFRESH BUTTON AT THE BOTTOM
+    st.markdown("<div class='sync-container'>", unsafe_allow_html=True)
+    if st.button(f"🔄 Sync Live Data ({update_time.strftime('%H:%M:%S')})"):
+        st.cache_data.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
 except Exception:
     st.info("Syncing with Google...")
