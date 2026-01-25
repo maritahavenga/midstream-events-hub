@@ -15,7 +15,6 @@ st.markdown("""<style>
     text-align: center; text-decoration: none !important;
     font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
     border-radius: 6px; display: block; white-space: nowrap;
-    letter-spacing: -0.2px;
 }
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
@@ -46,18 +45,20 @@ try:
         is_l = nfo.lower().startswith('http')
         bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo and nfo.lower()!='nan' and not is_l) else ""
 
+        # Build Button Row
         btn_html = '<div class="btn-row">'
-        # We look for the columns and clean the data immediately
-        links = {
-            "PROGRAMME": str(r.get('Program Link','')).strip(),
-            "TEAM": str(r.get('Team/Cast Link','')).strip(),
-            "CONFIRM": str(r.get('Transport','')).strip()
-        }
         
-        for label, val in links.items():
-            if val.lower().startswith("http"):
-                btn_html += f'<a href="{val}" target="_blank" class="btn">{label}</a>'
-        
+        # Pull links regardless of header name
+        p_val = str(r.get('Program Link','')).strip()
+        t_val = str(r.get('Team/Cast Link','')).strip()
+        s_val = str(r.get('Transport','')).strip()
+
+        if p_val.lower().startswith("http"):
+            btn_html += f'<a href="{p_val}" target="_blank" class="btn">PROGRAMME</a>'
+        if t_val.lower().startswith("http"):
+            btn_html += f'<a href="{t_val}" target="_blank" class="btn">TEAM</a>'
+        if s_val.lower().startswith("http"):
+            btn_html += f'<a href="{s_val}" target="_blank" class="btn">CONFIRM</a>'
         if is_l:
             btn_html += f'<a href="{nfo}" target="_blank" class="btn">INFORMATION</a>'
         
@@ -70,6 +71,5 @@ try:
             {bx}
             {btn_html}
         </div>''', unsafe_allow_html=True)
-
-except Exception:
-    st.info("Syncing events...")
+except:
+    st.info("Syncing...")
