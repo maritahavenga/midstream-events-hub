@@ -15,9 +15,8 @@ st.markdown("""<style>
     text-align: center; text-decoration: none !important;
     font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
     border-radius: 6px; display: block; white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: opacity 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.btn:active { opacity: 0.7; }
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
@@ -33,6 +32,11 @@ def load():
     df = pd.read_csv(U)
     return df
 
+# Helper to clean and check links
+def get_lnk(val):
+    s = str(val).strip()
+    return s if "http" in s.lower() else None
+
 try:
     data_raw = load()
     ch = st.selectbox("Filter Events:", ["All", "Sport", "Culture", "Academics"])
@@ -40,21 +44,19 @@ try:
 
     for _, r in df.iterrows():
         evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
-        p_l, t_l, s_l, i_l = str(r.iloc[4]).strip(), str(r.iloc[5]).strip(), str(r.iloc[6]).strip(), str(r.iloc[7]).strip()
+        p_l, t_l, s_l, i_l = get_lnk(r.iloc[4]), get_lnk(r.iloc[5]), get_lnk(r.iloc[6]), str(r.iloc[7]).strip()
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        is_info_link = i_l.lower().startswith('http')
-        bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_info_link) else ""
+        
+        # Info logic: check if Column H is a link or text
+        is_info_lnk = "http" in i_l.lower()
+        bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_info_lnk) else ""
 
         btn_html = '<div class="btn-row">'
-        if p_l.lower().startswith("http"):
-            btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
-        if t_l.lower().startswith("http"):
-            btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
-        if s_l.lower().startswith("http"):
-            btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
-        if is_info_link:
-            btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
+        if p_l: btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
+        if t_l: btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
+        if s_l: btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
+        if is_info_lnk: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
         btn_html += '</div>'
 
         st.markdown(f'''<div class="card">
@@ -64,5 +66,5 @@ try:
             {bx}
             {btn_html}
         </div>''', unsafe_allow_html=True)
-except Exception:
-    st.info("Syncing events...")
+except:
+    st.info("Syncing...")
