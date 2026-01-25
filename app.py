@@ -22,17 +22,16 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
-.stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
+.stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; border-radius: 8px; }
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
-# Blank Calendar SVG
 CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3,4.9 3,6V20C3,21.1 3.89,22 5,22H19C20.1,22 21,21.1 21,20V6C21,4.9 20.1,4 19,4M19,20H5V9H19V20M5,7V6H19V7H5Z"/></svg>'
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=1)
+@st.cache_data(ttl=5) # Slightly longer cache to stop it from hanging
 def load():
     df = pd.read_csv(U)
     def parse_dt(x):
@@ -60,36 +59,39 @@ try:
     grps = sorted(list(set([n.split()[0] for n in nms if n.strip()])))
     
     with c[1]:
-        # CHANGED TO MULTISELECT for de-cluttering
-        qs = st.multiselect("Activities:", grps, placeholder="Select activities...", key="evt_sel")
+        qs = st.multiselect("Activities:", grps, placeholder="Select...", key="evt_sel")
     
     with c[2]:
-        if st.button("Clear"):
+        if st.button("Reset"):
+            # Instant reset without the heavy cache clearing that causes hanging
             st.session_state.cat_sel = "All"
             st.session_state.evt_sel = []
             st.rerun()
 
     df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
     
-    for _, r in df.iterrows():
-        evt, ven = str(r.iloc[1]), str(r.iloc[3])
-        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
-        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
-        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
-        
-        btns = '<div class="btn-row">'
-        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
-        btns += '</div>'
-        
-        st.markdown(f'''<div class="card">
-            <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
-            <div class="t">{evt}</div>
-            <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-            {bx}{btns}</div>''', unsafe_allow_html=True)
+    if df.empty:
+        st.markdown("<p style='color:white;text-align:center;'>No events found.</p>", unsafe_allow_html=True)
+    else:
+        for _, r in df.iterrows():
+            evt, ven = str(r.iloc[1]), str(r.iloc[3])
+            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
+            p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
+            i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+            
+            btns = '<div class="btn-row">'
+            if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+            if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+            if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+            if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+            btns += '</div>'
+            
+            st.markdown(f'''<div class="card">
+                <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
+                <div class="t">{evt}</div>
+                <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+                {bx}{btns}</div>''', unsafe_allow_html=True)
 
     st.markdown(f'<div class="update-ts">Live Data Updated: {update_time.strftime("%d %b %H:%M")}</div>', unsafe_allow_html=True)
 except Exception:
