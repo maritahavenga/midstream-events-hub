@@ -17,8 +17,8 @@ st.markdown("""<style>
     font-weight: bold!important; font-size: 0.62rem!important; padding: 12px 1px!important;
     border-radius: 6px!important; display: block!important; white-space: nowrap!important;
 }
-div[data-baseweb="select"] > div, div[data-baseweb="input"] > div { background-color: #800000 !important; border: none !important; }
-div[data-baseweb="select"] *, div[data-baseweb="input"] * { color: white !important; }
+div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
+div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
 </style>""", unsafe_allow_html=True)
@@ -37,29 +37,35 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Clear function for the Reset button
-def clear_filters():
-    st.session_state.cat_key = "All"
-    st.session_state.evt_key = "All Events"
-
 try:
     df_raw = load()
     
-    # Get unique events from Column B (index 1) for the dropdown
-    event_list = ["All Events"] + sorted(df_raw.iloc[:, 1].dropna().unique().tolist())
-
+    # Setup columns for the top bar
     c1, c2, c3 = st.columns([2, 2, 1])
+    
     with c1:
-        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_key")
-    with c2:
-        # Auto-populated dropdown instead of text input
-        q = st.selectbox("Find Event:", event_list, key="evt_key")
-    with c3:
-        st.button("Reset", on_click=clear_filters)
+        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
 
-    df = df_raw
+    # Narrow down the list based on the Category first
     if cat != "All":
-        df = df[df.iloc[:, 0].str.contains(cat, case=False, na=False)]
+        filtered_for_list = df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    else:
+        filtered_for_list = df_raw
+
+    # Create the dynamic event list based on the category chosen
+    event_list = ["All Events"] + sorted(filtered_for_list.iloc[:, 1].dropna().unique().tolist())
+
+    with c2:
+        q = st.selectbox("Find Event:", event_list, key="evt_sel")
+        
+    with c3:
+        if st.button("Reset"):
+            st.session_state.cat_sel = "All"
+            st.session_state.evt_sel = "All Events"
+            st.rerun()
+
+    # Final Filter for the Cards
+    df = filtered_for_list
     if q != "All Events":
         df = df[df.iloc[:, 1] == q]
 
