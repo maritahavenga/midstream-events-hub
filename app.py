@@ -24,12 +24,12 @@ div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
-/* Style for the calendar image icon */
-.cal-icon { width: 18px; vertical-align: middle; margin-right: 5px; margin-bottom: 3px; }
+/* Clean SVG Styling */
+.cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
-# Path to a generic calendar icon with no numbers
-CAL_URL = "https://cdn-icons-png.flaticon.com/512/3652/3652191.png"
+# Clean Calendar SVG (Blank inside)
+CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3,4.9 3,6V20C3,21.1 3.89,22 5,22H19C20.1,22 21,21.1 21,20V6C21,4.9 20.1,4 19,4M19,20H5V9H19V20M5,7V6H19V7H5Z"/></svg>'
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
@@ -82,9 +82,8 @@ try:
         if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
         btns += '</div>'
         
-        # Using an image for the calendar instead of an emoji
         st.markdown(f'''<div class="card">
-            <div style="font-size:0.85rem;color:#333"><img src="{CAL_URL}" class="cal-icon"> {dat}</div>
+            <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
             <div class="t">{evt}</div>
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
             {bx}{btns}</div>''', unsafe_allow_html=True)
