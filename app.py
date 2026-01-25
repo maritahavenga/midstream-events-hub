@@ -18,7 +18,6 @@ st.markdown("<h1 style='text-align:center;color:white;'>EVENTS HUB 2026</h1>", u
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-# Reduced TTL to 2 seconds for near-instant updates
 @st.cache_data(ttl=2)
 def load():
     df = pd.read_csv(URL)
@@ -41,7 +40,6 @@ try:
         m_url = f"https://www.google.com/maps/search/?api=1&query={up.quote(v + ' Midstream')}"
         
         is_link = info.startswith('http')
-        # This part ensures the info box shows up if there is any text
         info_html = f'<div class="box">ℹ️ <b>Note:</b> {info}</div>' if (info.strip() != "" and info.lower() != 'nan' and not is_link) else ""
 
         st.markdown(f'''<div class="card"><img src="{icon}" width="50" style="float:right"><div style="color:#555;font-weight:bold">📅 {r.get("Date","TBA")}</div><div class="t">{r.get("Event","Event")}</div><div style="margin-top:8px">📍 Venue: <a href="{m_url}" target="_blank" class="v">{v}</a></div>{info_html}</div>''', unsafe_allow_html=True)
@@ -56,7 +54,7 @@ try:
         if pd.notna(r.get('Transport/Sign-up')):
             with c3: st.link_button("🚌 BUS SIGN-UP", str(r.get('Transport/Sign-up')))
         if is_link:
-            with c4: st.link_button("ℹ️ VIEW LETTER", info)
+            with c4: st.link_button("ℹ️ INFORMATION", info) 
         st.markdown("<br>", unsafe_allow_html=True)
-except Exception as e:
-    st.info("Syncing...")
+except Exception:
+    st.info("Syncing events...")
