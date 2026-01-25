@@ -15,7 +15,9 @@ st.markdown("""<style>
     text-align: center; text-decoration: none !important;
     font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
     border-radius: 6px; display: block; white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: opacity 0.2s;
 }
+.btn:active { opacity: 0.7; }
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
@@ -29,24 +31,18 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=2)
 def load():
     df = pd.read_csv(U)
-    # We ignore the names and just use the column position
     return df
 
 try:
     data_raw = load()
     ch = st.selectbox("Filter Events:", ["All", "Sport", "Culture", "Academics"])
-    
-    # Filter by the first column (Category)
     df = data_raw if ch == "All" else data_raw[data_raw.iloc[:, 0].str.contains(ch, case=False, na=False)]
 
     for _, r in df.iterrows():
-        # Get data by position (0=Cat, 1=Evt, 2=Dat, 3=Ven, 4=P, 5=T, 6=S, 7=I)
         evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
         p_l, t_l, s_l, i_l = str(r.iloc[4]).strip(), str(r.iloc[5]).strip(), str(r.iloc[6]).strip(), str(r.iloc[7]).strip()
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        
-        # Check if the last column (Information) is a link or text
         is_info_link = i_l.lower().startswith('http')
         bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_info_link) else ""
 
@@ -68,5 +64,5 @@ try:
             {bx}
             {btn_html}
         </div>''', unsafe_allow_html=True)
-except Exception as e:
-    st.info("Refreshing events...")
+except Exception:
+    st.info("Syncing events...")
