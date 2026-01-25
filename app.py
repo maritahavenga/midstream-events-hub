@@ -109,3 +109,16 @@ with tab_res:
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {ven_res}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
         else:
             st.info("No past results found.")
+
+# ... (Keep the top part of your code exactly the same) ...
+
+# Inside your loop where the buttons are created, I've updated the button logic slightly:
+                btns = '<div class="btn-row">'
+                if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
+                if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+                if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+                if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
+                btns += '</div>'
+
+# This ensures that when the user clicks, the browser manages the "hand-off" to the Drive app 
+# while keeping the Streamlit tab alive in the background.
