@@ -9,12 +9,15 @@ import io
 import time
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Configuration
+# 1. Page Configuration & Hide Menu
 st.set_page_config(page_title="LMCP Events & Results", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling (Hides the 3 dots/Rerun for a cleaner look)
 st.markdown("""<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .stTabs [data-baseweb="tab-list"] {gap: 8px; background-color: #008080; justify-content: center;}
 .stTabs [data-baseweb="tab"] { height: 45px; background-color: #800000; color: white; border-radius: 10px 10px 0px 0px; font-weight: bold; border: 1px solid #00cccc;}
@@ -33,8 +36,6 @@ div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
 </style>
-<div id="top"></div>
-<a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
 URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
@@ -43,6 +44,7 @@ def load_all_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
+        # Voeg 'n tydstempel by om te keer dat Google ou data "cache"
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         def parse_dt(x):
@@ -65,22 +67,18 @@ def smart_filter(df, query):
     q = query.lower().strip()
     translations = {
         "hokkie": "hockey", "atletiek": "athletics", "swem": "swimming",
-        "muurbal": "squash", "seuns": "b", "boys": "b", "seun": "b",
-        "meisies": "g", "girls": "g", "meisie": "g"
+        "muurbal": "squash", "tennis": "tennis", "seuns": "b", "meisies": "g"
     }
-    for afrikaans, english in translations.items():
-        q = q.replace(afrikaans, english)
+    for k, v in translations.items(): q = q.replace(k, v)
     
     terms = q.split()
     for term in terms:
-        clean_term = term.replace("o/","").replace("u/","").replace(" ","")
-        if not clean_term: continue
-        if clean_term in ['b', 'g']:
-            # Soek slegs in die Age Group kolom vir geslag
-            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean_term, na=False)
+        clean = term.replace("o/","").replace("u/","").replace(" ","")
+        if not clean: continue
+        if clean in ['b', 'g']:
+            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean, na=False)
         else:
-            # Soek ander terme in die hele ry
-            mask = df.apply(lambda r: clean_term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+            mask = df.apply(lambda r: clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
         df = df[mask]
     return df
 
@@ -112,10 +110,11 @@ with tab_up:
         if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
         df = smart_filter(df, raw_s)
 
-        for _, r in df.iterrows():
+        for i, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
             title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
-            ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+            ven = str(r.iloc[4])
             prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
             team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
@@ -137,7 +136,7 @@ with tab_res:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
         raw_res_s = st.text_input("🔍 Search History:", placeholder="Search...", key="search_res")
         df_res = smart_filter(df_past, raw_res_s)
-        for _, r in df_res.iterrows():
+        for i, r in df_res.iterrows():
             res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
             res_link = get_l(res_raw)
             dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
