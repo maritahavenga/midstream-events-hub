@@ -10,8 +10,6 @@ import time
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="Events Hub", layout="centered")
-
-# Auto-refresh every 2 minutes
 st_autorefresh(interval=120000, key="datarefresh")
 
 st.markdown("""<style>
@@ -37,8 +35,7 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
-.sync-container {margin-top:30px; padding-bottom:100px;}
-.stButton>button { width:100%; background-color:#800000; color:white; border:1px solid white; font-size:0.85rem; border-radius:10px; height:50px; font-weight:bold;}
+.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
 </style>
 <a href="#" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
@@ -67,50 +64,46 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-params = st.query_params
-if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
-if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
-if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
-
 try:
     df_raw, update_time = load_fresh() 
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     
-    # SEARCH BAR
-    raw_search = st.text_input("🔍 Search (e.g. U12 Boys, Dogters, Venue):", placeholder="Search...")
-    
-    # KEYWORD TRANSLATION: If they type "Boys", search for "B", etc.
-    search_term = raw_search.lower()
-    if "boy" in search_term or "seun" in search_term: search_term = search_term.replace("boys", "b").replace("boy", "b").replace("seun", "b").replace("seuns", "b")
-    if "girl" in search_term or "dogter" in search_term: search_term = search_term.replace("girls", "g").replace("girl", "g").replace("dogter", "g").replace("dogters", "g")
-    # Remove spaces for things like "U 12" -> "U12"
-    search_term = search_term.replace(" ", "")
+    if st.button(f"🔄 VERFRIS DATA ({update_time.strftime('%H:%M')})"):
+        st.cache_data.clear()
+        st.rerun()
 
+    raw_search = st.text_input("🔍 Soek (bv. 13B, Dogters, Plek):", placeholder="Tik hier...")
+    
+    # --- SLIM SOEK LOGIKA ---
+    s = raw_search.lower()
+    # Vervang woorde slegs as hulle "alleen" staan of aan die einde is
+    s = s.replace("boys", "b").replace("seuns", "b").replace("seun", "b").replace("boy", "b")
+    s = s.replace("girls", "g").replace("dogters", "g").replace("dogter", "g").replace("girl", "g")
+    s = s.replace("o/", "").replace("u/", "").replace("span", "").replace(" ", "")
+    
     c = st.columns([1, 1, 1])
     with c[0]:
-        cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
+        cat = st.selectbox("Tipe:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
     
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
     unique_acts = sorted([x for x in f_l.iloc[:, 1].dropna().unique() if str(x).strip()])
     unique_ages = sorted([x for x in f_l.iloc[:, 2].dropna().unique() if str(x).strip() and str(x) != ""])
     
     with c[1]:
-        sel_acts = st.multiselect("Activity:", unique_acts, key="act_sel")
+        sel_acts = st.multiselect("Aktiwiteit:", unique_acts, key="act_sel")
     with c[2]:
-        sel_ages = st.multiselect("Age:", unique_ages, key="age_sel")
-
-    st.query_params.from_dict({"type": cat, "act": sel_acts, "age": sel_ages})
+        sel_ages = st.multiselect("Ouderdom:", unique_ages, key="age_sel")
 
     df = f_l
     if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
     if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
     
-    # ADVANCED SEARCH: Checks translated keywords against the data
-    if search_term:
-        df = df[df.apply(lambda r: search_term in str(r).replace(" ", "").lower(), axis=1)]
+    if s:
+        # Hierdie soek nou baie meer spesifiek
+        df = df[df.apply(lambda r: s in str(r).replace("o/", "").replace("u/", "").replace(" ", "").lower(), axis=1)]
 
     if df.empty:
-        st.markdown(f'<div class="no-data"><h3>📭 No information currently</h3><p>Try different keywords or filters.</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>📭 Geen resultate</h3><p>Probeer "13B" of "13A" sonder ekstra woorde.</p></div>', unsafe_allow_html=True)
     else:
         for _, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
@@ -121,13 +114,13 @@ try:
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
             mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
             
-            bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
-            tm_bx = f'<div class="team-box"><b>Team Info:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
+            bx = f'<div class="box"><b>Nota:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
+            tm_bx = f'<div class="team-box"><b>Span-inligting:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
 
             btns = '<div class="btn-row">'
-            if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
-            if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
-            if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+            if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAM</a>'
+            if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">SPAN</a>'
+            if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">BEVESTIG</a>'
             if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
             btns += '</div>'
             
@@ -137,10 +130,5 @@ try:
                 <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
                 {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
-    st.markdown("<div class='sync-container'>", unsafe_allow_html=True)
-    if st.button(f"🔄 Sync Live Data ({update_time.strftime('%H:%M:%S')})"):
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
 except Exception:
-    st.info("Syncing with live data...")
+    st.info("Besig met data...")
