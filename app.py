@@ -92,4 +92,33 @@ with tab_up:
 
                 btns = '<div class="btn-row">'
                 if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
-                if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn
+                if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+                if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+                if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
+                btns += '</div>'
+                
+                st.markdown(f'''<div class="card">
+                    <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
+                    <div class="t">{display_title}</div>
+                    <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+                    {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
+
+with tab_res:
+    if not df_all.empty:
+        df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
+        search_res = st.text_input("🔍 Search Past Results:", placeholder="Search team or score...", key="search_res")
+        
+        if not df_past.empty:
+            if search_res: df_past = df_past[df_past.apply(lambda r: search_res.lower() in str(r).lower(), axis=1)]
+            for _, r in df_past.iterrows():
+                # RESULT is now in Column J (Index 9)
+                res_val = str(r.iloc[9]).strip() if (len(r) > 9 and str(r.iloc[9]).lower() != 'nan') else "Result Pending"
+                dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+                
+                st.markdown(f'''<div class="card">
+                    <div style="font-size:0.85rem;">🗓️ {dat_res}</div>
+                    <div class="t">{r.iloc[1]} {r.iloc[2]}</div>
+                    <div class="res-box">🏆 RESULT: {res_val}</div>
+                </div>''', unsafe_allow_html=True)
+        else:
+            st.info("No past results found yet.")
