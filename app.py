@@ -32,11 +32,15 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=1)
 def load():
     df = pd.read_csv(U)
-    # Store the original text date as a backup
-    df['orig_date'] = df.iloc[:, 2].astype(str)
-    # Convert to real date for sorting
-    df.iloc[:, 2] = pd.to_datetime(df.iloc[:, 2], dayfirst=True, errors='coerce')
-    return df.sort_values(by=df.columns[2], ascending=True)
+    def parse_dt(x):
+        s = str(x).strip()
+        if not s or s.lower() == 'nan': return pd.NaT
+        # If year 2026 isn't in the string, add it
+        if '2026' not in s: s = f"{s} 2026"
+        return pd.to_datetime(s, dayfirst=True, errors='coerce')
+    
+    df['dt_fixed'] = df.iloc[:, 2].apply(parse_dt)
+    return df.sort_values(by='dt_fixed', ascending=True)
 
 def get_l(val):
     t = str(val).strip()
@@ -62,11 +66,11 @@ try:
     
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
-        # Display logic: Use formatted date if possible, otherwise use original text
-        if pd.notnull(r.iloc[2]):
-            dat = r.iloc[2].strftime('%d %B %Y')
+        # Display as DD/MM/YYYY
+        if pd.notnull(r['dt_fixed']):
+            dat = r['dt_fixed'].strftime('%d/%m/%Y')
         else:
-            dat = r['orig_date']
+            dat = str(r.iloc[2]) # Fallback to exactly what was typed
             
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
