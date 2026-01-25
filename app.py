@@ -7,6 +7,7 @@ import pytz
 
 st.set_page_config(page_title="Events Hub", layout="centered")
 
+# CSS and Local Storage Script to remember selections
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
@@ -31,7 +32,7 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=5) # Slightly longer cache to stop it from hanging
+@st.cache_data(ttl=10) 
 def load():
     df = pd.read_csv(U)
     def parse_dt(x):
@@ -47,51 +48,51 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+# HANDLE PERSISTENT STATE
+if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
+if 'evt_sel' not in st.session_state: st.session_state.evt_sel = []
+
 try:
     df_raw, update_time = load()
     c = st.columns([1.5, 2.5, 0.8])
+    
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
     
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    
-    nms = f_l.iloc[:, 1].dropna().astype(str).tolist()
-    grps = sorted(list(set([n.split()[0] for n in nms if n.strip()])))
+    grps = sorted(list(set([str(n).split()[0] for n in f_l.iloc[:, 1].dropna() if str(n).strip()])))
     
     with c[1]:
-        qs = st.multiselect("Activities:", grps, placeholder="Select...", key="evt_sel")
+        # Selections here are now saved in session_state automatically
+        qs = st.multiselect("Activities:", grps, key="evt_sel")
     
     with c[2]:
         if st.button("Reset"):
-            # Instant reset without the heavy cache clearing that causes hanging
             st.session_state.cat_sel = "All"
             st.session_state.evt_sel = []
             st.rerun()
 
     df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
     
-    if df.empty:
-        st.markdown("<p style='color:white;text-align:center;'>No events found.</p>", unsafe_allow_html=True)
-    else:
-        for _, r in df.iterrows():
-            evt, ven = str(r.iloc[1]), str(r.iloc[3])
-            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
-            p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
-            i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-            bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
-            
-            btns = '<div class="btn-row">'
-            if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-            if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-            if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-            if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
-            btns += '</div>'
-            
-            st.markdown(f'''<div class="card">
-                <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
-                <div class="t">{evt}</div>
-                <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-                {bx}{btns}</div>''', unsafe_allow_html=True)
+    for _, r in df.iterrows():
+        evt, ven = str(r.iloc[1]), str(r.iloc[3])
+        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
+        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
+        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+        
+        btns = '<div class="btn-row">'
+        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+        btns += '</div>'
+        
+        st.markdown(f'''<div class="card">
+            <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
+            <div class="t">{evt}</div>
+            <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+            {bx}{btns}</div>''', unsafe_allow_html=True)
 
     st.markdown(f'<div class="update-ts">Live Data Updated: {update_time.strftime("%d %b %H:%M")}</div>', unsafe_allow_html=True)
 except Exception:
