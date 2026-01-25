@@ -28,7 +28,7 @@ div[data-baseweb="select"] > div { background-color: #800000 !important; border:
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .sync-container {margin-top: 30px; padding-bottom: 50px;}
-.stButton>button { width: 100%; background-color: rgba(128, 0, 0, 0.9); color: white; border: 1px solid white; font-size: 0.85rem; border-radius: 10px; height: 50px; font-weight: bold;}
+.stButton>button { width: 100%; background-color: #800000; color: white; border: 1px solid white; font-size: 0.85rem; border-radius: 10px; height: 50px; font-weight: bold;}
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
@@ -36,11 +36,13 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=1) 
-def load(buster):
-    # TRICK 1: Add a random number to the URL to bypass Google's cache
-    url = f"{U}&cachebuster={buster}"
-    response = requests.get(url)
+# NO INTERNAL CACHING: Forces the app to check the source every time it reloads
+def load_fresh():
+    # Adding a completely unique timestamp to every single request
+    unique_url = f"{U}&refresh={int(time.time())}"
+    # Headers to tell the browser NOT to cache this result
+    headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    response = requests.get(unique_url, headers=headers)
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
     
@@ -58,15 +60,15 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Persistence Logic
+# Load persistent filters
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
 if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
 
 try:
-    # TRICK 2: The loader now requires a unique ID every time
-    df_raw, update_time = load(st.session_state.get('buster', random.randint(1, 999999))) 
+    # Always load fresh data
+    df_raw, update_time = load_fresh() 
     
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
@@ -118,11 +120,8 @@ try:
 
     st.markdown("<div class='sync-container'>", unsafe_allow_html=True)
     if st.button(f"🔄 Sync Live Data ({update_time.strftime('%H:%M:%S')})"):
-        with st.spinner("Forcing Google Update..."):
-            # TRICK 3: Generate a completely new buster and clear all data
-            st.session_state.buster = random.randint(1, 999999)
-            st.cache_data.clear()
-            time.sleep(2) 
+        with st.spinner("Re-syncing with Google Sheets..."):
+            time.sleep(1.5)
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
