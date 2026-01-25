@@ -15,7 +15,6 @@ st.markdown("""<style>
     text-align: center; text-decoration: none !important;
     font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
     border-radius: 6px; display: block; white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
@@ -25,38 +24,38 @@ label { color: white !important; font-weight: bold; }
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
 
+# THE LIVE LINK (Make sure this matches your 'Publish to Web' link)
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=2)
+@st.cache_data(ttl=1) # Set to 1 second for instant updates
 def load():
-    df = pd.read_csv(U)
-    return df
+    return pd.read_csv(U)
 
-# Helper to clean and check links
-def get_lnk(val):
-    s = str(val).strip()
-    return s if "http" in s.lower() else None
+def clean(v):
+    return str(v).strip() if pd.notna(v) else ""
 
 try:
-    data_raw = load()
+    df = load()
     ch = st.selectbox("Filter Events:", ["All", "Sport", "Culture", "Academics"])
-    df = data_raw if ch == "All" else data_raw[data_raw.iloc[:, 0].str.contains(ch, case=False, na=False)]
+    if ch != "All":
+        df = df[df.iloc[:, 0].str.contains(ch, case=False, na=False)]
 
     for _, r in df.iterrows():
-        evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
-        p_l, t_l, s_l, i_l = get_lnk(r.iloc[4]), get_lnk(r.iloc[5]), get_lnk(r.iloc[6]), str(r.iloc[7]).strip()
+        # Get by Position
+        evt, dat, ven = clean(r.iloc[1]), clean(r.iloc[2]), clean(r.iloc[3])
+        p_l, t_l, s_l, i_l = clean(r.iloc[4]), clean(r.iloc[5]), clean(r.iloc[6]), clean(r.iloc[7])
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        is_i_lnk = "http" in i_l.lower()
         
-        # Info logic: check if Column H is a link or text
-        is_info_lnk = "http" in i_l.lower()
-        bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_info_lnk) else ""
+        bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_i_lnk) else ""
 
+        # BUTTON LOGIC
         btn_html = '<div class="btn-row">'
-        if p_l: btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
-        if t_l: btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
-        if s_l: btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
-        if is_info_lnk: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
+        if "http" in p_l.lower(): btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
+        if "http" in t_l.lower(): btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
+        if "http" in s_l.lower(): btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
+        if is_i_lnk: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
         btn_html += '</div>'
 
         st.markdown(f'''<div class="card">
@@ -66,5 +65,5 @@ try:
             {bx}
             {btn_html}
         </div>''', unsafe_allow_html=True)
-except:
-    st.info("Syncing...")
+except Exception as e:
+    st.error(f"Error: {e}")
