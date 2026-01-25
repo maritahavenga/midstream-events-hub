@@ -26,9 +26,8 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
-/* Bottom Sync Button Styling */
 .sync-container {margin-top: 30px; padding-bottom: 50px;}
-.stButton>button { width: 100%; background-color: rgba(128, 0, 0, 0.8); color: white; border: 1px solid rgba(255,255,255,0.3); font-size: 0.75rem; border-radius: 10px;}
+.stButton>button { width: 100%; background-color: rgba(128, 0, 0, 0.9); color: white; border: 1px solid white; font-size: 0.85rem; border-radius: 10px; height: 50px; font-weight: bold;}
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 10px; opacity: 0.7; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
@@ -111,11 +110,13 @@ try:
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
             {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
-    # REFRESH BUTTON AT THE BOTTOM
     st.markdown("<div class='sync-container'>", unsafe_allow_html=True)
+    # The Button with built-in spinner feedback
     if st.button(f"🔄 Sync Live Data ({update_time.strftime('%H:%M:%S')})"):
-        st.cache_data.clear()
-        st.rerun()
+        with st.spinner("Syncing with Google..."):
+            st.cache_data.clear()
+            time.sleep(1) # Give the user a second to see the spinner
+            st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 except Exception:
