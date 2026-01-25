@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. CSS Styling (Fixed Arrow and Header)
+# 2. CSS Styling & Anchor Setup
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
@@ -29,24 +29,25 @@ st.markdown("""<style>
     border-radius:6px!important; display:block!important; white-space:nowrap!important;
 }
 
-/* Fixed Floating Arrow */
+/* Back to Top Button Styling */
 #back-to-top {
     position: fixed; 
     bottom: 90px; 
-    right: 25px; 
+    right: 20px; 
     background-color: #800000; 
-    color: white; 
-    width: 50px; 
-    height: 50px; 
-    line-height: 50px; 
+    color: white !important; 
+    width: 45px; 
+    height: 45px; 
+    line-height: 45px; 
     text-align: center;
     border-radius: 50%; 
-    text-decoration: none; 
-    z-index: 9999; 
-    font-size: 24px;
+    text-decoration: none !important; 
+    z-index: 99999; 
+    font-size: 22px;
     font-weight: bold; 
     border: 2px solid white; 
     box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    display: block;
 }
 
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
@@ -54,7 +55,9 @@ div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
 </style>
-<a href="#" id="back-to-top">↑</a>
+
+<div id="top"></div>
+<a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
@@ -84,7 +87,7 @@ def get_l(val):
 try:
     df_raw, today_date, update_time = load_fresh() 
     
-    # --- HEADER SECTION ---
+    # logo and Title
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>MIDSTREAM EVENTS HUB</h2>", unsafe_allow_html=True)
     
