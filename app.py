@@ -32,7 +32,6 @@ h2 { color: white !important; text-align: center; margin-top: -10px; text-transf
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
-.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
 </style>
 <div id="top"></div>
 <a href="#top" id="back-to-top">↑</a>
@@ -65,20 +64,21 @@ def smart_filter(df, query):
     if not query: return df
     q = query.lower()
     
-    # Vertalings en opruiming
+    # Vertalings
     q = q.replace("seuns","b").replace("boys","b").replace("seun","b")
     q = q.replace("meisies","g").replace("girls","g").replace("meisie","g")
-    q = q.replace("o/","").replace("u/","")
     
     terms = q.split()
     for term in terms:
-        if term in ['b', 'g']:
-            # AS dit 'b' of 'g' is, soek SLEGS in die Age Group kolom (Index 2)
-            # Dit keer dat 'Garsfontein' (met 'g') alles opmors
-            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(term, na=False)
+        # Skoonmaak vir o/13 tipe terme
+        clean_term = term.replace("o/","").replace("u/","")
+        
+        if clean_term in ['b', 'g']:
+            # As dit net 'b' of 'g' is, wees streng (kyk net na spannaam/age group)
+            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean_term, na=False)
         else:
-            # Vir ander woorde (hokkie, 13, ens), soek in die hele ry
-            mask = df.apply(lambda r: term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+            # Vir enige ander woorde soos "Hokkie", soek oral in die ry
+            mask = df.apply(lambda r: clean_term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
         df = df[mask]
     return df
 
@@ -133,13 +133,13 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("Geen gebeure gevind nie.")
+            st.info("Geen gebeure gevind nie. Probeer slegs 'hokkie' of 'seuns' tik.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        raw_res_s = st.text_input("🔍 Search History:", placeholder="Search team or score...", key="search_res")
+        raw_res_s = st.text_input("🔍 Search History:", placeholder="Soek span of telling...", key="search_res")
         
         df_res = smart_filter(df_past, raw_res_s)
         
