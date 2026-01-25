@@ -13,33 +13,18 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Professional CSS Styling
+# 2. CSS Styling
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .stTabs [data-baseweb="tab-list"] {gap: 8px; background-color: #008080; justify-content: center;}
-.stTabs [data-baseweb="tab"] {
-    height: 45px; background-color: #800000; color: white; 
-    border-radius: 10px 10px 0px 0px; font-weight: bold; border: 1px solid #00cccc;
-}
-.stTabs [aria-selected="true"] { background-color: #00cccc !important; color: white !important; }
+.stTabs [data-baseweb="tab"] { height: 45px; background-color: #800000; color: white; border-radius: 10px 10px 0px 0px; font-weight: bold; border: 1px solid #00cccc;}
+.stTabs [aria-selected="true"] { background-color: #00cccc !important; }
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
-.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
-.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
 .res-box{background:#e6f4ea; padding:10px; border-radius:8px; margin:5px 0; border:1px solid #1e7e34; color: #1e7e34; font-weight:bold; text-align:center;}
-.no-data{text-align:center; padding:40px 20px; background:rgba(255,255,255,0.1); border-radius:15px; color:white; border:1px dashed white; margin-top:20px}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important;}
-.btn {
-    flex:1!important; background:#800000!important; color:white!important; 
-    text-align:center!important; text-decoration:none!important;
-    font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important;
-    border-radius:6px!important; display:block!important; white-space:nowrap!important;
-}
-#back-to-top {
-    position: fixed; bottom: 90px; right: 20px; background-color: #800000; 
-    color: white !important; width: 45px; height: 45px; line-height: 45px; 
-    text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-}
+.btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
+#back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
@@ -49,10 +34,9 @@ label { color:white !important; font-weight:bold; }
 <a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
-# --- GOOGLE SHEETS CONFIGURATION ---
+# --- DATA URLs ---
+# Make sure GID 0 is your Results and 1966566702 is your Upcoming
 URL_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?"
-
-# We use the GIDs from your link: 1966566702 for Upcoming, 0 for Results
 URL_UPCOMING = f"{URL_BASE}gid=1966566702&single=true&output=csv"
 URL_RESULTS = f"{URL_BASE}gid=0&single=true&output=csv"
 
@@ -60,23 +44,29 @@ def get_data(url, is_upcoming=True):
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        response = requests.get(f"{url}&refresh={int(time.time())}")
+        response = requests.get(f"{url}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
+        
+        # SAFETY CHECK: If the sheet is empty or columns are missing
+        if df.empty or len(df.columns) < 4:
+            return pd.DataFrame(), now, datetime.now(SA_TIME)
+
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
+        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         if is_upcoming:
             df = df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed')
-            if not df.empty:
+            if len(df.columns) > 2:
                 df.iloc[:, 2] = df.iloc[:, 2].astype(str).apply(lambda x: x.replace(" ", "").upper() if x.lower() != 'nan' else "")
         else:
             df = df.sort_values(by='dt_fixed', ascending=False)
         return df, now, datetime.now(SA_TIME)
     except:
-        return pd.DataFrame(), None, datetime.now()
+        return pd.DataFrame(), datetime.now().date(), datetime.now()
 
 def get_l(val):
     t = str(val).strip()
@@ -85,50 +75,47 @@ def get_l(val):
 
 # --- UI LOGIC ---
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-
 tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 PAST RESULTS"])
 
 with tab_up:
     df_raw, today_date, update_time = get_data(URL_UPCOMING, is_upcoming=True)
-    
-    st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>EVENTS HUB</h2>", unsafe_allow_html=True)
-    
-    if st.button(f"🔄 REFRESH DATA (Last update: {update_time.strftime('%H:%M')})"):
-        st.cache_data.clear()
-        st.rerun()
+    if not df_raw.empty:
+        if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})", key="ref_up"):
+            st.cache_data.clear()
+            st.rerun()
 
-    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days Only"], horizontal=True, key="view_up")
-    raw_search = st.text_input("🔍 Search (e.g. U13 Girls, Boys, Venue):", placeholder="Type here...", key="search_up")
-    
-    s = raw_search.lower()
-    s = s.replace("boys", "b").replace("seuns", "b").replace("seun", "b").replace("boy", "b")
-    s = s.replace("girls", "g").replace("dogters", "g").replace("dogter", "g").replace("girl", "g")
-    s = s.replace("o/", "").replace("u/", "").replace("span", "").replace(" ", "")
-    
-    c = st.columns([1, 1, 1])
-    with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_up")
-    
-    f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    if view_opt == "Next 7 Days Only":
-        f_l = f_l[f_l['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+        view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days Only"], horizontal=True, key="view_up")
+        raw_search = st.text_input("🔍 Search:", placeholder="U13B, Hockey...", key="search_up")
+        
+        # Search cleanup logic
+        s = raw_search.lower()
+        s = s.replace("boys", "b").replace("seuns", "b").replace("seun", "b").replace("boy", "b")
+        s = s.replace("girls", "g").replace("dogters", "g").replace("dogter", "g").replace("girl", "g")
+        s = s.replace("o/", "").replace("u/", "").replace("span", "").replace(" ", "")
+        
+        c = st.columns([1, 1, 1])
+        with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_up")
+        
+        f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+        if view_opt == "Next 7 Days Only":
+            f_l = f_l[f_l['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
-    with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_l.iloc[:, 1].dropna().unique()), key="act_up")
-    with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_l.iloc[:, 2].dropna().unique()), key="age_up")
+        # Safety on dropdowns
+        acts = sorted(f_l.iloc[:, 1].dropna().unique()) if not f_l.empty else []
+        ages = sorted(f_l.iloc[:, 2].dropna().unique()) if not f_l.empty else []
+        
+        with c[1]: sel_acts = st.multiselect("Activity:", acts, key="act_up")
+        with c[2]: sel_ages = st.multiselect("Age Group:", ages, key="age_up")
 
-    df = f_l
-    if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
-    if s: df = df[df.apply(lambda r: s in str(r).replace("o/", "").replace("u/", "").replace(" ", "").lower(), axis=1)]
+        df = f_l
+        if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
+        if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
+        if s: df = df[df.apply(lambda r: s in str(r).replace("o/", "").replace("u/", "").replace(" ", "").lower(), axis=1)]
 
-    if df.empty:
-        st.markdown(f'<div class="no-data"><h3>📭 No Upcoming Events Found</h3></div>', unsafe_allow_html=True)
-    else:
         for _, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
             display_title = f"{r.iloc[1]} {age_val}" if age_val else str(r.iloc[1])
-            ven = str(r.iloc[4])
-            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "Date Pending"
-            
+            ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
             prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
             team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
@@ -149,24 +136,23 @@ with tab_up:
                 <div class="t">{display_title}</div>
                 <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
                 {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
+    else:
+        st.info("Syncing events hub...")
 
 with tab_res:
-    df_res_raw, _, _ = get_data(URL_RESULTS, is_upcoming=False)
-    st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>MATCH RESULTS</h2>", unsafe_allow_html=True)
-    search_res = st.text_input("🔍 Search Past Results (e.g. Rugby, U13A):", placeholder="Start typing...", key="search_res")
-    
+    df_res_raw, _, update_res = get_data(URL_RESULTS, is_upcoming=False)
     if not df_res_raw.empty:
+        search_res = st.text_input("🔍 Search Results:", placeholder="Rugby, U13A...", key="search_res")
         if search_res:
             df_res_raw = df_res_raw[df_res_raw.apply(lambda r: search_res.lower() in str(r).lower(), axis=1)]
         
         for _, r in df_res_raw.iterrows():
-            res_val = str(r.iloc[8]).strip() if len(r) > 8 else "Result Pending"
-            dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "Date Unknown"
-            
+            res_val = str(r.iloc[8]).strip() if len(r) > 8 else "Pending"
+            dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
             st.markdown(f'''<div class="card">
                 <div style="font-size:0.85rem;">🗓️ {dat_res}</div>
                 <div class="t">{r.iloc[1]} {r.iloc[2]}</div>
                 <div class="res-box">🏆 RESULT: {res_val}</div>
             </div>''', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="no-data"><h3>🏆 No results recorded yet.</h3></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>🏆 No results yet</h3><p>Ensure your "Results" sheet has headers and data.</p></div>', unsafe_allow_html=True)
