@@ -9,12 +9,11 @@ st.markdown("""<style>
 .card{background:white;padding:15px;border-radius:15px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000;font-weight:bold;font-size:1.1rem;margin:5px 0}.v{color:#800000;font-weight:bold;text-decoration:underline}
 .box{background:#f1f3f5;padding:10px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.85rem}
-/* Updated Button Bar for longer text */
 .btn-row {display: flex; gap: 4px; justify-content: space-between; margin-top: 10px;}
 .btn {
     flex: 1; background: #800000; color: white !important; 
     text-align: center; text-decoration: none !important;
-    font-weight: bold; font-size: 0.65rem; padding: 12px 1px;
+    font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
     border-radius: 6px; display: block; white-space: nowrap;
     letter-spacing: -0.2px;
 }
@@ -41,23 +40,27 @@ try:
 
     for _, r in data.iterrows():
         evt, dat, ven = str(r.get('Event','')), str(r.get('Date','')), str(r.get('Venue',''))
-        nfo = str(r.get('Information',''))
+        nfo = str(r.get('Information','')).strip()
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         
-        is_l = nfo.startswith('http')
-        bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo.strip() and nfo.lower()!='nan' and not is_l) else ""
+        is_l = nfo.lower().startswith('http')
+        bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo and nfo.lower()!='nan' and not is_l) else ""
 
         btn_html = '<div class="btn-row">'
+        # We look for the columns and clean the data immediately
         links = {
-            "PROGRAMME": r.get('Program Link'),
-            "TEAM": r.get('Team/Cast Link'),
-            "CONFIRM": r.get('Transport')
+            "PROGRAMME": str(r.get('Program Link','')).strip(),
+            "TEAM": str(r.get('Team/Cast Link','')).strip(),
+            "CONFIRM": str(r.get('Transport','')).strip()
         }
+        
         for label, val in links.items():
-            if pd.notna(val) and str(val).startswith("http"):
+            if val.lower().startswith("http"):
                 btn_html += f'<a href="{val}" target="_blank" class="btn">{label}</a>'
+        
         if is_l:
             btn_html += f'<a href="{nfo}" target="_blank" class="btn">INFORMATION</a>'
+        
         btn_html += '</div>'
 
         st.markdown(f'''<div class="card">
