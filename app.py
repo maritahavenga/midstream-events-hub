@@ -24,15 +24,11 @@ div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
-/* Clean SVG Styling */
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
-# Clean Calendar SVG (Blank inside)
+# Blank Calendar SVG
 CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2H6V4H5C3.89,4 3,4.9 3,6V20C3,21.1 3.89,22 5,22H19C20.1,22 21,21.1 21,20V6C21,4.9 20.1,4 19,4M19,20H5V9H19V20M5,7V6H19V7H5Z"/></svg>'
-
-st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
@@ -54,20 +50,26 @@ def get_l(val):
 
 try:
     df_raw, update_time = load()
-    c = st.columns([2, 2, 1])
+    c = st.columns([1.5, 2.5, 0.8])
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
+    
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    
     nms = f_l.iloc[:, 1].dropna().astype(str).tolist()
     grps = sorted(list(set([n.split()[0] for n in nms if n.strip()])))
-    g_l = ["All Events"] + grps
+    
     with c[1]:
-        q = st.selectbox("Find Activity:", g_l, key="evt_sel")
+        # CHANGED TO MULTISELECT for de-cluttering
+        qs = st.multiselect("Activities:", grps, placeholder="Select activities...", key="evt_sel")
+    
     with c[2]:
-        if st.button("Reset"):
-            st.session_state.cat_sel, st.session_state.evt_sel = "All", "All Events"
+        if st.button("Clear"):
+            st.session_state.cat_sel = "All"
+            st.session_state.evt_sel = []
             st.rerun()
-    df = f_l if q == "All Events" else f_l[f_l.iloc[:, 1].str.startswith(q, na=False)]
+
+    df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
     
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
@@ -75,6 +77,7 @@ try:
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+        
         btns = '<div class="btn-row">'
         if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
         if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
