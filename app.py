@@ -65,5 +65,12 @@ try:
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+        
         btn_html = '<div class="btn-row">'
-        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAM
+        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+        btn_html += '</div>'
+        
+        st.markdown(f'''<div class="card"><div style="font-size:0.85rem;
