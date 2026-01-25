@@ -28,31 +28,16 @@ st.markdown("""<style>
     font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important;
     border-radius:6px!important; display:block!important; white-space:nowrap!important;
 }
-
-/* Fixed Floating Button - Moved HIGHER to clear the Streamlit logo */
 #back-to-top {
-    position: fixed; 
-    bottom: 80px; /* Increased from 20px to 80px to clear the logo */
-    right: 25px; 
-    background-color: #800000; /* Changed to Maroon to stand out against teal background */
-    color: white; 
-    width: 50px;
-    height: 50px;
-    line-height: 50px;
-    text-align: center;
-    border-radius: 50%; 
-    text-decoration: none;
-    z-index: 9999; 
-    font-size: 24px;
-    font-weight: bold; 
-    border: 2px solid white; 
-    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    position: fixed; bottom: 80px; right: 25px; background-color: #800000; 
+    color: white; width: 50px; height: 50px; line-height: 50px; text-align: center;
+    border-radius: 50%; text-decoration: none; z-index: 9999; font-size: 24px;
+    font-weight: bold; border: 2px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
 }
-
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
-.sync-container {margin-top:30px; padding-bottom:100px;} /* Extra padding at bottom */
+.sync-container {margin-top:30px; padding-bottom:100px;}
 .stButton>button { width:100%; background-color:#800000; color:white; border:1px solid white; font-size:0.85rem; border-radius:10px; height:50px; font-weight:bold;}
 </style>
 <a href="#" id="back-to-top">↑</a>
@@ -89,10 +74,17 @@ if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all(
 
 try:
     df_raw, update_time = load_fresh() 
-    
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     
-    search = st.text_input("🔍 Search events, teams or venues:", placeholder="e.g. Overkruin, Hockey, U12...")
+    # SEARCH BAR
+    raw_search = st.text_input("🔍 Search (e.g. U12 Boys, Dogters, Venue):", placeholder="Search...")
+    
+    # KEYWORD TRANSLATION: If they type "Boys", search for "B", etc.
+    search_term = raw_search.lower()
+    if "boy" in search_term or "seun" in search_term: search_term = search_term.replace("boys", "b").replace("boy", "b").replace("seun", "b").replace("seuns", "b")
+    if "girl" in search_term or "dogter" in search_term: search_term = search_term.replace("girls", "g").replace("girl", "g").replace("dogter", "g").replace("dogters", "g")
+    # Remove spaces for things like "U 12" -> "U12"
+    search_term = search_term.replace(" ", "")
 
     c = st.columns([1, 1, 1])
     with c[0]:
@@ -113,11 +105,12 @@ try:
     if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
     if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
     
-    if search:
-        df = df[df.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+    # ADVANCED SEARCH: Checks translated keywords against the data
+    if search_term:
+        df = df[df.apply(lambda r: search_term in str(r).replace(" ", "").lower(), axis=1)]
 
     if df.empty:
-        st.markdown(f'<div class="no-data"><h3>📭 No information currently</h3><p>Try changing your filters or search terms.</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>📭 No information currently</h3><p>Try different keywords or filters.</p></div>', unsafe_allow_html=True)
     else:
         for _, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
