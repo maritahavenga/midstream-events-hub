@@ -32,21 +32,53 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 def load():
     return pd.read_csv(U)
 
-def extract_link(val):
-    text = str(val).strip()
-    match = re.search(r'https?://[^\s<>"]+', text)
-    return match.group(0) if match else None
+def get_l(val):
+    t = str(val).strip()
+    m = re.search(r'https?://[^\s<>"]+', t)
+    return m.group(0) if m else None
 
 try:
     df_raw = load()
     
-    # Initialize Search State
-    if 'search_val' not in st.session_state:
-        st.session_state.search_val = ""
+    if 's_val' not in st.session_state:
+        st.session_state.s_val = ""
 
-    # FILTER & SEARCH BAR
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
-        cat_choice = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     with c2:
-        search_query = st.text_input("Find Event:", value=st.session_state.search_val, placeholder="e.g
+        q = st.text_input("Find Event:", value=st.session_state.s_val)
+    with c3:
+        if st.button("Reset"):
+            st.session_state.s_val = ""
+            st.rerun()
+
+    df = df_raw
+    if cat != "All":
+        df = df[df.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    if q:
+        m = df.iloc[:, 1].str.contains(q, case=False, na=False) | \
+            df.iloc[:, 0].str.contains(q, case=False, na=False)
+        df = df[m]
+
+    for _, r in df.iterrows():
+        evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
+        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
+        i_l = get_l(i_r)
+        mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+
+        btn_html = '<div class="btn-row">'
+        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
+        btn_html += '</div>'
+
+        st.markdown(f'''<div class="card">
+            <div style="font-size:0.85rem; color:#333;">📅 {dat}</div>
+            <div class="t">{evt}</div>
+            <div style="font-size:0.85rem; color:#333;">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+            {bx}{btn_html}</div>''', unsafe_allow_html=True)
+except Exception:
+    st.info("Refreshing...")
