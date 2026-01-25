@@ -51,7 +51,6 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Fixed Session State initialization
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
 if 'act_sel' not in st.session_state: st.session_state.act_sel = []
 if 'age_sel' not in st.session_state: st.session_state.age_sel = []
@@ -75,11 +74,15 @@ try:
     df = f_l
     if sel_acts:
         df = df[df.iloc[:, 1].isin(sel_acts)]
+    
+    # MODIFIED LOGIC: Always show items with NO age group even if a filter is set
     if sel_ages:
-        df = df[df.iloc[:, 2].isin(sel_ages)]
+        df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2].isna()) | (df.iloc[:, 2].astype(str).str.lower() == 'nan')]
     
     for _, r in df.iterrows():
-        title = f"{r.iloc[1]} {r.iloc[2]}" 
+        age_val = str(r.iloc[2]).strip()
+        display_age = "" if age_val.lower() == 'nan' else age_val
+        title = f"{r.iloc[1]} {display_age}" 
         ven = str(r.iloc[4])
         dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[3])
         
