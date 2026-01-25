@@ -17,9 +17,10 @@ st.markdown("""<style>
     font-weight: bold!important; font-size: 0.62rem!important; padding: 12px 1px!important;
     border-radius: 6px!important; display: block!important; white-space: nowrap!important;
 }
-div[data-baseweb="select"] > div { background-color: #800000 !important; }
-div[data-baseweb="select"] * { color: white !important; }
+div[data-baseweb="select"] > div, div[data-baseweb="input"] > div { background-color: #800000 !important; border: none !important; }
+div[data-baseweb="select"] *, div[data-baseweb="input"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
+.stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
 </style>""", unsafe_allow_html=True)
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
@@ -38,38 +39,14 @@ def extract_link(val):
 
 try:
     df_raw = load()
-    ch = st.selectbox("Filter Events:", ["All", "Sport", "Culture", "Academics"])
-    df = df_raw if ch == "All" else df_raw[df_raw.iloc[:, 0].str.contains(ch, case=False, na=False)]
+    
+    # Initialize Search State
+    if 'search_val' not in st.session_state:
+        st.session_state.search_val = ""
 
-    for _, r in df.iterrows():
-        evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
-        p_l = extract_link(r.iloc[4])
-        t_l = extract_link(r.iloc[5])
-        s_l = extract_link(r.iloc[6])
-        i_raw = str(r.iloc[7]).strip()
-        i_l = extract_link(i_raw)
-        
-        mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        bx = f'<div class="box"><b>Note:</b> {i_raw}</div>' if (i_raw and i_raw.lower()!='nan' and not i_l) else ""
-
-        btn_html = '<div class="btn-row">'
-        if p_l: btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
-        if t_l: btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
-        if s_l: btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
-        if i_l: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
-        btn_html += '</div>'
-
-        # This block combines everything into one clean HTML string
-        card_content = f'''
-        <div class="card">
-            <div style="font-size:0.85rem; color:#333;">📅 {dat}</div>
-            <div class="t">{evt}</div>
-            <div style="font-size:0.85rem; color:#333;">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-            {bx}
-            {btn_html}
-        </div>
-        '''
-        st.markdown(card_content, unsafe_allow_html=True)
-
-except Exception:
-    st.info("Refreshing...")
+    # FILTER & SEARCH BAR
+    c1, c2, c3 = st.columns([2, 2, 1])
+    with c1:
+        cat_choice = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    with c2:
+        search_query = st.text_input("Find Event:", value=st.session_state.search_val, placeholder="e.g
