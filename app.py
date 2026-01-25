@@ -46,7 +46,6 @@ try:
         bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo and nfo.lower()!='nan' and not is_l) else ""
 
         btn_html = '<div class="btn-row">'
-        # Pull links based on the specific headers
         p = str(r.get('Program Link','')).strip()
         t = str(r.get('Team/Cast Link','')).strip()
         s = str(r.get('Transport','')).strip()
