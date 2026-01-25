@@ -45,23 +45,20 @@ try:
         is_l = nfo.lower().startswith('http')
         bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo and nfo.lower()!='nan' and not is_l) else ""
 
-        # Build Button Row
         btn_html = '<div class="btn-row">'
-        
-        # Pull links regardless of header name
-        p_val = str(r.get('Program Link','')).strip()
-        t_val = str(r.get('Team/Cast Link','')).strip()
-        s_val = str(r.get('Transport','')).strip()
+        # Pull links based on the specific headers
+        p = str(r.get('Program Link','')).strip()
+        t = str(r.get('Team/Cast Link','')).strip()
+        s = str(r.get('Transport','')).strip()
 
-        if p_val.lower().startswith("http"):
-            btn_html += f'<a href="{p_val}" target="_blank" class="btn">PROGRAMME</a>'
-        if t_val.lower().startswith("http"):
-            btn_html += f'<a href="{t_val}" target="_blank" class="btn">TEAM</a>'
-        if s_val.lower().startswith("http"):
-            btn_html += f'<a href="{s_val}" target="_blank" class="btn">CONFIRM</a>'
+        if p.lower().startswith("http"):
+            btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t.lower().startswith("http"):
+            btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s.lower().startswith("http"):
+            btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
         if is_l:
             btn_html += f'<a href="{nfo}" target="_blank" class="btn">INFORMATION</a>'
-        
         btn_html += '</div>'
 
         st.markdown(f'''<div class="card">
