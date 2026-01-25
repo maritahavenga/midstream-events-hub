@@ -37,29 +37,31 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+# Clear function for the Reset button
+def clear_filters():
+    st.session_state.cat_key = "All"
+    st.session_state.evt_key = "All Events"
+
 try:
     df_raw = load()
     
-    if 's_val' not in st.session_state:
-        st.session_state.s_val = ""
+    # Get unique events from Column B (index 1) for the dropdown
+    event_list = ["All Events"] + sorted(df_raw.iloc[:, 1].dropna().unique().tolist())
 
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
-        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_key")
     with c2:
-        q = st.text_input("Find Event:", value=st.session_state.s_val)
+        # Auto-populated dropdown instead of text input
+        q = st.selectbox("Find Event:", event_list, key="evt_key")
     with c3:
-        if st.button("Reset"):
-            st.session_state.s_val = ""
-            st.rerun()
+        st.button("Reset", on_click=clear_filters)
 
     df = df_raw
     if cat != "All":
         df = df[df.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    if q:
-        m = df.iloc[:, 1].str.contains(q, case=False, na=False) | \
-            df.iloc[:, 0].str.contains(q, case=False, na=False)
-        df = df[m]
+    if q != "All Events":
+        df = df[df.iloc[:, 1] == q]
 
     for _, r in df.iterrows():
         evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
