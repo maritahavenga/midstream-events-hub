@@ -35,10 +35,8 @@ def load():
     def parse_dt(x):
         s = str(x).strip()
         if not s or s.lower() == 'nan': return pd.NaT
-        # If year 2026 isn't in the string, add it
         if '2026' not in s: s = f"{s} 2026"
         return pd.to_datetime(s, dayfirst=True, errors='coerce')
-    
     df['dt_fixed'] = df.iloc[:, 2].apply(parse_dt)
     return df.sort_values(by='dt_fixed', ascending=True)
 
@@ -66,11 +64,11 @@ try:
     
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
-        # Display as DD/MM/YYYY
+        # Display as 20 January 2026
         if pd.notnull(r['dt_fixed']):
-            dat = r['dt_fixed'].strftime('%d/%m/%Y')
+            dat = r['dt_fixed'].strftime('%d %B %Y')
         else:
-            dat = str(r.iloc[2]) # Fallback to exactly what was typed
+            dat = str(r.iloc[2])
             
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
