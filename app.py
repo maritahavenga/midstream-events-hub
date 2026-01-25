@@ -31,7 +31,6 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=1)
 def load():
     df = pd.read_csv(U)
-    # SORTING: Convert Column C (Index 2) to Real Dates
     df.iloc[:, 2] = pd.to_datetime(df.iloc[:, 2], dayfirst=True, errors='coerce')
     return df.sort_values(by=df.columns[2], ascending=True)
 
@@ -42,17 +41,29 @@ def get_l(val):
 
 try:
     df_raw = load()
-    cols = st.columns([2, 2, 1])
-    with cols[0]:
+    c = st.columns([2, 2, 1])
+    with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
+    f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    
+    nms = f_l.iloc[:, 1].dropna().astype(str).tolist()
+    grps = sorted(list(set([n.split()[0] for n in nms if n.strip()])))
+    g_l = ["All Events"] + grps
+    
+    with c[1]:
+        q = st.selectbox("Find Activity:", g_l, key="evt_sel")
+    with c[2]:
+        if st.button("Reset"):
+            st.session_state.cat_sel, st.session_state.evt_sel = "All", "All Events"
+            st.rerun()
 
-    f_list = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    df = f_l if q == "All Events" else f_l[f_l.iloc[:, 1].str.startswith(q, na=False)]
 
-    names = f_list.iloc[:, 1].dropna().astype(str).tolist()
-    unique_groups = sorted(list(set([n.split()[0] for n in names if n.strip()])))
-    group_list = ["All Events"] + unique_groups
-
-    with cols[1]:
-        q = st.selectbox("Find Activity:", group_list, key="evt_sel")
-    with cols[2]:
-        if st.button("
+    for _, r in df.iterrows():
+        evt, ven = str(r.iloc[1]), str(r.iloc[3])
+        dat = r.iloc[2].strftime('%d %B %Y') if pd.notnull(r.iloc[2]) else "TBC"
+        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
+        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+        btn_html = '<div class="btn-row">'
+        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAM
