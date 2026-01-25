@@ -10,10 +10,10 @@ import time
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
-st.set_page_config(page_title="Events & Results Hub", layout="centered")
+st.set_page_config(page_title="LMCP Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. CSS Styling
+# 2. Professional CSS Styling
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .stTabs [data-baseweb="tab-list"] {gap: 8px; background-color: #008080; justify-content: center;}
@@ -49,10 +49,12 @@ label { color:white !important; font-weight:bold; }
 <a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
-# --- DATA URLs ---
-URL_UPCOMING = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
-# IMPORTANT: Put your "Results" sheet GID below
-URL_RESULTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=REPLACE_WITH_RESULTS_GID&single=true&output=csv"
+# --- GOOGLE SHEETS CONFIGURATION ---
+URL_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?"
+
+# We use the GIDs from your link: 1966566702 for Upcoming, 0 for Results
+URL_UPCOMING = f"{URL_BASE}gid=1966566702&single=true&output=csv"
+URL_RESULTS = f"{URL_BASE}gid=0&single=true&output=csv"
 
 def get_data(url, is_upcoming=True):
     try:
@@ -89,6 +91,8 @@ tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 PAST RESULTS"])
 with tab_up:
     df_raw, today_date, update_time = get_data(URL_UPCOMING, is_upcoming=True)
     
+    st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>EVENTS HUB</h2>", unsafe_allow_html=True)
+    
     if st.button(f"🔄 REFRESH DATA (Last update: {update_time.strftime('%H:%M')})"):
         st.cache_data.clear()
         st.rerun()
@@ -117,12 +121,14 @@ with tab_up:
     if s: df = df[df.apply(lambda r: s in str(r).replace("o/", "").replace("u/", "").replace(" ", "").lower(), axis=1)]
 
     if df.empty:
-        st.markdown(f'<div class="no-data"><h3>📭 No Upcoming Events</h3></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>📭 No Upcoming Events Found</h3></div>', unsafe_allow_html=True)
     else:
         for _, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
             display_title = f"{r.iloc[1]} {age_val}" if age_val else str(r.iloc[1])
-            ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y')
+            ven = str(r.iloc[4])
+            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "Date Pending"
+            
             prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
             team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
@@ -146,7 +152,8 @@ with tab_up:
 
 with tab_res:
     df_res_raw, _, _ = get_data(URL_RESULTS, is_upcoming=False)
-    search_res = st.text_input("🔍 Search Past Results:", placeholder="e.g. U13A Rugby...", key="search_res")
+    st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>MATCH RESULTS</h2>", unsafe_allow_html=True)
+    search_res = st.text_input("🔍 Search Past Results (e.g. Rugby, U13A):", placeholder="Start typing...", key="search_res")
     
     if not df_res_raw.empty:
         if search_res:
@@ -154,8 +161,10 @@ with tab_res:
         
         for _, r in df_res_raw.iterrows():
             res_val = str(r.iloc[8]).strip() if len(r) > 8 else "Result Pending"
+            dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "Date Unknown"
+            
             st.markdown(f'''<div class="card">
-                <div style="font-size:0.85rem;">🗓️ {r['dt_fixed'].strftime('%d %b %Y')}</div>
+                <div style="font-size:0.85rem;">🗓️ {dat_res}</div>
                 <div class="t">{r.iloc[1]} {r.iloc[2]}</div>
                 <div class="res-box">🏆 RESULT: {res_val}</div>
             </div>''', unsafe_allow_html=True)
