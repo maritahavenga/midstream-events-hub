@@ -33,7 +33,7 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=15) 
+@st.cache_data(ttl=10) 
 def load():
     response = requests.get(U)
     response.encoding = 'utf-8' 
@@ -51,36 +51,39 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+# Initialize session state so selections stick
+if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
+if 'evt_sel' not in st.session_state: st.session_state.evt_sel = []
+
 try:
     df_raw, update_time = load()
     c = st.columns([1, 2])
+    
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
+    
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    grps = sorted(list(set([str(n).split()[0] for n in f_l.iloc[:, 1].dropna() if str(n).strip()])))
+    
+    # Smarter Activity List: grabs the full name so "U10 Tennis" is easy to find
+    all_activities = sorted(list(set(f_l.iloc[:, 1].dropna().astype(str).tolist())))
+    
     with c[1]:
-        qs = st.multiselect("Activities:", grps, key="evt_sel", placeholder="Filter...")
-    df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
+        qs = st.multiselect("Activities:", all_activities, key="evt_sel", placeholder="Filter...")
+
+    df = f_l if not qs else f_l[f_l.iloc[:, 1].astype(str).isin(qs)]
     
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
         dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
         
-        # Pulling data for buttons/boxes
-        prog_l = get_l(r.iloc[4])
-        team_val = str(r.iloc[5]).strip()
-        team_l = get_l(team_val)
-        conf_l = get_l(r.iloc[6])
+        prog_l, team_val = get_l(r.iloc[4]), str(r.iloc[5]).strip()
+        team_l, conf_l = get_l(team_val), get_l(r.iloc[6])
         info_val = str(r.iloc[7]).strip()
         info_l = get_l(info_val)
-
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         
-        # Info Box (Column H)
         bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
-        
-        # Team Box (If text is typed in Team column instead of a link)
-        tm_bx = f'<div class="team-box"><b>Team:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
+        tm_bx = f'<div class="team-box"><b>Team Info:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
 
         btns = '<div class="btn-row">'
         if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
