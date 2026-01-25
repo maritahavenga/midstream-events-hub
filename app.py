@@ -69,4 +69,18 @@ try:
             dat = r['orig_date']
             
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
-        i_l, mu = get_l(i_r), f"
+        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+        btns = '<div class="btn-row">'
+        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+        btns += '</div>'
+        html = f'<div class="card"><div style="font-size:0.85rem;color:#333">📅 {dat}</div>'
+        html += f'<div class="t">{evt}</div>'
+        html += f'<div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>'
+        html += f'{bx}{btns}</div>'
+        st.markdown(html, unsafe_allow_html=True)
+except Exception:
+    st.info("Refreshing...")
