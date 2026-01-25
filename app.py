@@ -25,7 +25,7 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
-.update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
+.update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; cursor: pointer; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
@@ -33,9 +33,11 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=10) 
+# TTL set to 5 seconds for much faster updates
+@st.cache_data(ttl=5) 
 def load():
-    response = requests.get(U)
+    # Adding a random number to the URL forces Google to send the LATEST version
+    response = requests.get(f"{U}&cachebust={datetime.now().timestamp()}")
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
     def parse_dt(x):
@@ -51,7 +53,7 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# --- PERSISTENCE LOGIC: READ FROM URL ---
+# Handle Persistant URL Parameters
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
@@ -60,41 +62,30 @@ if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all(
 try:
     df_raw, update_time = load()
     c = st.columns([1, 1, 1])
-    
     with c[0]:
         cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
-    
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    
     unique_acts = sorted([x for x in f_l.iloc[:, 1].dropna().unique() if str(x).strip()])
     unique_ages = sorted([x for x in f_l.iloc[:, 2].dropna().unique() if str(x).strip()])
-    
     with c[1]:
         sel_acts = st.multiselect("Activity:", unique_acts, key="act_sel")
     with c[2]:
         sel_ages = st.multiselect("Age:", unique_ages, key="age_sel")
 
-    # --- PERSISTENCE LOGIC: WRITE TO URL ---
     st.query_params.from_dict({"type": cat, "act": sel_acts, "age": sel_ages})
 
     df = f_l
-    if sel_acts:
-        df = df[df.iloc[:, 1].isin(sel_acts)]
-    
-    if sel_ages:
-        df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2].isna()) | (df.iloc[:, 2].astype(str).str.lower() == 'nan')]
+    if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
+    if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2].isna()) | (df.iloc[:, 2].astype(str).str.lower() == 'nan')]
     
     for _, r in df.iterrows():
         age_val = str(r.iloc[2]).strip()
         display_age = "" if age_val.lower() == 'nan' else age_val
         title = f"{r.iloc[1]} {display_age}" 
-        ven = str(r.iloc[4])
-        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[3])
-        
+        ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[3])
         prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
         team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
-        info_val = str(r.iloc[8]).strip()
-        info_l = get_l(info_val)
+        info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
@@ -113,6 +104,10 @@ try:
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
             {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
-    st.markdown(f'<div class="update-ts">Live Data Updated: {update_time.strftime("%d %b %H:%M")}</div>', unsafe_allow_html=True)
+    # Added a "Refresh Button" disguised as the timestamp
+    if st.button(f'Live Data Updated: {update_time.strftime("%d %b %H:%M")} (Click to Force Refresh)', use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
 except Exception:
     st.info("Refreshing...")
