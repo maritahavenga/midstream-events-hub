@@ -9,9 +9,11 @@ import io
 import time
 from streamlit_autorefresh import st_autorefresh
 
+# 1. Page Configuration
 st.set_page_config(page_title="Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
+# 2. CSS Styling (Fixed Arrow and Header)
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
@@ -26,12 +28,27 @@ st.markdown("""<style>
     font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important;
     border-radius:6px!important; display:block!important; white-space:nowrap!important;
 }
+
+/* Fixed Floating Arrow */
 #back-to-top {
-    position: fixed; bottom: 80px; right: 25px; background-color: #800000; 
-    color: white; width: 50px; height: 50px; line-height: 50px; text-align: center;
-    border-radius: 50%; text-decoration: none; z-index: 9999; font-size: 24px;
-    font-weight: bold; border: 2px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    position: fixed; 
+    bottom: 90px; 
+    right: 25px; 
+    background-color: #800000; 
+    color: white; 
+    width: 50px; 
+    height: 50px; 
+    line-height: 50px; 
+    text-align: center;
+    border-radius: 50%; 
+    text-decoration: none; 
+    z-index: 9999; 
+    font-size: 24px;
+    font-weight: bold; 
+    border: 2px solid white; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
 }
+
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
@@ -66,15 +83,16 @@ def get_l(val):
 
 try:
     df_raw, today_date, update_time = load_fresh() 
+    
+    # --- HEADER SECTION ---
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
+    st.markdown("<h2 style='text-align:center; color:white; margin-top:-10px;'>MIDSTREAM EVENTS HUB</h2>", unsafe_allow_html=True)
     
     if st.button(f"🔄 REFRESH DATA (Last update: {update_time.strftime('%H:%M')})"):
         st.cache_data.clear()
         st.rerun()
 
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days Only"], horizontal=True)
-    
-    # --- CHANGED SEARCH TEXT TO ENGLISH ONLY ---
     raw_search = st.text_input("🔍 Search (e.g. U13 Girls, Boys, Venue):", placeholder="Type here to search...")
     
     s = raw_search.lower()
