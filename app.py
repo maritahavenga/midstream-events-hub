@@ -26,6 +26,7 @@ st.markdown("""<style>
 .res-box{background:#e6f4ea; padding:10px; border-radius:8px; margin:5px 0; border:1px solid #1e7e34; color: #1e7e34; font-weight:bold; text-align:center;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
+.res-btn { background:#1e7e34!important; border: 2px solid #ffffff !important; }
 #back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
 h2 { color: white !important; text-align: center; margin-top: -10px; text-transform: uppercase; }
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
@@ -60,6 +61,23 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+def smart_filter(df, query):
+    if not query: return df
+    # Maak soektog skoon
+    q = query.lower()
+    q = q.replace("seuns","b").replace("boys","b").replace("seun","b")
+    q = q.replace("meisies","g").replace("girls","g").replace("meisie","g")
+    q = q.replace("o/","").replace("u/","")
+    
+    # Breek soektog op in woorde (e.g. "13", "b", "hokkie")
+    terms = q.split()
+    
+    for term in terms:
+        # Soek elke term individueel in die ry
+        mask = df.apply(lambda r: term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+        df = df[mask]
+    return df
+
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_all, today_date, update_time = load_all_data()
 
@@ -70,19 +88,13 @@ with tab_up:
     if not df_all.empty:
         df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
         
-        # 1. Refresh Button
         if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
             st.cache_data.clear()
             st.rerun()
 
-        # 2. View Toggle
         view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="v_up")
+        raw_s = st.text_input("🔍 Search (e.g. o13 seuns hokkie):", placeholder="Type here...", key="search_up")
         
-        # 3. Search Bar with Auto-Conversion (Meisies/Seuns -> G/B)
-        raw_s = st.text_input("🔍 Search:", placeholder="U13B, Hockey...", key="search_up")
-        s = raw_s.lower().replace("seuns","b").replace("boys","b").replace("girls","g").replace("dogters","g").replace("meisies","g").replace("o/","u/").replace(" ","")
-        
-        # 4. Dropdown Filters
         c = st.columns([1, 1, 1])
         with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
         
@@ -93,11 +105,11 @@ with tab_up:
         with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
         with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
 
-        # Apply final filtering
+        # Pas filters toe
         df = f_df
         if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
         if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
-        if s: df = df[df.apply(lambda r: s in str(r).lower().replace("o/","u/").replace(" ",""), axis=1)]
+        df = smart_filter(df, raw_s)
 
         if not df.empty:
             for _, r in df.iterrows():
@@ -118,16 +130,18 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("No matching upcoming events found.")
+            st.info("Geen gebeure gevind nie. Probeer 'n korter soekterm.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        search_res = st.text_input("🔍 Search Past Results:", placeholder="Search team or score...", key="search_res")
-        if not df_past.empty:
-            if search_res: df_past = df_past[df_past.apply(lambda r: search_res.lower() in str(r).lower(), axis=1)]
-            for _, r in df_past.iterrows():
+        raw_res_s = st.text_input("🔍 Search History:", placeholder="Search team or score...", key="search_res")
+        
+        df_res = smart_filter(df_past, raw_res_s)
+        
+        if not df_res.empty:
+            for _, r in df_res.iterrows():
                 res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
                 res_link = get_l(res_raw)
                 dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
@@ -143,4 +157,4 @@ with tab_res:
                     res_disp = f'<div class="res-box" style="background:#f8f9fa; border-color:#ccc; color:#666;">🏆 Result Pending</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {ven_res}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
         else:
-            st.info("No past results found.")
+            st.info("Geen resultate gevind nie.")
