@@ -10,14 +10,30 @@ st.markdown("""<style>
 .card{background:white;padding:15px;border-radius:15px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000;font-weight:bold;font-size:1.1rem;margin:5px 0}.v{color:#800000;font-weight:bold;text-decoration:underline}
 .box{background:#f1f3f5;padding:10px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.85rem}
-.btn-row {display: flex; gap: 4px; justify-content: space-between; margin-top: 10px; width: 100%;}
-.btn {
-    flex: 1; background: #800000 !important; color: white !important; 
-    text-align: center; text-decoration: none !important;
-    font-weight: bold; font-size: 0.62rem; padding: 12px 1px;
-    border-radius: 6px; display: block; white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+/* THE BUTTON BAR - FORCED VISIBILITY */
+.btn-row {
+    display: flex !important; 
+    gap: 4px !important; 
+    justify-content: space-between !important; 
+    margin-top: 15px !important;
+    width: 100% !important;
 }
+.btn {
+    flex: 1 !important; 
+    background-color: #800000 !important; 
+    color: #ffffff !important; 
+    text-align: center !important; 
+    text-decoration: none !important;
+    font-weight: bold !important; 
+    font-size: 0.6rem !important; 
+    padding: 12px 2px !important;
+    border-radius: 6px !important; 
+    display: block !important; 
+    white-space: nowrap !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+}
+
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
@@ -34,7 +50,6 @@ def load():
 
 def extract_link(val):
     text = str(val).strip()
-    # Find anything starting with http until a space or end of string
     match = re.search(r'https?://[^\s<>"]+', text)
     return match.group(0) if match else None
 
@@ -46,7 +61,7 @@ try:
     for _, r in df.iterrows():
         evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
         
-        # Extract links from columns 4, 5, 6, and 7
+        # Position-based link extraction
         p_l = extract_link(r.iloc[4])
         t_l = extract_link(r.iloc[5])
         s_l = extract_link(r.iloc[6])
