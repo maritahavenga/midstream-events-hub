@@ -28,6 +28,7 @@ st.markdown("""<style>
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
 .res-btn { background:#1e7e34!important; border: 2px solid #ffffff !important; }
 #back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
+h2 { color: white !important; text-align: center; margin-top: -10px; text-transform: uppercase; letter-spacing: 1px; }
 </style>
 <div id="top"></div>
 <a href="#top" id="back-to-top">↑</a>
@@ -62,6 +63,7 @@ df_all, today_date, update_time = load_all_data()
 tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 RESULTS"])
 
 with tab_up:
+    st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_up = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
         search_up = st.text_input("🔍 Search Upcoming:", placeholder="U13B, Hockey...", key="search_up")
@@ -85,8 +87,11 @@ with tab_up:
                 if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
+        else:
+            st.info("No upcoming events found.")
 
 with tab_res:
+    st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
         search_res = st.text_input("🔍 Search Past Results:", placeholder="Search team or score...", key="search_res")
