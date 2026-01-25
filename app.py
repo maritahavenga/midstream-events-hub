@@ -74,9 +74,9 @@ try:
 
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days Only"], horizontal=True)
     
-    raw_search = st.text_input("🔍 Search (e.g. U13 Boys, Dogters, Venue):", placeholder="Type here to search...")
+    # --- CHANGED SEARCH TEXT TO ENGLISH ONLY ---
+    raw_search = st.text_input("🔍 Search (e.g. U13 Girls, Boys, Venue):", placeholder="Type here to search...")
     
-    # BILINGUAL SEARCH LOGIC (Secretly handles Afrikaans)
     s = raw_search.lower()
     s = s.replace("boys", "b").replace("seuns", "b").replace("seun", "b").replace("boy", "b")
     s = s.replace("girls", "g").replace("dogters", "g").replace("dogter", "g").replace("girl", "g")
