@@ -29,35 +29,36 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=2)
 def load():
     df = pd.read_csv(U)
-    df.columns = [str(c).strip() for c in df.columns]
+    # We ignore the names and just use the column position
     return df
 
 try:
-    df_raw = load()
+    data_raw = load()
     ch = st.selectbox("Filter Events:", ["All", "Sport", "Culture", "Academics"])
-    data = df_raw if ch == "All" else df_raw[df_raw['Category'].str.contains(ch, case=False, na=False)]
+    
+    # Filter by the first column (Category)
+    df = data_raw if ch == "All" else data_raw[data_raw.iloc[:, 0].str.contains(ch, case=False, na=False)]
 
-    for _, r in data.iterrows():
-        evt, dat, ven = str(r.get('Event','')), str(r.get('Date','')), str(r.get('Venue',''))
-        nfo = str(r.get('Information','')).strip()
+    for _, r in df.iterrows():
+        # Get data by position (0=Cat, 1=Evt, 2=Dat, 3=Ven, 4=P, 5=T, 6=S, 7=I)
+        evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
+        p_l, t_l, s_l, i_l = str(r.iloc[4]).strip(), str(r.iloc[5]).strip(), str(r.iloc[6]).strip(), str(r.iloc[7]).strip()
+        
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         
-        is_l = nfo.lower().startswith('http')
-        bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo and nfo.lower()!='nan' and not is_l) else ""
+        # Check if the last column (Information) is a link or text
+        is_info_link = i_l.lower().startswith('http')
+        bx = f'<div class="box"><b>Note:</b> {i_l}</div>' if (i_l and i_l.lower()!='nan' and not is_info_link) else ""
 
         btn_html = '<div class="btn-row">'
-        p = str(r.get('Program Link','')).strip()
-        t = str(r.get('Team/Cast Link','')).strip()
-        s = str(r.get('Transport','')).strip()
-
-        if p.lower().startswith("http"):
-            btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-        if t.lower().startswith("http"):
-            btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-        if s.lower().startswith("http"):
-            btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-        if is_l:
-            btn_html += f'<a href="{nfo}" target="_blank" class="btn">INFORMATION</a>'
+        if p_l.lower().startswith("http"):
+            btn_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
+        if t_l.lower().startswith("http"):
+            btn_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
+        if s_l.lower().startswith("http"):
+            btn_html += f'<a href="{s_l}" target="_blank" class="btn">CONFIRM</a>'
+        if is_info_link:
+            btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
         btn_html += '</div>'
 
         st.markdown(f'''<div class="card">
@@ -67,5 +68,5 @@ try:
             {bx}
             {btn_html}
         </div>''', unsafe_allow_html=True)
-except:
-    st.info("Syncing...")
+except Exception as e:
+    st.info("Refreshing events...")
