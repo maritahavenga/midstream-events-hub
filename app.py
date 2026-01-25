@@ -51,13 +51,16 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
-if 'act_sel' not in st.session_state: st.session_state.act_sel = []
-if 'age_sel' not in st.session_state: st.session_state.age_sel = []
+# --- PERSISTENCE LOGIC: READ FROM URL ---
+params = st.query_params
+if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
+if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
+if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
 
 try:
     df_raw, update_time = load()
     c = st.columns([1, 1, 1])
+    
     with c[0]:
         cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
     
@@ -71,11 +74,13 @@ try:
     with c[2]:
         sel_ages = st.multiselect("Age:", unique_ages, key="age_sel")
 
+    # --- PERSISTENCE LOGIC: WRITE TO URL ---
+    st.query_params.from_dict({"type": cat, "act": sel_acts, "age": sel_ages})
+
     df = f_l
     if sel_acts:
         df = df[df.iloc[:, 1].isin(sel_acts)]
     
-    # MODIFIED LOGIC: Always show items with NO age group even if a filter is set
     if sel_ages:
         df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2].isna()) | (df.iloc[:, 2].astype(str).str.lower() == 'nan')]
     
