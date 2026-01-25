@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import urllib.parse as up
 import re
+from datetime import datetime
 
 st.set_page_config(page_title="Events Hub", layout="centered")
 
@@ -31,6 +32,9 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=1)
 def load():
     df = pd.read_csv(U)
+    # Store the original text date as a backup
+    df['orig_date'] = df.iloc[:, 2].astype(str)
+    # Convert to real date for sorting
     df.iloc[:, 2] = pd.to_datetime(df.iloc[:, 2], dayfirst=True, errors='coerce')
     return df.sort_values(by=df.columns[2], ascending=True)
 
@@ -55,22 +59,14 @@ try:
             st.session_state.cat_sel, st.session_state.evt_sel = "All", "All Events"
             st.rerun()
     df = f_l if q == "All Events" else f_l[f_l.iloc[:, 1].str.startswith(q, na=False)]
+    
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
-        dat = r.iloc[2].strftime('%d %B %Y') if pd.notnull(r.iloc[2]) else "TBC"
+        # Display logic: Use formatted date if possible, otherwise use original text
+        if pd.notnull(r.iloc[2]):
+            dat = r.iloc[2].strftime('%d %B %Y')
+        else:
+            dat = r['orig_date']
+            
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
-        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
-        btns = '<div class="btn-row">'
-        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
-        btns += '</div>'
-        html = f'<div class="card"><div style="font-size:0.85rem;color:#333">📅 {dat}</div>'
-        html += f'<div class="t">{evt}</div>'
-        html += f'<div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>'
-        html += f'{bx}{btns}</div>'
-        st.markdown(html, unsafe_allow_html=True)
-except Exception:
-    st.info("Refreshing...")
+        i_l, mu = get_l(i_r), f"
