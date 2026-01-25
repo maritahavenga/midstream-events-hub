@@ -7,6 +7,7 @@ import pytz
 import requests
 import io
 import time
+import random
 
 st.set_page_config(page_title="Events Hub", layout="centered")
 
@@ -28,7 +29,6 @@ div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .sync-container {margin-top: 30px; padding-bottom: 50px;}
 .stButton>button { width: 100%; background-color: rgba(128, 0, 0, 0.9); color: white; border: 1px solid white; font-size: 0.85rem; border-radius: 10px; height: 50px; font-weight: bold;}
-.update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 10px; opacity: 0.7; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
 
@@ -36,16 +36,20 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=5) 
-def load(cb):
-    response = requests.get(f"{U}&cachebust={cb}")
+@st.cache_data(ttl=1) 
+def load(buster):
+    # TRICK 1: Add a random number to the URL to bypass Google's cache
+    url = f"{U}&cachebuster={buster}"
+    response = requests.get(url)
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
+    
     def parse_dt(x):
         s = str(x).strip()
         if not s or s.lower() == 'nan': return pd.NaT
         if '2026' not in s: s = f"{s} 2026"
         return pd.to_datetime(s, dayfirst=True, errors='coerce')
+    
     df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
     return df.sort_values(by='dt_fixed', ascending=True), datetime.now(pytz.timezone('Africa/Johannesburg'))
 
@@ -54,13 +58,15 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+# Persistence Logic
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
 if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
 
 try:
-    df_raw, update_time = load(int(time.time() / 5)) 
+    # TRICK 2: The loader now requires a unique ID every time
+    df_raw, update_time = load(st.session_state.get('buster', random.randint(1, 999999))) 
     
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
@@ -111,11 +117,12 @@ try:
             {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
     st.markdown("<div class='sync-container'>", unsafe_allow_html=True)
-    # The Button with built-in spinner feedback
     if st.button(f"🔄 Sync Live Data ({update_time.strftime('%H:%M:%S')})"):
-        with st.spinner("Syncing with Google..."):
+        with st.spinner("Forcing Google Update..."):
+            # TRICK 3: Generate a completely new buster and clear all data
+            st.session_state.buster = random.randint(1, 999999)
             st.cache_data.clear()
-            time.sleep(1) # Give the user a second to see the spinner
+            time.sleep(2) 
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
