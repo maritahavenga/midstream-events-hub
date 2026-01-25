@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. CSS Styling
+# 2. Styling
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .stTabs [data-baseweb="tab-list"] {gap: 8px; background-color: #008080; justify-content: center;}
@@ -34,11 +34,11 @@ label { color:white !important; font-weight:bold; }
 <a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
-# --- DATA URLs ---
-# Make sure GID 0 is your Results and 1966566702 is your Upcoming
+# --- UPDATED DATA URLs ---
 URL_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?"
-URL_UPCOMING = f"{URL_BASE}gid=1966566702&single=true&output=csv"
-URL_RESULTS = f"{URL_BASE}gid=0&single=true&output=csv"
+# SWAPPED GIDs based on your latest update
+URL_UPCOMING = f"{URL_BASE}gid=0&single=true&output=csv"
+URL_RESULTS = f"{URL_BASE}gid=1966566702&single=true&output=csv"
 
 def get_data(url, is_upcoming=True):
     try:
@@ -47,7 +47,6 @@ def get_data(url, is_upcoming=True):
         response = requests.get(f"{url}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
-        # SAFETY CHECK: If the sheet is empty or columns are missing
         if df.empty or len(df.columns) < 4:
             return pd.DataFrame(), now, datetime.now(SA_TIME)
 
@@ -87,7 +86,6 @@ with tab_up:
         view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days Only"], horizontal=True, key="view_up")
         raw_search = st.text_input("🔍 Search:", placeholder="U13B, Hockey...", key="search_up")
         
-        # Search cleanup logic
         s = raw_search.lower()
         s = s.replace("boys", "b").replace("seuns", "b").replace("seun", "b").replace("boy", "b")
         s = s.replace("girls", "g").replace("dogters", "g").replace("dogter", "g").replace("girl", "g")
@@ -100,7 +98,6 @@ with tab_up:
         if view_opt == "Next 7 Days Only":
             f_l = f_l[f_l['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
-        # Safety on dropdowns
         acts = sorted(f_l.iloc[:, 1].dropna().unique()) if not f_l.empty else []
         ages = sorted(f_l.iloc[:, 2].dropna().unique()) if not f_l.empty else []
         
@@ -137,7 +134,7 @@ with tab_up:
                 <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
                 {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
     else:
-        st.info("Syncing events hub...")
+        st.info("No upcoming events found on this sheet. Check your Google Sheet tab.")
 
 with tab_res:
     df_res_raw, _, update_res = get_data(URL_RESULTS, is_upcoming=False)
@@ -155,4 +152,4 @@ with tab_res:
                 <div class="res-box">🏆 RESULT: {res_val}</div>
             </div>''', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="no-data"><h3>🏆 No results yet</h3><p>Ensure your "Results" sheet has headers and data.</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>🏆 No results yet</h3><p>Ensure the Results tab has data and headers.</p></div>', unsafe_allow_html=True)
