@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Events & Results", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Hides the 3 dots/Rerun for a cleaner look)
+# 2. Styling
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -24,8 +24,9 @@ header {visibility: hidden;}
 .stTabs [aria-selected="true"] { background-color: #00cccc !important; }
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
-.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
-.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
+/* This fix allows the "Hard Enters" to show up in the Note box */
+.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4;white-space: pre-wrap;}
+.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem;white-space: pre-wrap;}
 .res-box{background:#e6f4ea; padding:10px; border-radius:8px; margin:5px 0; border:1px solid #1e7e34; color: #1e7e34; font-weight:bold; text-align:center;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
@@ -44,7 +45,6 @@ def load_all_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Voeg 'n tydstempel by om te keer dat Google ou data "cache"
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         def parse_dt(x):
@@ -70,7 +70,6 @@ def smart_filter(df, query):
         "muurbal": "squash", "tennis": "tennis", "seuns": "b", "meisies": "g"
     }
     for k, v in translations.items(): q = q.replace(k, v)
-    
     terms = q.split()
     for term in terms:
         clean = term.replace("o/","").replace("u/","").replace(" ","")
@@ -91,7 +90,6 @@ with tab_up:
     st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
-        
         if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
             st.cache_data.clear()
             st.rerun()
@@ -105,10 +103,9 @@ with tab_up:
         with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
         with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
 
-        df = f_df
+        df = smart_filter(f_df, raw_s)
         if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
         if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
-        df = smart_filter(df, raw_s)
 
         for i, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
@@ -119,8 +116,9 @@ with tab_up:
             team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
             mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-            bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val.lower()!='nan' and not info_l) else ""
-            tm_bx = f'<div class="team-box"><b>Team:</b> {team_val}</div>' if (team_val.lower()!='nan' and not team_l) else ""
+            
+            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and not info_l) else ""
+            tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and not team_l) else ""
             
             btns = '<div class="btn-row">'
             if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
