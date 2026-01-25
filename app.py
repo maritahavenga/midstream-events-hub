@@ -63,18 +63,22 @@ def get_l(val):
 
 def smart_filter(df, query):
     if not query: return df
-    # Maak soektog skoon
     q = query.lower()
+    
+    # Vertalings en opruiming
     q = q.replace("seuns","b").replace("boys","b").replace("seun","b")
     q = q.replace("meisies","g").replace("girls","g").replace("meisie","g")
     q = q.replace("o/","").replace("u/","")
     
-    # Breek soektog op in woorde (e.g. "13", "b", "hokkie")
     terms = q.split()
-    
     for term in terms:
-        # Soek elke term individueel in die ry
-        mask = df.apply(lambda r: term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+        if term in ['b', 'g']:
+            # AS dit 'b' of 'g' is, soek SLEGS in die Age Group kolom (Index 2)
+            # Dit keer dat 'Garsfontein' (met 'g') alles opmors
+            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(term, na=False)
+        else:
+            # Vir ander woorde (hokkie, 13, ens), soek in die hele ry
+            mask = df.apply(lambda r: term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
         df = df[mask]
     return df
 
@@ -93,7 +97,7 @@ with tab_up:
             st.rerun()
 
         view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="v_up")
-        raw_s = st.text_input("🔍 Search (e.g. o13 seuns hokkie):", placeholder="Type here...", key="search_up")
+        raw_s = st.text_input("🔍 Search (e.g. o13 seuns hokkie):", placeholder="Tik hier...", key="search_up")
         
         c = st.columns([1, 1, 1])
         with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
@@ -105,7 +109,6 @@ with tab_up:
         with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
         with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
 
-        # Pas filters toe
         df = f_df
         if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
         if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
@@ -130,7 +133,7 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("Geen gebeure gevind nie. Probeer 'n korter soekterm.")
+            st.info("Geen gebeure gevind nie.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
