@@ -45,32 +45,32 @@ try:
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    
     nms = f_l.iloc[:, 1].dropna().astype(str).tolist()
     grps = sorted(list(set([n.split()[0] for n in nms if n.strip()])))
     g_l = ["All Events"] + grps
-    
     with c[1]:
         q = st.selectbox("Find Activity:", g_l, key="evt_sel")
     with c[2]:
         if st.button("Reset"):
             st.session_state.cat_sel, st.session_state.evt_sel = "All", "All Events"
             st.rerun()
-
     df = f_l if q == "All Events" else f_l[f_l.iloc[:, 1].str.startswith(q, na=False)]
-
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
         dat = r.iloc[2].strftime('%d %B %Y') if pd.notnull(r.iloc[2]) else "TBC"
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
         bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
-        
-        btn_html = '<div class="btn-row">'
-        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-        if t: btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-        if s: btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-        if i_l: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
-        btn_html += '</div>'
-        
-        st.markdown(f'''<div class="card"><div style="font-size:0.85rem;
+        btns = '<div class="btn-row">'
+        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+        btns += '</div>'
+        html = f'<div class="card"><div style="font-size:0.85rem;color:#333">📅 {dat}</div>'
+        html += f'<div class="t">{evt}</div>'
+        html += f'<div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>'
+        html += f'{bx}{btns}</div>'
+        st.markdown(html, unsafe_allow_html=True)
+except Exception:
+    st.info("Refreshing...")
