@@ -4,6 +4,8 @@ import urllib.parse as up
 import re
 from datetime import datetime
 import pytz
+import requests
+import io
 
 st.set_page_config(page_title="Events Hub", layout="centered")
 
@@ -32,7 +34,11 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 
 @st.cache_data(ttl=15) 
 def load():
-    df = pd.read_csv(U)
+    # Use requests to ensure we get the UTF-8 content correctly
+    response = requests.get(U)
+    response.encoding = 'utf-8' 
+    df = pd.read_csv(io.StringIO(response.text))
+    
     def parse_dt(x):
         s = str(x).strip()
         if not s or s.lower() == 'nan': return pd.NaT
@@ -46,13 +52,12 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Keep the memory logic but remove the buggy reset button
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
 if 'evt_sel' not in st.session_state: st.session_state.evt_sel = []
 
 try:
     df_raw, update_time = load()
-    c = st.columns([1, 2]) # Two equal columns for a cleaner look
+    c = st.columns([1, 2])
     
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
