@@ -40,17 +40,4 @@ def get_l(val):
 try:
     df_raw = load()
     
-    c1, c2, c3 = st.columns([2, 2, 1])
-    
-    with c1:
-        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
-
-    # Filter data by category first
-    if cat != "All":
-        filtered_for_list = df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    else:
-        filtered_for_list = df_raw
-
-    # Grouping Logic: Get the FIRST WORD of every event name
-    # This turns "Tennis U11" and "Tennis U13" into just "Tennis"
-    unique_groups = sorted(list(set([str(val
+    c1, c2, c3 = st.columns(
