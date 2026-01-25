@@ -64,20 +64,24 @@ def smart_filter(df, query):
     if not query: return df
     q = query.lower()
     
-    # Vertalings
+    # Vertalings en opruiming
     q = q.replace("seuns","b").replace("boys","b").replace("seun","b")
     q = q.replace("meisies","g").replace("girls","g").replace("meisie","g")
     
+    # Breek soektog op in woorde
     terms = q.split()
     for term in terms:
-        # Skoonmaak vir o/13 tipe terme
-        clean_term = term.replace("o/","").replace("u/","")
+        # Verwyder o/ en u/ vir makliker passing (e.g. o/13 -> 13)
+        clean_term = term.replace("o/","").replace("u/","").replace(" ","")
+        
+        if not clean_term: continue
         
         if clean_term in ['b', 'g']:
-            # As dit net 'b' of 'g' is, wees streng (kyk net na spannaam/age group)
+            # As dit 'b' of 'g' is, kyk slegs na die span beskrywing (Kolom 3)
             mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean_term, na=False)
         else:
-            # Vir enige ander woorde soos "Hokkie", soek oral in die ry
+            # Vir enige ander term (Hokkie, 13, Garsfontein), soek in die hele ry
+            # Ons verwyder o/ en u/ tydelik uit die data ook vir die vergelyking
             mask = df.apply(lambda r: clean_term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
         df = df[mask]
     return df
@@ -96,16 +100,13 @@ with tab_up:
             st.cache_data.clear()
             st.rerun()
 
-        view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="v_up")
-        raw_s = st.text_input("🔍 Search (e.g. o13 seuns hokkie):", placeholder="Tik hier...", key="search_up")
+        raw_s = st.text_input("🔍 Search (e.g. o/13 seuns hokkie):", placeholder="Tik hier...", key="search_up")
         
         c = st.columns([1, 1, 1])
         with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
         
         f_df = df_up_raw if cat == "All" else df_up_raw[df_up_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-        if view_opt == "Next 7 Days":
-            f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
-
+        
         with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
         with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
 
@@ -133,16 +134,14 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("Geen gebeure gevind nie. Probeer slegs 'hokkie' of 'seuns' tik.")
+            st.info("Geen gebeure gevind nie. Probeer 'n korter term.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        raw_res_s = st.text_input("🔍 Search History:", placeholder="Soek span of telling...", key="search_res")
-        
+        raw_res_s = st.text_input("🔍 Search Results:", placeholder="Soek span of telling...", key="search_res")
         df_res = smart_filter(df_past, raw_res_s)
-        
         if not df_res.empty:
             for _, r in df_res.iterrows():
                 res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
@@ -159,5 +158,3 @@ with tab_res:
                 else:
                     res_disp = f'<div class="res-box" style="background:#f8f9fa; border-color:#ccc; color:#666;">🏆 Result Pending</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {ven_res}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
-        else:
-            st.info("Geen resultate gevind nie.")
