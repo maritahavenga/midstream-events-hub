@@ -21,6 +21,8 @@ st.markdown("""<style>
 .stTabs [aria-selected="true"] { background-color: #00cccc !important; }
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
+.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
+.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
 .res-box{background:#e6f4ea; padding:10px; border-radius:8px; margin:5px 0; border:1px solid #1e7e34; color: #1e7e34; font-weight:bold; text-align:center;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
@@ -68,10 +70,8 @@ with tab_up:
             if s: df_up = df_up[df_up.apply(lambda r: s in str(r).lower().replace(" ",""), axis=1)]
             for _, r in df_up.iterrows():
                 age_val = str(r.iloc[2]).strip()
-                # Remove 'nan' from the title
-                display_title = f"{r.iloc[1]} {age_val}" if (age_val and age_val.lower() != 'nan') else str(r.iloc[1])
-                ven = str(r.iloc[4])
-                dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+                title = f"{r.iloc[1]} {age_val}" if (age_val and age_val.lower() != 'nan') else str(r.iloc[1])
+                ven, dat = str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
                 prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
                 team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
                 info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
@@ -84,11 +84,7 @@ with tab_up:
                 if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
                 if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
                 btns += '</div>'
-                st.markdown(f'''<div class="card">
-                    <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
-                    <div class="t">{display_title}</div>
-                    <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-                    {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
+                st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
 
 with tab_res:
     if not df_all.empty:
@@ -102,4 +98,14 @@ with tab_res:
                 dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
                 ven_res = str(r.iloc[4]) if str(r.iloc[4]).lower() != 'nan' else "Venue Unknown"
                 age_res = str(r.iloc[2]).strip()
-                title_res = f"{r.iloc[1]} {age_res}" if (age_res and age_res.lower() != 'nan
+                title_res = f"{r.iloc[1]} {age_res}" if (age_res and age_res.lower() != 'nan') else str(r.iloc[1])
+                res_disp = ""
+                if res_link:
+                    res_disp = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn">🏆 VIEW FULL RESULTS</a></div>'
+                elif res_raw.lower() != 'nan' and res_raw != "":
+                    res_disp = f'<div class="res-box">🏆 RESULT: {res_raw}</div>'
+                else:
+                    res_disp = f'<div class="res-box" style="background:#f8f9fa; border-color:#ccc; color:#666;">🏆 Result Pending</div>'
+                st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {ven_res}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
+        else:
+            st.info("No past results found.")
