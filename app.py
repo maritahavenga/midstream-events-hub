@@ -26,9 +26,6 @@ st.markdown("""<style>
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
 .res-btn { background:#1e7e34!important; border: 2px solid #ffffff !important; }
 #back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
-div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
-div[data-baseweb="select"] * { color:white !important; }
-label { color:white !important; font-weight:bold; }
 </style>
 <div id="top"></div>
 <a href="#top" id="back-to-top">↑</a>
@@ -64,9 +61,12 @@ tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 RESULTS"])
 
 with tab_up:
     if not df_all.empty:
+        # Show FUTURE and TODAY's events
         df_up = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
-        raw_search = st.text_input("🔍 Search Upcoming:", placeholder="U13B, Hockey...", key="search_up")
-        s = raw_search.lower().replace(" ","")
+        
+        search_up = st.text_input("🔍 Search Upcoming:", placeholder="U13B, Hockey...", key="search_up")
+        s = search_up.lower().replace(" ","")
+        
         if not df_up.empty:
             if s: df_up = df_up[df_up.apply(lambda r: s in str(r).lower().replace(" ",""), axis=1)]
             for _, r in df_up.iterrows():
@@ -74,18 +74,22 @@ with tab_up:
                 display_title = f"{r.iloc[1]} {age_val}" if age_val != 'nan' else str(r.iloc[1])
                 ven = str(r.iloc[4])
                 dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+                
                 prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
                 team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
                 info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
                 mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+                
                 bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
                 tm_bx = f'<div class="team-box"><b>Team Info:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
+                
                 btns = '<div class="btn-row">'
                 if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
                 if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
                 if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
                 if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
                 btns += '</div>'
+                
                 st.markdown(f'''<div class="card">
                     <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
                     <div class="t">{display_title}</div>
@@ -94,16 +98,20 @@ with tab_up:
 
 with tab_res:
     if not df_all.empty:
+        # Show PAST events (yesterday and older)
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        search_res = st.text_input("🔍 Search Past Results:", placeholder="Search team or score...", key="search_res")
+        
+        search_res = st.text_input("🔍 Search Results:", placeholder="Search team or score...", key="search_res")
+        
         if not df_past.empty:
             if search_res: df_past = df_past[df_past.apply(lambda r: search_res.lower() in str(r).lower(), axis=1)]
+            
             for _, r in df_past.iterrows():
+                # Force checking Column J (Index 9)
                 res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
                 res_link = get_l(res_raw)
                 dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
                 
-                # Logic: If it's a link, show a button. If it's text, show the box.
                 res_display = ""
                 if res_link:
                     res_display = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn">🏆 VIEW FULL RESULTS</a></div>'
@@ -117,3 +125,5 @@ with tab_res:
                     <div class="t">{r.iloc[1]} {r.iloc[2]}</div>
                     {res_display}
                 </div>''', unsafe_allow_html=True)
+        else:
+            st.info("No past events found to show results for.")
