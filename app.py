@@ -20,6 +20,7 @@ st.markdown("""<style>
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
 .team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
+/* The "No Data" Styling */
 .no-data{text-align:center; padding:40px 20px; background:rgba(255,255,255,0.1); border-radius:15px; color:white; border:1px dashed white; margin-top:20px}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn {
@@ -53,10 +54,10 @@ def load_fresh():
     
     df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
     
-    # RULE: Only show events from Today onwards
+    # Filter for future events only
     df = df[df['dt_fixed'].dt.date >= now].copy()
     
-    # SMART CLEANUP: Standardize Age Groups (remove spaces, make uppercase)
+    # Standardize Age Groups
     if not df.empty:
         df.iloc[:, 2] = df.iloc[:, 2].astype(str).apply(lambda x: x.replace(" ", "").upper() if x.lower() != 'nan' else "")
     
@@ -97,9 +98,9 @@ try:
     df = f_l
     if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
     if sel_ages:
-        # Show selected ages OR blank/all-school events
         df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
     
+    # CHECK: Is the filtered list empty?
     if df.empty:
         st.markdown(f'''<div class="no-data">
             <h3>📭 No information currently</h3>
@@ -137,4 +138,4 @@ try:
     st.markdown("</div>", unsafe_allow_html=True)
 
 except Exception:
-    st.info("Syncing with Google...")
+    st.info("Connecting to live data...")
