@@ -64,3 +64,74 @@ def get_l(val):
 
 # --- HEADER ---
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
+df_all, today_date, update_time = load_all_data()
+
+tab_up, tab_res = st.tabs(["🗓️ UPCOMING", "🏆 RESULTS"])
+
+with tab_up:
+    if not df_all.empty:
+        # Filter: Today and Future
+        df_up = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
+        
+        if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
+            st.cache_data.clear()
+            st.rerun()
+
+        raw_search = st.text_input("🔍 Search Upcoming:", placeholder="U13B, Hockey...", key="search_up")
+        s = raw_search.lower().replace("seuns","b").replace("boys","b").replace("girls","g").replace("dogters","g").replace(" ","")
+        
+        if not df_up.empty:
+            if s: df_up = df_up[df_up.apply(lambda r: s in str(r).lower().replace(" ",""), axis=1)]
+            
+            for _, r in df_up.iterrows():
+                age_val = str(r.iloc[2]).strip()
+                display_title = f"{r.iloc[1]} {age_val}" if age_val != 'nan' else str(r.iloc[1])
+                ven = str(r.iloc[4])
+                dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+                
+                # Link Parsing
+                prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
+                team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
+                info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
+                mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+                
+                # HTML Boxes (only if not empty)
+                bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
+                tm_bx = f'<div class="team-box"><b>Team Info:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
+
+                btns = '<div class="btn-row">'
+                if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
+                if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+                if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+                if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
+                btns += '</div>'
+                
+                st.markdown(f'''<div class="card">
+                    <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
+                    <div class="t">{display_title}</div>
+                    <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+                    {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
+        else:
+            st.info("No upcoming events found.")
+
+with tab_res:
+    if not df_all.empty:
+        # Filter: Past only
+        df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
+        
+        search_res = st.text_input("🔍 Search Results:", placeholder="Search team or score...", key="search_res")
+        
+        if not df_past.empty:
+            if search_res: df_past = df_past[df_past.apply(lambda r: search_res.lower() in str(r).lower(), axis=1)]
+            
+            for _, r in df_past.iterrows():
+                res_val = str(r.iloc[8]).strip() if (len(r) > 8 and str(r.iloc[8]).lower() != 'nan') else "Result Pending"
+                dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+                
+                st.markdown(f'''<div class="card">
+                    <div style="font-size:0.85rem;">🗓️ {dat_res}</div>
+                    <div class="t">{r.iloc[1]} {r.iloc[2]}</div>
+                    <div class="res-box">🏆 RESULT: {res_val}</div>
+                </div>''', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="no-data"><h3>🏆 No past results yet.</h3><p>Matches will appear here automatically once the date has passed.</p></div>', unsafe_allow_html=True)
