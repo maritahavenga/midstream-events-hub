@@ -7,7 +7,6 @@ import pytz
 
 st.set_page_config(page_title="Events Hub", layout="centered")
 
-# CSS and Local Storage Script to remember selections
 st.markdown("""<style>
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
@@ -23,7 +22,6 @@ st.markdown("""<style>
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
 div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
-.stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; border-radius: 8px; }
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
 .cal-svg { width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; fill: #555; }
 </style>""", unsafe_allow_html=True)
@@ -32,7 +30,7 @@ CAL_SVG = '<svg class="cal-svg" viewBox="0 0 24 24"><path d="M19,4H18V2H16V4H8V2
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=10) 
+@st.cache_data(ttl=15) 
 def load():
     df = pd.read_csv(U)
     def parse_dt(x):
@@ -48,13 +46,13 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# HANDLE PERSISTENT STATE
+# Keep the memory logic but remove the buggy reset button
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
 if 'evt_sel' not in st.session_state: st.session_state.evt_sel = []
 
 try:
     df_raw, update_time = load()
-    c = st.columns([1.5, 2.5, 0.8])
+    c = st.columns([1, 2]) # Two equal columns for a cleaner look
     
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
@@ -63,14 +61,7 @@ try:
     grps = sorted(list(set([str(n).split()[0] for n in f_l.iloc[:, 1].dropna() if str(n).strip()])))
     
     with c[1]:
-        # Selections here are now saved in session_state automatically
-        qs = st.multiselect("Activities:", grps, key="evt_sel")
-    
-    with c[2]:
-        if st.button("Reset"):
-            st.session_state.cat_sel = "All"
-            st.session_state.evt_sel = []
-            st.rerun()
+        qs = st.multiselect("Activities:", grps, key="evt_sel", placeholder="Filter...")
 
     df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
     
