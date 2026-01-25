@@ -32,9 +32,7 @@ st.markdown("""
         border: none;
         height: 3.2em;
         text-transform: uppercase;
-        letter-spacing: 1px;
     }
-    .stButton button:hover { background-color: #a00000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -59,13 +57,12 @@ try:
     df = load_data()
     
     for index, row in df.iterrows():
-        # Set Sport vs Culture Icons (using reliable hosted icons)
+        # Set Sport vs Culture Icons
         category = str(row.get('Category', '')).lower()
-        # Sport icon (Whistle/Running) or Culture icon (Masks/Art)
-        icon_url = "https://cdn-icons-png.flaticon.com/512/3163/3163635.png" # Default Sport Whistle
+        icon_url = "https://cdn-icons-png.flaticon.com/512/3163/3163635.png" # Default Sport
         
         if "cult" in category:
-            icon_url = "https://cdn-icons-png.flaticon.com/512/3163/3163732.png" # Drama Masks
+            icon_url = "https://cdn-icons-png.flaticon.com/512/3163/3163732.png" # Culture
 
         # Display the Card
         st.markdown(f"""
@@ -92,4 +89,7 @@ try:
 
         # Transport Link
         b_col = [c for c in df.columns if 'Transport' in c]
-        if b_col and pd.notna(row.
+        if b_col and pd.notna(row.get(b_col[0])) and str(row.get(b_col[0])).startswith('http'):
+            with c3: st.link_button("🚌 Bus", str(row.get(b_col[0])))
+            
+        st.markdown("<div style='margin-bottom:
