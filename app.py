@@ -27,14 +27,11 @@ st.markdown("""<style>
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
 .res-btn { background:#1e7e34!important; border: 2px solid #ffffff !important; }
-#back-to-top { position: fixed; bottom: 90px; right: 20px; background-color: #800000; color: white !important; width: 45px; height: 45px; line-height: 45px; text-align: center; border-radius: 50%; z-index: 99999; border: 2px solid white; }
 h2 { color: white !important; text-align: center; margin-top: -10px; text-transform: uppercase; }
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 </style>
-<div id="top"></div>
-<a href="#top" id="back-to-top">↑</a>
 """, unsafe_allow_html=True)
 
 URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
@@ -62,29 +59,18 @@ def get_l(val):
 
 def smart_filter(df, query):
     if not query: return df
-    q = query.lower()
+    q = query.lower().strip()
     
-    # Vertalings en opruiming
+    # Vertalings vir Seuns/Meisies
     q = q.replace("seuns","b").replace("boys","b").replace("seun","b")
     q = q.replace("meisies","g").replace("girls","g").replace("meisie","g")
     
-    # Breek soektog op in woorde
-    terms = q.split()
-    for term in terms:
-        # Verwyder o/ en u/ vir makliker passing (e.g. o/13 -> 13)
-        clean_term = term.replace("o/","").replace("u/","").replace(" ","")
-        
-        if not clean_term: continue
-        
-        if clean_term in ['b', 'g']:
-            # As dit 'b' of 'g' is, kyk slegs na die span beskrywing (Kolom 3)
-            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean_term, na=False)
-        else:
-            # Vir enige ander term (Hokkie, 13, Garsfontein), soek in die hele ry
-            # Ons verwyder o/ en u/ tydelik uit die data ook vir die vergelyking
-            mask = df.apply(lambda r: clean_term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
-        df = df[mask]
-    return df
+    # Verwyder o/ en u/ en spasies vir passing
+    q_clean = q.replace("o/","").replace("u/","").replace(" ","")
+    
+    # Soek die skoon term in die hele ry
+    mask = df.apply(lambda r: q_clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+    return df[mask]
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_all, today_date, update_time = load_all_data()
@@ -96,24 +82,10 @@ with tab_up:
     if not df_all.empty:
         df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
         
-        if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
-            st.cache_data.clear()
-            st.rerun()
-
-        raw_s = st.text_input("🔍 Search (e.g. o/13 seuns hokkie):", placeholder="Tik hier...", key="search_up")
+        raw_s = st.text_input("🔍 Soek (bv. Hokkie, Atletiek, o/13):", placeholder="Tik hier...", key="search_up")
         
-        c = st.columns([1, 1, 1])
-        with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
-        
-        f_df = df_up_raw if cat == "All" else df_up_raw[df_up_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-        
-        with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
-        with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
-
-        df = f_df
-        if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
-        if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
-        df = smart_filter(df, raw_s)
+        # Pas die nuwe smart filter toe
+        df = smart_filter(df_up_raw, raw_s)
 
         if not df.empty:
             for _, r in df.iterrows():
@@ -134,13 +106,13 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("Geen gebeure gevind nie. Probeer 'n korter term.")
+            st.info("Geen gebeure gevind nie. Maak seker die spelling is dieselfde as in die Google Sheet.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        raw_res_s = st.text_input("🔍 Search Results:", placeholder="Soek span of telling...", key="search_res")
+        raw_res_s = st.text_input("🔍 Soek Resultate:", placeholder="Soek span of telling...", key="search_res")
         df_res = smart_filter(df_past, raw_res_s)
         if not df_res.empty:
             for _, r in df_res.iterrows():
