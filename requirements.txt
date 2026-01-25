@@ -1,3 +1,6 @@
 pandas
 streamlit==1.41.1
 altair==5.5.0
+streamlit-autorefresh
+requests
+pytz
