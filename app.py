@@ -20,7 +20,6 @@ st.markdown("""<style>
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
 .team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
-/* The "No Data" Styling */
 .no-data{text-align:center; padding:40px 20px; background:rgba(255,255,255,0.1); border-radius:15px; color:white; border:1px dashed white; margin-top:20px}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
 .btn {
@@ -29,38 +28,38 @@ st.markdown("""<style>
     font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important;
     border-radius:6px!important; display:block!important; white-space:nowrap!important;
 }
+/* Floating Back to Top Button */
+#back-to-top {
+    position: fixed; bottom: 20px; right: 20px; background-color: #00cccc; 
+    color: white; padding: 10px 15px; border-radius: 50%; text-decoration: none;
+    z-index: 1000; font-weight: bold; border: 2px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 .sync-container {margin-top:30px; padding-bottom:50px;}
 .stButton>button { width:100%; background-color:#800000; color:white; border:1px solid white; font-size:0.85rem; border-radius:10px; height:50px; font-weight:bold;}
-</style>""", unsafe_allow_html=True)
+</style>
+<a href="#" id="back-to-top">↑</a>
+""", unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
 def load_fresh():
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     now = datetime.now(SA_TIME).date()
-    
     response = requests.get(f"{U}&refresh={int(time.time())}")
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
-    
     def parse_dt(x):
         s = str(x).strip()
         if not s or s.lower() == 'nan': return pd.NaT
-        if '2026' not in s: s = f"{s} 2026"
+        if '202' not in s: s = f"{s} 2026"
         return pd.to_datetime(s, dayfirst=True, errors='coerce')
-    
     df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-    
-    # Filter for future events only
     df = df[df['dt_fixed'].dt.date >= now].copy()
-    
-    # Standardize Age Groups
     if not df.empty:
         df.iloc[:, 2] = df.iloc[:, 2].astype(str).apply(lambda x: x.replace(" ", "").upper() if x.lower() != 'nan' else "")
-    
     return df.sort_values(by='dt_fixed', ascending=True), datetime.now(SA_TIME)
 
 def get_l(val):
@@ -68,23 +67,26 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
+# Persistence Logic
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
 if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
+if 'search_val' not in st.session_state: st.session_state.search_val = ""
 
 try:
     df_raw, update_time = load_fresh() 
     
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-    st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
+    
+    # SEARCH BAR AT THE TOP
+    search = st.text_input("🔍 Search events, teams or venues:", value=st.session_state.search_val, placeholder="e.g. Overkruin, Hockey, U12...")
 
     c = st.columns([1, 1, 1])
     with c[0]:
         cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
     
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    
     unique_acts = sorted([x for x in f_l.iloc[:, 1].dropna().unique() if str(x).strip()])
     unique_ages = sorted([x for x in f_l.iloc[:, 2].dropna().unique() if str(x).strip() and str(x) != ""])
     
@@ -93,19 +95,17 @@ try:
     with c[2]:
         sel_ages = st.multiselect("Age:", unique_ages, key="age_sel")
 
-    st.query_params.from_dict({"type": cat, "act": sel_acts, "age": sel_ages})
-
+    # Filter Logic
     df = f_l
     if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages:
-        df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
+    if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
     
-    # CHECK: Is the filtered list empty?
+    # Keyword Search Filter (searches across Event Name, Venue, and Notes)
+    if search:
+        df = df[df.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+
     if df.empty:
-        st.markdown(f'''<div class="no-data">
-            <h3>📭 No information currently</h3>
-            <p>Try changing your filters or check back later for updates.</p>
-        </div>''', unsafe_allow_html=True)
+        st.markdown(f'<div class="no-data"><h3>📭 No information currently</h3><p>Try changing your filters or search terms.</p></div>', unsafe_allow_html=True)
     else:
         for _, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
@@ -114,8 +114,8 @@ try:
             prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
             team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
             info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
-            
             mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            
             bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
             tm_bx = f'<div class="team-box"><b>Team Info:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
 
@@ -138,4 +138,4 @@ try:
     st.markdown("</div>", unsafe_allow_html=True)
 
 except Exception:
-    st.info("Connecting to live data...")
+    st.info("Syncing with live data...")
