@@ -18,7 +18,6 @@ st.markdown("""
     }
     .event-title { color: #800000; font-weight: bold; font-size: 1.3rem; margin-bottom: 2px; }
     .event-date { color: #555; font-weight: bold; font-size: 1rem; }
-    /* Styling for the interactive Venue link */
     .venue-link { 
         color: #800000 !important; 
         text-decoration: underline; 
@@ -44,17 +43,41 @@ def load_data():
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
+# Start of the data processing block
 try:
     df = load_data()
     for index, row in df.iterrows():
         # Category Icons
         cat = str(row.get('Category', '')).lower()
         icon = "https://cdn-icons-png.flaticon.com/512/3163/3163635.png"
-        if "cult" in cat: icon = "https://cdn-icons-png.flaticon.com/512/3163/3163732.png"
+        if "cult" in cat: 
+            icon = "https://cdn-icons-png.flaticon.com/512/3163/3163732.png"
 
         # Map Link Logic
         venue = str(row.get('Venue', 'TBA'))
         clean_venue = urllib.parse.quote(venue + " South Africa")
-        map_search_url = f"https://www.google.com/maps/search/?api=1&query={clean_venue}"
+        map_url = f"https://www.google.com/maps/search/?api=1&query={clean_venue}"
 
         # Display Card
+        st.markdown(f"""
+            <div class="event-card">
+                <img src="{icon}" width="45" style="float: right; opacity: 0.8;">
+                <div class="event-date">📅 {row.get('Date', 'TBA')}</div>
+                <div class="event-title">{row.get('Event', 'Event')}</div>
+                <div style="margin-top:10px; color:#333;">📍 Venue: 
+                    <a href="{map_url}" target="_blank" class="venue-link">{venue}</a>
+                </div>
+                <p style="font-size:0.8rem; color:#666;">(Tap venue name for GPS directions)</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Action Buttons
+        c1, c2, c3 = st.columns(3)
+        
+        p_col = [c for c in df.columns if 'Program' in c]
+        if p_col and pd.notna(row.get(p_col[0])) and str(row.get(p_col[0])).startswith('http'):
+            with c1: st.link_button("📜 Program", str(row.get(p_col[0])))
+        
+        t_col = [c for c in df.columns if 'Team' in c]
+        if t_col and pd.notna(row.get(t_col[0])) and str(row.get(t_col[0])).startswith('http'):
+            with c2: st.
