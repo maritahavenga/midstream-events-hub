@@ -24,7 +24,12 @@ div[data-baseweb="select"] * { color: white !important; }
 label { color: white !important; font-weight: bold; }
 .stButton>button { width: 100%; background-color: #800000; color: white; border: none; font-weight: bold; margin-top: 28px; height: 42px; }
 .update-ts { text-align: center; color: white; font-size: 0.7rem; margin-top: 20px; opacity: 0.8; }
+/* Style for the calendar image icon */
+.cal-icon { width: 18px; vertical-align: middle; margin-right: 5px; margin-bottom: 3px; }
 </style>""", unsafe_allow_html=True)
+
+# Path to a generic calendar icon with no numbers
+CAL_URL = "https://cdn-icons-png.flaticon.com/512/3652/3652191.png"
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
@@ -69,12 +74,7 @@ try:
         dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
         p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
         i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        
-        # Smart Info Box: No character limit, handles long text
-        bx = ""
-        if i_r and i_r.lower()!='nan' and not i_l:
-            bx = f'<div class="box"><b>Note:</b> {i_r}</div>'
-
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
         btns = '<div class="btn-row">'
         if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
         if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
@@ -82,9 +82,11 @@ try:
         if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
         btns += '</div>'
         
-        # Cleaned up icon: used 📅 (standard) instead of specific numbered ones
-        st.markdown(f'''<div class="card"><div style="font-size:0.85rem;color:#333">📅 {dat}</div>
-            <div class="t">{evt}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+        # Using an image for the calendar instead of an emoji
+        st.markdown(f'''<div class="card">
+            <div style="font-size:0.85rem;color:#333"><img src="{CAL_URL}" class="cal-icon"> {dat}</div>
+            <div class="t">{evt}</div>
+            <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
             {bx}{btns}</div>''', unsafe_allow_html=True)
 
     st.markdown(f'<div class="update-ts">Live Data Updated: {update_time.strftime("%d %b %H:%M")}</div>', unsafe_allow_html=True)
