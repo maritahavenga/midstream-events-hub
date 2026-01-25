@@ -64,30 +64,31 @@ def smart_filter(df, query):
     if not query: return df
     q = query.lower().strip()
     
-    # HARD-CODED TRANSLATIONS
+    # Vertalings
     translations = {
-        "hokkie": "hockey",
-        "atletiek": "athletics",
-        "swem": "swimming",
-        "muurbal": "squash",
-        "landloop": "cross country",
-        "rugby": "rugby",
-        "netbal": "netball",
-        "tennis": "tennis",
-        "seuns": "b",
-        "boys": "b",
-        "seun": "b",
-        "meisies": "g",
-        "girls": "g",
-        "meisie": "g"
+        "hokkie": "hockey", "atletiek": "athletics", "swem": "swimming",
+        "muurbal": "squash", "landloop": "cross country", "seuns": "b",
+        "boys": "b", "seun": "b", "meisies": "g", "girls": "g", "meisie": "g"
     }
     
     for afrikaans, english in translations.items():
         q = q.replace(afrikaans, english)
         
-    q_clean = q.replace("o/","").replace("u/","").replace(" ","")
-    mask = df.apply(lambda r: q_clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
-    return df[mask]
+    # Breek soektog op in terme (e.g. ["hockey", "13", "g"])
+    terms = q.split()
+    
+    for term in terms:
+        clean_term = term.replace("o/","").replace("u/","").replace(" ","")
+        if not clean_term: continue
+        
+        if clean_term in ['b', 'g']:
+            # Wees streng met geslag (soek net in Age Group kolom)
+            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean_term, na=False)
+        else:
+            # Soek ander woorde oral
+            mask = df.apply(lambda r: clean_term in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+        df = df[mask]
+    return df
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_all, today_date, update_time = load_all_data()
@@ -98,18 +99,16 @@ with tab_up:
     st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
-        
         if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
             st.cache_data.clear()
             st.rerun()
 
-        raw_s = st.text_input("🔍 Search:", placeholder="e.g. u13 squash", key="search_up")
+        raw_s = st.text_input("🔍 Search:", placeholder="e.g. u13 girls hockey", key="search_up")
         
         c = st.columns([1, 1, 1])
         with c[0]: cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="c_up")
         
         f_df = df_up_raw if cat == "All" else df_up_raw[df_up_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-        
         with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="a_up")
         with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="ag_up")
 
@@ -137,7 +136,7 @@ with tab_up:
                 btns += '</div>'
                 st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
         else:
-            st.info("No events found.")
+            st.info("No events found. Check your search terms.")
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
