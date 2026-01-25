@@ -28,16 +28,31 @@ st.markdown("""<style>
     font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important;
     border-radius:6px!important; display:block!important; white-space:nowrap!important;
 }
-/* Floating Back to Top Button */
+
+/* Fixed Floating Button - Moved HIGHER to clear the Streamlit logo */
 #back-to-top {
-    position: fixed; bottom: 20px; right: 20px; background-color: #00cccc; 
-    color: white; padding: 10px 15px; border-radius: 50%; text-decoration: none;
-    z-index: 1000; font-weight: bold; border: 2px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    position: fixed; 
+    bottom: 80px; /* Increased from 20px to 80px to clear the logo */
+    right: 25px; 
+    background-color: #800000; /* Changed to Maroon to stand out against teal background */
+    color: white; 
+    width: 50px;
+    height: 50px;
+    line-height: 50px;
+    text-align: center;
+    border-radius: 50%; 
+    text-decoration: none;
+    z-index: 9999; 
+    font-size: 24px;
+    font-weight: bold; 
+    border: 2px solid white; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
 }
+
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
-.sync-container {margin-top:30px; padding-bottom:50px;}
+.sync-container {margin-top:30px; padding-bottom:100px;} /* Extra padding at bottom */
 .stButton>button { width:100%; background-color:#800000; color:white; border:1px solid white; font-size:0.85rem; border-radius:10px; height:50px; font-weight:bold;}
 </style>
 <a href="#" id="back-to-top">↑</a>
@@ -67,20 +82,17 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-# Persistence Logic
 params = st.query_params
 if 'cat_sel' not in st.session_state: st.session_state.cat_sel = params.get("type", "All")
 if 'act_sel' not in st.session_state: st.session_state.act_sel = params.get_all("act")
 if 'age_sel' not in st.session_state: st.session_state.age_sel = params.get_all("age")
-if 'search_val' not in st.session_state: st.session_state.search_val = ""
 
 try:
     df_raw, update_time = load_fresh() 
     
     st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
     
-    # SEARCH BAR AT THE TOP
-    search = st.text_input("🔍 Search events, teams or venues:", value=st.session_state.search_val, placeholder="e.g. Overkruin, Hockey, U12...")
+    search = st.text_input("🔍 Search events, teams or venues:", placeholder="e.g. Overkruin, Hockey, U12...")
 
     c = st.columns([1, 1, 1])
     with c[0]:
@@ -95,12 +107,12 @@ try:
     with c[2]:
         sel_ages = st.multiselect("Age:", unique_ages, key="age_sel")
 
-    # Filter Logic
+    st.query_params.from_dict({"type": cat, "act": sel_acts, "age": sel_ages})
+
     df = f_l
     if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
     if sel_ages: df = df[(df.iloc[:, 2].isin(sel_ages)) | (df.iloc[:, 2] == "") | (df.iloc[:, 2].isna())]
     
-    # Keyword Search Filter (searches across Event Name, Venue, and Notes)
     if search:
         df = df[df.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
 
