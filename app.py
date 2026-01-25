@@ -2,41 +2,29 @@ import streamlit as st
 import pandas as pd
 import urllib.parse as up
 
-st.set_page_config(page_title="Events Hub", layout="wide")
+st.set_page_config(page_title="Events Hub", layout="centered")
 
 st.markdown("""<style>
-.stApp{background:#008080}.block-container{padding:0.5rem;max-width:100%}
-.card{background:white;padding:12px;border-radius:12px;border-left:8px solid #800000;margin-bottom:5px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
-.t{color:#800000;font-weight:bold;font-size:0.95rem}.v{color:#800000;font-weight:bold;text-decoration:underline}
-
-/* Force 4 columns to fit on one screen without scrolling */
-[data-testid="column"] {
-    width: 25% !important;
-    flex: 1 1 25% !important;
-    min-width: 0px !important;
-    padding: 1px !important;
-}
-div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 2px !important;
-}
-/* Ultra-small buttons for mobile */
-.stButton button {
-    width: 100%; background: #800000!important; color: white!important; 
-    font-weight: bold; height: 2.2em; font-size: 0.55rem!important; 
-    padding: 0px!important; border-radius: 4px; border: none;
-    line-height: 1;
+.stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
+.card{background:white;padding:15px;border-radius:15px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
+.t{color:#800000;font-weight:bold;font-size:1.1rem;margin:5px 0}.v{color:#800000;font-weight:bold;text-decoration:underline}
+.box{background:#f1f3f5;padding:10px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.85rem}
+/* Updated Button Bar for longer text */
+.btn-row {display: flex; gap: 4px; justify-content: space-between; margin-top: 10px;}
+.btn {
+    flex: 1; background: #800000; color: white !important; 
+    text-align: center; text-decoration: none !important;
+    font-weight: bold; font-size: 0.65rem; padding: 12px 1px;
+    border-radius: 6px; display: block; white-space: nowrap;
+    letter-spacing: -0.2px;
 }
 div[data-baseweb="select"] > div { background-color: #800000 !important; border: none !important; }
-div[data-baseweb="select"] * { color: white !important; font-size: 0.8rem; }
-.box{background:#f1f3f5;padding:8px;border-radius:8px;margin-top:5px;border-left:4px solid #008080;color:#333;font-size:0.75rem}
-label { color: white !important; font-weight: bold; font-size: 0.8rem; }
+div[data-baseweb="select"] * { color: white !important; }
+label { color: white !important; font-weight: bold; }
 </style>""", unsafe_allow_html=True)
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-st.markdown("<h2 style='text-align:center;color:white;font-size:1.5rem;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align:center;color:white;'>EVENTS HUB 2026</h2>", unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
@@ -52,29 +40,33 @@ try:
     data = df_raw if ch == "All" else df_raw[df_raw['Category'].str.contains(ch, case=False, na=False)]
 
     for _, r in data.iterrows():
-        evt, dat = str(r.get('Event','Event')), str(r.get('Date','TBA'))
-        ven, nfo = str(r.get('Venue','TBA')), str(r.get('Information',''))
+        evt, dat, ven = str(r.get('Event','')), str(r.get('Date','')), str(r.get('Venue',''))
+        nfo = str(r.get('Information',''))
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        
         is_l = nfo.startswith('http')
         bx = f'<div class="box"><b>Note:</b> {nfo}</div>' if (nfo.strip() and nfo.lower()!='nan' and not is_l) else ""
 
-        st.markdown(f'''<div class="card"><div style="font-size:0.8rem">📅 {dat}</div><div class="t">{evt}</div><div style="font-size:0.8rem">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}</div>''', unsafe_allow_html=True)
+        btn_html = '<div class="btn-row">'
+        links = {
+            "PROGRAMME": r.get('Program Link'),
+            "TEAM": r.get('Team/Cast Link'),
+            "CONFIRM": r.get('Transport')
+        }
+        for label, val in links.items():
+            if pd.notna(val) and str(val).startswith("http"):
+                btn_html += f'<a href="{val}" target="_blank" class="btn">{label}</a>'
+        if is_l:
+            btn_html += f'<a href="{nfo}" target="_blank" class="btn">INFORMATION</a>'
+        btn_html += '</div>'
 
-        c1, c2, c3, c4 = st.columns(4)
-        cols = r.index.tolist()
-        prog = next((r[c] for c in cols if "Program" in c), None)
-        team = next((r[c] for c in cols if "Team" in c), None)
-        sign = next((r[c] for c in cols if any(x in c for x in ["Transport", "Sign", "Confirm"])), None)
+        st.markdown(f'''<div class="card">
+            <div style="font-size:0.85rem">📅 {dat}</div>
+            <div class="t">{evt}</div>
+            <div style="font-size:0.85rem">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+            {bx}
+            {btn_html}
+        </div>''', unsafe_allow_html=True)
 
-        with c1:
-            if pd.notna(prog) and str(prog).strip().startswith("http"): st.link_button("PROG", str(prog))
-        with c2:
-            if pd.notna(team) and str(team).strip().startswith("http"): st.link_button("TEAM", str(team))
-        with c3:
-            if pd.notna(sign) and str(sign).strip().startswith("http"): st.link_button("CONFIRM", str(sign))
-        with c4:
-            if is_l: st.link_button("INFO", nfo)
-            
-        st.markdown("<div style='margin-bottom:10px'></div>", unsafe_allow_html=True)
 except Exception:
     st.info("Syncing events...")
