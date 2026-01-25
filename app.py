@@ -14,6 +14,7 @@ st.markdown("""<style>
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4}
+.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem}
 .btn-row {display: flex!important; gap: 4px!important; justify-content: space-between!important; margin-top: 15px!important; width: 100%!important;}
 .btn {
     flex: 1!important; background: #800000!important; color: white!important; 
@@ -34,11 +35,9 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 
 @st.cache_data(ttl=15) 
 def load():
-    # Use requests to ensure we get the UTF-8 content correctly
     response = requests.get(U)
     response.encoding = 'utf-8' 
     df = pd.read_csv(io.StringIO(response.text))
-    
     def parse_dt(x):
         s = str(x).strip()
         if not s or s.lower() == 'nan': return pd.NaT
@@ -52,43 +51,49 @@ def get_l(val):
     m = re.search(r'https?://[^\s<>"]+', t)
     return m.group(0) if m else None
 
-if 'cat_sel' not in st.session_state: st.session_state.cat_sel = "All"
-if 'evt_sel' not in st.session_state: st.session_state.evt_sel = []
-
 try:
     df_raw, update_time = load()
     c = st.columns([1, 2])
-    
     with c[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
-    
     f_l = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
     grps = sorted(list(set([str(n).split()[0] for n in f_l.iloc[:, 1].dropna() if str(n).strip()])))
-    
     with c[1]:
         qs = st.multiselect("Activities:", grps, key="evt_sel", placeholder="Filter...")
-
     df = f_l if not qs else f_l[f_l.iloc[:, 1].apply(lambda x: any(q in str(x) for q in qs))]
     
     for _, r in df.iterrows():
         evt, ven = str(r.iloc[1]), str(r.iloc[3])
         dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[2])
-        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
-        i_l, mu = get_l(i_r), f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
         
+        # Pulling data for buttons/boxes
+        prog_l = get_l(r.iloc[4])
+        team_val = str(r.iloc[5]).strip()
+        team_l = get_l(team_val)
+        conf_l = get_l(r.iloc[6])
+        info_val = str(r.iloc[7]).strip()
+        info_l = get_l(info_val)
+
+        mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        
+        # Info Box (Column H)
+        bx = f'<div class="box"><b>Note:</b> {info_val}</div>' if (info_val and info_val.lower()!='nan' and not info_l) else ""
+        
+        # Team Box (If text is typed in Team column instead of a link)
+        tm_bx = f'<div class="team-box"><b>Team:</b> {team_val}</div>' if (team_val and team_val.lower()!='nan' and not team_l) else ""
+
         btns = '<div class="btn-row">'
-        if p: btns += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
-        if t: btns += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
-        if s: btns += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
-        if i_l: btns += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+        if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
+        if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+        if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+        if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
         btns += '</div>'
         
         st.markdown(f'''<div class="card">
             <div style="font-size:0.85rem;color:#333">{CAL_SVG} {dat}</div>
             <div class="t">{evt}</div>
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-            {bx}{btns}</div>''', unsafe_allow_html=True)
+            {bx}{tm_bx}{btns}</div>''', unsafe_allow_html=True)
 
     st.markdown(f'<div class="update-ts">Live Data Updated: {update_time.strftime("%d %b %H:%M")}</div>', unsafe_allow_html=True)
 except Exception:
