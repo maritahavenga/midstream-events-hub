@@ -31,10 +31,9 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR
 @st.cache_data(ttl=1)
 def load():
     df = pd.read_csv(U)
-    # Sort by Date (Assumes Column C/Index 2 has the date)
-    df.iloc[:, 2] = pd.to_datetime(df.iloc[:, 2], errors='coerce', dayfirst=True)
-    df = df.sort_values(by=df.columns[2], ascending=True)
-    return df
+    # SORTING: Convert Column C (Index 2) to Real Dates
+    df.iloc[:, 2] = pd.to_datetime(df.iloc[:, 2], dayfirst=True, errors='coerce')
+    return df.sort_values(by=df.columns[2], ascending=True)
 
 def get_l(val):
     t = str(val).strip()
@@ -44,13 +43,16 @@ def get_l(val):
 try:
     df_raw = load()
     cols = st.columns([2, 2, 1])
-    
     with cols[0]:
         cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
 
-    if cat != "All":
-        f_list = df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    else:
-        f_list = df_raw
+    f_list = df_raw if cat == "All" else df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
 
-    names = f_
+    names = f_list.iloc[:, 1].dropna().astype(str).tolist()
+    unique_groups = sorted(list(set([n.split()[0] for n in names if n.strip()])))
+    group_list = ["All Events"] + unique_groups
+
+    with cols[1]:
+        q = st.selectbox("Find Activity:", group_list, key="evt_sel")
+    with cols[2]:
+        if st.button("
