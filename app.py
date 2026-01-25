@@ -40,4 +40,54 @@ def get_l(val):
 try:
     df_raw = load()
     
-    c1, c2, c3 = st.columns(
+    # Using simple list for columns to avoid clipping
+    cols = st.columns([2, 2, 1])
+    
+    with cols[0]:
+        cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"], key="cat_sel")
+
+    if cat != "All":
+        f_list = df_raw[df_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    else:
+        f_list = df_raw
+
+    # Simplified grouping
+    names = f_list.iloc[:, 1].dropna().astype(str).tolist()
+    first_words = [n.split()[0] for n in names if n.strip()]
+    unique_groups = sorted(list(set(first_words)))
+    group_list = ["All Events"] + unique_groups
+
+    with cols[1]:
+        q = st.selectbox("Find Activity:", group_list, key="evt_sel")
+        
+    with cols[2]:
+        if st.button("Reset"):
+            st.session_state.cat_sel = "All"
+            st.session_state.evt_sel = "All Events"
+            st.rerun()
+
+    df = f_list
+    if q != "All Events":
+        df = df[df.iloc[:, 1].str.startswith(q, na=False)]
+
+    for _, r in df.iterrows():
+        evt, dat, ven = str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[3])
+        p, t, s, i_r = get_l(r.iloc[4]), get_l(r.iloc[5]), get_l(r.iloc[6]), str(r.iloc[7]).strip()
+        i_l = get_l(i_r)
+        mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+        bx = f'<div class="box"><b>Note:</b> {i_r}</div>' if (i_r and i_r.lower()!='nan' and not i_l) else ""
+
+        btn_html = '<div class="btn-row">'
+        if p: btn_html += f'<a href="{p}" target="_blank" class="btn">PROGRAMME</a>'
+        if t: btn_html += f'<a href="{t}" target="_blank" class="btn">TEAM</a>'
+        if s: btn_html += f'<a href="{s}" target="_blank" class="btn">CONFIRM</a>'
+        if i_l: btn_html += f'<a href="{i_l}" target="_blank" class="btn">INFORMATION</a>'
+        btn_html += '</div>'
+
+        st.markdown(f'''<div class="card">
+            <div style="font-size:0.85rem; color:#333;">📅 {dat}</div>
+            <div class="t">{evt}</div>
+            <div style="font-size:0.85rem; color:#333;">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+            {bx}{btn_html}</div>''', unsafe_allow_html=True)
+except Exception:
+    st.info("Refreshing...")
