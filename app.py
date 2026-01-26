@@ -13,16 +13,18 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Die mooi, skoon Midstream-look)
+# 2. Styling (Maroen rande vir alles)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
+/* Kaartjie met Maroen rand */
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
-.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.85rem;}
+/* Note-boksie met Maroen rand */
+.box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:1px solid #00cccc!important; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
@@ -37,7 +39,6 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Ons trek vars data vanaf Google
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
@@ -48,7 +49,6 @@ def load_live_data():
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # Slegs vandag en vorentoe
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
@@ -60,8 +60,9 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
+st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
+
 if not df_live.empty:
-    # 3. Filters
     url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
@@ -70,7 +71,6 @@ if not df_live.empty:
     sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
     st.query_params["act"] = sel_acts
 
-    # Filter Logika
     f_df = df_live
     if view_range == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
@@ -79,18 +79,15 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
-    # 4. Vertoon die kaarte
     for i, r in f_df.iterrows():
-        # Ons trek die Spanbeskrywing (o/11B ens.) uit kolom 2 (indeks 2)
-        act_display = str(r.iloc[1])
-        age_display = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        venue_display = str(r.iloc[4])
-        date_display = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        # Trek Sport (1) en Ouderdom (2)
+        act_n = str(r.iloc[1])
+        age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        ven_n = str(r.iloc[4])
+        dat_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
-        # Knoppie-logika
         found_btns = []
         has_info_link = False
-        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Information
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             match = re.search(r'(https?://[^\s<>"]+)', val)
@@ -98,22 +95,22 @@ if not df_live.empty:
                 found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
                 if label == "INFORMATION": has_info_link = True
 
-        # Skoon Information-raampie Logika
-        note_text = str(r.iloc[8]).strip()
-        final_info_box = ""
-        if note_text.lower() != 'nan' and note_text != "" and not has_info_link:
-            final_info_box = f'<div class="box"><b>Note:</b><br>{note_text}</div>'
+        # Note-boksie met Maroen rand
+        note_txt = str(r.iloc[8]).strip()
+        info_box_html = ""
+        if note_txt.lower() != 'nan' and note_txt != "" and not has_info_link:
+            info_box_html = f'<div class="box"><b>Note:</b><br>{note_txt}</div>'
 
         st.markdown(f"""
         <div class="card">
-            <div style="color:#333; font-size:0.85rem;">🗓️ {date_display}</div>
-            <div class="t">{act_display} {age_display}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue_display}</div>
+            <div style="color:#333; font-size:0.85rem;">🗓️ {dat_s}</div>
+            <div class="t">{act_n} {age_n}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {ven_n}</div>
             <div class="btn-row">
                 {"".join(found_btns)}
             </div>
-            {final_info_box}
+            {info_box_html}
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.info("No upcoming fixtures found.")
+    st.info("No fixtures found.")
