@@ -205,10 +205,18 @@ def load_data():
 raw_df = load_data()
 
 # --------------------------------------------------
-# REFRESH BUTTON
+# REFRESH BUTTON (safe)
 # --------------------------------------------------
+if "refresh_flag" not in st.session_state:
+    st.session_state.refresh_flag = False
+
 if st.button("🔄 Refresh Data"):
+    st.session_state.refresh_flag = True
     st.cache_data.clear()
+
+# Trigger rerun safely after button click
+if st.session_state.refresh_flag:
+    st.session_state.refresh_flag = False
     st.experimental_rerun()
 
 # --------------------------------------------------
