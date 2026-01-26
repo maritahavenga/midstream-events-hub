@@ -6,18 +6,17 @@ import pytz
 import requests
 import io
 import time
-import html
 from streamlit_autorefresh import st_autorefresh
 
-# --------------------------------------------------
+# ----------------------------
 # Page Config
-# --------------------------------------------------
+# ----------------------------
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
-st_autorefresh(interval=120000, key="datarefresh")
+st_autorefresh(interval=120000, key="datarefresh")  # refresh every 2 minutes
 
-# --------------------------------------------------
+# ----------------------------
 # Styling
-# --------------------------------------------------
+# ----------------------------
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
@@ -33,9 +32,9 @@ label { color:white !important; font-weight:bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# --------------------------------------------------
+# ----------------------------
 # Data Source
-# --------------------------------------------------
+# ----------------------------
 URL_DATA = (
     "https://docs.google.com/spreadsheets/d/e/"
     "2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-"
@@ -43,17 +42,18 @@ URL_DATA = (
     "?gid=0&single=true&output=csv"
 )
 
-# --------------------------------------------------
-# URL Helpers
-# --------------------------------------------------
+# ----------------------------
+# Regex Helper
+# ----------------------------
 URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
 
 def extract_urls(text: str):
     return URL_REGEX.findall(text)
 
-# --------------------------------------------------
-# Load Data
-# --------------------------------------------------
+# ----------------------------
+# Load Data with caching
+# ----------------------------
+@st.cache_data(ttl=120)
 def load_data():
     try:
         response = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
@@ -70,23 +70,27 @@ def load_data():
     except:
         return pd.DataFrame()
 
+# ----------------------------
+# Refresh Data Button
+# ----------------------------
+if st.button("🔄 REFRESH DATA"):
+    st.cache_data.clear()
+    st.experimental_rerun()
+
 raw_df = load_data()
 SA_TIME = pytz.timezone("Africa/Johannesburg")
 today = datetime.now(SA_TIME).date()
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 
-# --------------------------------------------------
-# Sticky Multiselect Activity Filter
-# --------------------------------------------------
+# ----------------------------
+# Sticky Activity Filter
+# ----------------------------
 if "activity_filter" not in st.session_state:
     st.session_state.activity_filter = []
 
-# Get all unique activities
 all_activities = raw_df.iloc[:,1].dropna().unique()
 all_activities = sorted([str(a).strip() for a in all_activities if str(a).strip().lower() != "nan"])
-
-# Ensure defaults are valid
 safe_default = [a for a in st.session_state.activity_filter if a in all_activities]
 
 activity_selection = st.multiselect(
@@ -94,12 +98,11 @@ activity_selection = st.multiselect(
     options=all_activities,
     default=safe_default
 )
-
 st.session_state.activity_filter = activity_selection
 
-# --------------------------------------------------
+# ----------------------------
 # Other Filters
-# --------------------------------------------------
+# ----------------------------
 col1, col2 = st.columns(2)
 with col1:
     view = st.radio("View:", ["Upcoming","Results"], horizontal=True)
@@ -108,13 +111,12 @@ with col2:
 
 search_q = st.text_input("🔍 Search:", placeholder="e.g. u13 hockey").lower().strip()
 
-# --------------------------------------------------
+# ----------------------------
 # Filtering Logic
-# --------------------------------------------------
+# ----------------------------
 if raw_df.empty:
     st.error("No data found. Please check your connection.")
 else:
-    # Date filter
     if view == "Upcoming":
         df = raw_df[ raw_df["dt_fixed"].isna() | (raw_df["dt_fixed"].dt.date >= today) ]
     else:
@@ -122,22 +124,19 @@ else:
 
     df = df.sort_values("dt_fixed", na_position="last")
 
-    # Category filter
     if cat != "All":
         df = df[ df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower()) ]
 
-    # Activity filter
     if activity_selection:
         df = df[ df.iloc[:,1].astype(str).str.lower().isin([a.lower() for a in activity_selection]) ]
 
-    # Search filter
     if search_q:
         mask = df.astype(str).apply(lambda c: c.str.lower().str.contains(search_q, na=False))
         df = df[mask.any(axis=1)]
 
-    # --------------------------------------------------
+    # ----------------------------
     # Display Cards
-    # --------------------------------------------------
+    # ----------------------------
     for _, r in df.iterrows():
         sport = str(r.iloc[1]).strip()
         age_raw = str(r.iloc[2]).strip()
@@ -145,10 +144,9 @@ else:
         date_str = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
         venue = str(r.iloc[4]).strip()
 
-        prog_link = ""
-        other_btns = []
         team_text = ""
         note_text = ""
+        prog_confirm_btns = []
 
         for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFORMATION")]:
             val = str(r.iloc[idx]).strip()
@@ -156,25 +154,23 @@ else:
                 continue
 
             urls = extract_urls(val)
-            clean_text = html.escape(URL_REGEX.sub("", val).strip())
+            clean_text = re.sub(URL_REGEX, "", val).strip()
 
-            for u in urls:
-                if lbl == "PROGRAMME":
-                    prog_link = u
-                else:
-                    other_btns.append(f'<a href="{u}" target="_blank" class="btn">{lbl}</a>')
-
-            if clean_text:
-                if lbl=="TEAM":
+            if lbl == "TEAM":
+                if clean_text:
                     team_text = clean_text
-                elif lbl=="INFORMATION":
-                    note_text = clean_text
+            elif lbl == "CONFIRM":
+                for u in urls:
+                    prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">✅ CONFIRM</a>')
+            elif lbl == "PROGRAMME":
+                for u in urls:
+                    prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">📄 PROGRAMME</a>')
+            elif lbl == "INFORMATION":
+                note_text = clean_text
 
         buttons_html = ""
-        if other_btns:
-            buttons_html += f'<div class="btn-row">{" ".join(other_btns)}</div>'
-        if prog_link:
-            buttons_html += f'<div class="btn-row"><a href="{prog_link}" target="_blank" class="btn">PROGRAMME</a></div>'
+        if prog_confirm_btns:
+            buttons_html = f'<div class="btn-row">{" ".join(prog_confirm_btns)}</div>'
 
         st.markdown(f"""
         <div class="card">
