@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Met die dotted line vir Teams)
+# 2. Styling (Maroen & Left-Aligned)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -23,8 +23,8 @@ header {visibility: hidden;}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
-/* Die spesiale dotted boksie vir Team teks */
-.team-box{border:2px dashed #800000; padding:10px; border-radius:8px; margin:10px 0; background:#fff9f9; color:#800000; font-weight:bold; font-size:0.85rem; text-align:center;}
+/* Team-boksie is nou links belyn */
+.team-box{border:2px dashed #800000; padding:10px; border-radius:8px; margin:10px 0; background:#fff9f9; color:#800000; font-weight:bold; font-size:0.85rem; text-align:left;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:none!important; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
@@ -40,7 +40,6 @@ def load_live_data():
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
-        # Gebruik utf-8 om Hoërskool se 'ë' reg te lees
         df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
         
         def parse_dt(x):
@@ -78,43 +77,25 @@ if not df_live.empty:
     for i, r in f_df.iterrows():
         act_name = str(r.iloc[1])
         age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        date_str = r['dt_fixed'].strftime('%d %B %Y')
         venue = str(r.iloc[4])
         
-        # --- Teams & Buttons Logika ---
         btns_html = ""
-        team_text = ""
-        info_notes = []
+        team_display_text = ""
+        notes_list = []
         
-        # 5=Prog, 6=Team, 7=Confirm, 8=Info
+        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Info
         col_map = [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]
         
         for col_idx, label in col_map:
             val = str(r.iloc[col_idx]).strip()
             if val.lower() == 'nan' or val == "": continue
             
+            # Kyk of daar 'n skakel is
             link_match = re.search(r'(https?://[^\s<>"]+)', val)
+            
             if link_match:
                 btns_html += f'<a href="{link_match.group(0)}" target="_blank" class="btn">{label}</a>'
-            elif label == "TEAM":
-                team_text = val # Teks vir die dotted box
-            elif label == "INFORMATION":
-                info_notes.append(val)
-
-        # Results (Kolom 9)
-        res_val = str(r.iloc[9]).strip() if len(r) > 9 else "nan"
-        if res_val.lower() != 'nan' and res_val != "":
-            info_notes.append(f"<b>Result:</b> {res_val}")
-
-        st.markdown(f"""
-        <div class="card">
-            <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{act_name} {age_group}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
-            {f'<div class="team-box">🏃 {team_text}</div>' if team_text else ""}
-            <div class="btn-row">{btns_html}</div>
-            {f'<div class="box"><b>Note:</b><br>{"<br>".join(info_notes)}</div>' if info_notes else ""}
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.info("No fixtures found.")
+                # As daar ook teks saam met die link is, trek dit uit vir die notas (behalwe vir knoppies)
+                clean_text = val.replace(link_match.group(0), "").strip()
+                if clean_text and label != "TEAM":
