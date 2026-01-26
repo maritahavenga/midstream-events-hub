@@ -37,12 +37,8 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Dwing vars data met 'n tydstempel
-        response = requests.get(f"{URL_DATA}&nocache={time.time()}", timeout=10)
+        response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
-        
-        # Maak seker kolomme is skoon
-        df.columns = [c.strip() for c in df.columns]
         
         def parse_dt(x):
             s = str(x).strip()
@@ -50,7 +46,6 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
-        # Soek die datum kolom (gewoonlik die 4de een)
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -63,48 +58,64 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
+st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
+
 if not df_live.empty:
+    # --- FILTERS IS TERUG ---
     url_acts = st.query_params.get_all("act")
+    
+    # 1. 7-Day Radio
+    view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    
+    # 2. Category Dropdown
+    category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+
+    # 3. Activity Multiselect (met URL sticky)
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
     st.query_params["act"] = sel_acts
 
+    # Filter Logika
     f_df = df_live
+    if view_range == "Next 7 Days":
+        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+    if category != "All":
+        f_df = f_df[f_df.iloc[:, 0].str.contains(category, case=False, na=False)]
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # --- AGE GROUP & SPORT (FORCE) ---
-        sport = str(r.iloc[1])
-        # Ons kombineer Sport en Age Group (Kolom 2) in een lyn
-        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        venue = str(r.iloc[4])
+        # --- AGE GROUP FIX ---
+        sport_name = str(r.iloc[1])
+        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        venue_name = str(r.iloc[4])
         date_str = r['dt_fixed'].strftime('%d %B %Y')
         
         # Knoppies
-        btns = []
+        found_btns = []
         has_info_link = False
-        labels = ["PROGRAMME", "TEAM", "CONFIRM", "INFORMATION"]
-        for idx, label in enumerate(labels):
-            val = str(r.iloc[5+idx]).strip()
+        for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
             match = re.search(r'(https?://[^\s<>"]+)', val)
             if match:
-                btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
+                found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
                 if label == "INFORMATION": has_info_link = True
 
-        # Swem Gala / Information to follow Logika
-        info_val = str(r.iloc[8]).strip()
-        info_box = ""
-        if info_val.lower() != 'nan' and info_val != "" and not has_info_link:
-            info_box = f'<div class="box"><b>Note:</b><br>{info_val}</div>'
+        # Swem/Note Logika (Maroen rand)
+        info_txt = str(r.iloc[8]).strip()
+        info_box_html = ""
+        if info_txt.lower() != 'nan' and info_txt != "" and not has_info_link:
+            info_box_html = f'<div class="box"><b>Note:</b><br>{info_txt}</div>'
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{sport} {age}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
-            <div class="btn-row">{" ".join(btns)}</div>
-            {info_box}
+            <div class="t">{sport_name} {age_group}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue_name}</div>
+            <div class="btn-row">
+                {"".join(found_btns)}
+            </div>
+            {info_box_html}
         </div>
         """, unsafe_allow_html=True)
 else:
