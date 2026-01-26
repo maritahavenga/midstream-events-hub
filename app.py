@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling (Skoon en professioneel)
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -36,6 +36,12 @@ label { color:white !important; font-weight:bold; }
 
 URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
+# --- INITIALIZE SESSION STATE (GEHEUE) ---
+if 'search_mem' not in st.session_state: st.session_state['search_mem'] = ""
+if 'act_mem' not in st.session_state: st.session_state['act_mem'] = []
+if 'age_mem' not in st.session_state: st.session_state['age_mem'] = []
+if 'range_mem' not in st.session_state: st.session_state['range_mem'] = "All Upcoming"
+
 def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
@@ -48,66 +54,71 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
+        # Slegs vandag en toekoms (geen results)
         df = df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed')
         return df, now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
+def smart_filter(df, query):
+    if not query: return df
+    q = query.lower().strip()
+    translations = {"hokkie": "hockey", "atletiek": "athletics", "swem": "swimming", "muurbal": "squash", "tennis": "tennis", "seuns": "b", "meisies": "g"}
+    for k, v in translations.items(): q = q.replace(k, v)
+    terms = q.split()
+    for term in terms:
+        clean = term.replace("o/","").replace("u/","").replace(" ","")
+        if not clean: continue
+        mask = df.apply(lambda r: clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+        df = df[mask]
+    return df
+
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# --- DIE KRISIS-OPLOSSING ---
-# Hierdie lees die filters direk uit die URL as die app oopmaak
-params = st.query_params
+st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # 1. Range Filter
-    saved_range = params.get("range", "all")
-    r_idx = 1 if saved_range == "7" else 0
-    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=r_idx)
-    st.query_params["range"] = "7" if view_opt == "Next 7 Days" else "all"
+    # 1. Range Filter (geheue)
+    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_v")
+    
+    if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_v"):
+        st.cache_data.clear()
+        st.rerun()
 
-    # 2. Search Filter
-    saved_search = params.get("search", "")
-    raw_s = st.text_input("🔍 Search:", value=saved_search)
-    st.query_params["search"] = raw_s
-
+    # 2. Search (geheue)
+    raw_s = st.text_input("🔍 Search:", key="search_v")
+    
     c = st.columns([1, 1, 1])
+    with c[0]: 
+        cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
     
-    # 3. Activity Filter (MULTIPLE)
-    all_acts = sorted(df_live.iloc[:, 1].dropna().unique())
-    saved_acts = params.get_all("act")
-    # Kyk watter van die gestoorde filters bestaan nog in die data
-    valid_acts = [a for a in saved_acts if a in all_acts]
-    
-    with c[1]:
-        sel_acts = st.multiselect("Activity:", all_acts, default=valid_acts)
-    st.query_params["act"] = sel_acts
-
-    # 4. Age Group Filter
-    all_ages = sorted(df_live.iloc[:, 2].dropna().unique())
-    saved_ages = params.get_all("age")
-    valid_ages = [a for a in saved_ages if a in all_ages]
-    
-    with c[2]:
-        sel_ages = st.multiselect("Age Group:", all_ages, default=valid_ages)
-    st.query_params["age"] = sel_ages
-
-    # --- FILTER DATA ---
-    f_df = df_live
+    f_df = df_live if cat == "All" else df_live[df_live.iloc[:, 0].str.contains(cat, case=False, na=False)]
     if view_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
-    if sel_acts:
-        f_df = f_df[f_df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages:
-        f_df = f_df[f_df.iloc[:, 2].isin(sel_ages)]
-    if raw_s:
-        # Simple search logic
-        f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
 
-    # DISPLAY
-    for i, r in f_df.iterrows():
-        age_val = str(r.iloc[2]).strip()
-        title = f"{r.iloc[1]} {age_val}"
-        dat = r['dt_fixed'].strftime('%d %B %Y')
-        st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 {r.iloc[4]}</div></div>', unsafe_allow_html=True)
+    # 3. Activity & Age (geheue - multiselect hou nou sy eie staat via die 'key')
+    with c[1]: 
+        sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="act_v")
+    with c[2]: 
+        sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="age_v")
+
+    # Filter die data
+    final_df = smart_filter(f_df, raw_s)
+    if sel_acts: final_df = final_df[final_df.iloc[:, 1].isin(sel_acts)]
+    if sel_ages: final_df = final_df[final_df.iloc[:, 2].isin(sel_ages)]
+
+    if not final_df.empty:
+        for i, r in final_df.iterrows():
+            age_val = str(r.iloc[2]).strip()
+            title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
+            dat = r['dt_fixed'].strftime('%d %B %Y')
+            ven = str(r.iloc[4])
+            info_val = str(r.iloc[8]).strip()
+            
+            mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and 'http' not in info_val) else ""
+            
+            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}</div>', unsafe_allow_html=True)
+    else:
+        st.info("No events found.")
