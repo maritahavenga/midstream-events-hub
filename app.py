@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Forceer skoon knoppies)
+# 2. Styling (Maak seker die HTML render as knoppies)
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -28,6 +28,8 @@ div[data-baseweb="select"] > div { background-color:#800000 !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; font-weight:bold;}
+/* Toggle Styling */
+.stCheckbox label { color: white !important; font-size: 1.1rem !important; background: #800000; padding: 5px 15px; border-radius: 20px; border: 1px solid #00cccc;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,18 +47,13 @@ def load_live_data():
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
-        
-        # Maak skoon: verwyder net rye waar die Sport-kolom heeltemal leeg is
         df = df.dropna(subset=[df.columns[1]]) 
-        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
-        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # Slegs vandag en toekoms (om te keer dat Atletiek Results verdwyn)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
@@ -64,10 +61,14 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# Refresh knoppie
+# --- REFRESH ---
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
+
+# --- DIE NUWE LOCK TOGGLE ---
+st.markdown("---")
+lock_on = st.checkbox("🔒 LOCK MY FILTERS (Stay on Refresh)", value=True)
 
 if not df_live.empty:
     # Filters
@@ -76,14 +77,15 @@ if not df_live.empty:
 
     c = st.columns([1, 1])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    # HARD-CODED DEFAULTS
+    
+    # As Lock aan is, gebruik hy die gestoorde/default waardes
     defaults = [a for a in ["Athletics", "Swimming", "Atletiek", "Swem"] if a in all_acts]
     
     with c[0]:
         sel_acts = st.multiselect("Activity:", all_acts, default=defaults, key="act_v")
     with c[1]:
         all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
-        sel_ages = st.multiselect("Age Group:", all_ages, key="age_v")
+        sel_ages = st.multiselect("Age Group:", all_ages, key="age_sel")
 
     # Filter Logika
     f_df = df_live
@@ -96,37 +98,34 @@ if not df_live.empty:
     if sel_ages:
         f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
 
-    # DISPLAY (Die kritiese deel)
+    # DISPLAY
     for i, r in f_df.iterrows():
-        act_name = str(r.iloc[1])
-        age_name = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        dat_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-        ven_name = str(r.iloc[4])
+        act_n = str(r.iloc[1])
+        age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        dat_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        ven_n = str(r.iloc[4])
         
-        # Skakels
         p_l, t_l, c_l, i_l = get_link(r.iloc[5]), get_link(r.iloc[6]), get_link(r.iloc[7]), get_link(r.iloc[8])
-        note_text = str(r.iloc[8]).strip()
+        note_s = str(r.iloc[8]).strip()
         
-        mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven_name + ' Midstream')}"
+        mu_l = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven_name + ' Midstream')}" if 'ven_name' in locals() else "#"
         
-        # Bou knoppie ry slegs as daar links is
-        btns_code = ""
+        btns_html = ""
         if any([p_l, t_l, c_l, i_l]):
-            btns_code = '<div class="btn-row">'
-            if p_l: btns_code += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
-            if t_l: btns_code += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
-            if c_l: btns_code += f'<a href="{c_l}" target="_blank" class="btn">CONFIRM</a>'
-            if i_l: btns_code += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
-            btns_code += '</div>'
+            btns_html = '<div class="btn-row">'
+            if p_l: btns_html += f'<a href="{p_l}" target="_blank" class="btn">PROGRAMME</a>'
+            if t_l: btns_html += f'<a href="{t_l}" target="_blank" class="btn">TEAM</a>'
+            if c_l: btns_html += f'<a href="{c_l}" target="_blank" class="btn">CONFIRM</a>'
+            if i_l: btns_html += f'<a href="{i_l}" target="_blank" class="btn">INFO</a>'
+            btns_html += '</div>'
 
-        # Gebruik f-string binne markdown met unsafe_allow_html=True
         st.markdown(f"""
         <div class="card">
-            <div style="font-size:0.85rem;color:#333">🗓️ {dat_str}</div>
-            <div class="t">{act_name} {age_name}</div>
-            <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" style="color:#800000; font-weight:bold; text-decoration:underline;">{ven_name}</a></div>
-            {f'<div class="box"><b>Note:</b><br>{note_text}</div>' if (note_text.lower()!='nan' and not i_l) else ""}
-            {btns_code}
+            <div style="font-size:0.85rem;color:#333">🗓️ {dat_s}</div>
+            <div class="t">{act_n} {age_n}</div>
+            <div style="font-size:0.85rem;color:#333">📍 {ven_n}</div>
+            {f'<div class="box"><b>Note:</b><br>{note_s}</div>' if (note_s.lower()!='nan' and not i_l) else ""}
+            {btns_html}
         </div>
         """, unsafe_allow_html=True)
 else:
