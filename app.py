@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling (Die oorspronklike skoon look)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -44,14 +44,15 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Cache-buster: Dwing vars data af
-        response = requests.get(f"{URL_DATA}&nocache={time.time()}", timeout=10)
+        response = requests.get(f"{URL_DATA}&cb={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
+        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -60,6 +61,7 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
+# Refresh Button
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
@@ -67,35 +69,21 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # Sticky URL Logika: Lees bestaande filters uit die URL
-    url_acts = st.query_params.get_all("act")
-    
-    range_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    cat_opt = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
-
+    # Basiese Filters (Sonder die komplekse sticky goed vir nou)
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    # Gebruik URL as default as dit bestaan
-    sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
-    
-    # Skryf keuse na URL vir "Sticky" effek
-    st.query_params["act"] = sel_acts
+    sel_acts = st.multiselect("Activity:", all_acts)
 
     f_df = df_live
-    if range_opt == "Next 7 Days":
-        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
-    if cat_opt != "All":
-        f_df = f_df[f_df.iloc[:, 0].str.contains(cat_opt, case=False, na=False)]
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # Data vir die kaartjie
         act_n = str(r.iloc[1])
         age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         ven_n = str(r.iloc[4])
         dat_s = r['dt_fixed'].strftime('%d %B %Y')
         
-        # Knoppies: Trek direk uit kolomme F, G, H, I
+        # Knoppies: Programme (5), Team (6), Confirm (7), Information (8)
         p_l = get_link(r.iloc[5])
         t_l = get_link(r.iloc[6])
         c_l = get_link(r.iloc[7])
@@ -104,7 +92,6 @@ if not df_live.empty:
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven_n + ' Midstream')}"
         
-        # Bou die knoppie-ry HTML
         btns_html = ""
         if any([p_l, t_l, c_l, i_l]):
             btns_html = '<div class="btn-row">'
