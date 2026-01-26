@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Suiwer Midstream Maroen)
+# 2. Styling (Clean Maroon & Teal)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
@@ -36,15 +36,18 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Dwing vars data met 'n unieke tyd-stempel
         response = requests.get(f"{URL_DATA}&nocache={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
+        
+        # Clean column names just in case
+        df.columns = [str(c).strip() for c in df.columns]
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
-        # Kolom 3 = Date
+        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -53,65 +56,31 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# WEERGAWE NOMMER VIR TOETSING
-st.write(f"**App Version: 3.0** | Updated: {update_time.strftime('%H:%M')}")
+st.write(f"**App Version: 3.1** | Updated: {update_time.strftime('%H:%M')}")
 
-if st.button("🔄 DRUK HIER VIR VARS DATA"):
+if st.button("🔄 REFRESH FIXTURES"):
     st.cache_data.clear()
     st.rerun()
 
 if not df_live.empty:
-    # FILTERS
-    view_range = st.radio("View:", ["All", "Next 7 Days"], horizontal=True)
+    # 1. Restore Filters (Activity, Category, Range)
+    view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     
+    # Get all activities from column 1
+    all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
+    sel_acts = st.multiselect("Activity:", all_acts)
+
     f_df = df_live
     if view_range == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
     if category_sel != "All":
         f_df = f_df[f_df.iloc[:, 0].str.contains(category_sel, case=False, na=False)]
+    if sel_acts:
+        f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
+    # 2. Render Cards
     for _, r in f_df.iterrows():
-        # Kolomme volgens jou lys: 1=Act, 2=Age, 4=Venue
         act_val = str(r.iloc[1])
         age_val = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        date_val = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-        venue_val = str(r.iloc[4])
-        
-        # Knoppies & Tekste (5=Prog, 6=Team, 7=Conf, 8=Info)
-        buttons = []
-        team_note = ""
-        other_notes = []
-        
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
-            cell = str(r.iloc[idx]).strip()
-            if cell.lower() == 'nan' or not cell: continue
-            
-            # Soek vir enige skakel
-            link = re.search(r'(https?://[^\s<>"]+)', cell)
-            if link:
-                buttons.append(f'<a href="{link.group(0)}" target="_blank" class="btn">{lbl}</a>')
-                # As daar teks saam met die skakel is, hou dit vir notas
-                txt = cell.replace(link.group(0), "").strip()
-                if txt and lbl != "TEAM": other_notes.append(txt)
-            else:
-                if lbl == "TEAM": team_note = cell
-                else: other_notes.append(cell)
-        
-        # Results (Kolom 9)
-        res = str(r.iloc[9]).strip() if len(r) > 9 else ""
-        if res.lower() != 'nan' and res: other_notes.append(f"Result: {res}")
-
-        # HTML Vertoning
-        st.markdown(f"""
-        <div class="card">
-            <div style="color:#666; font-size:0.8rem;">🗓️ {date_val}</div>
-            <div class="t">{act_val} {age_val}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue_val}</div>
-            {f'<div class="team-box"><b>TEAMS:</b><br>{team_note}</div>' if team_note else ""}
-            <div class="btn-row">{"".join(buttons)}</div>
-            {f'<div class="box"><b>Note:</b><br>{"<br>".join(other_notes)}</div>' if other_notes else ""}
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.info("Geen fixtures gevind nie.")
+        date_val = r['dt_fixed'].strftime('%d %B %Y')
