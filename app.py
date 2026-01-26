@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import re
 from datetime import datetime
@@ -11,7 +12,7 @@ from streamlit_autorefresh import st_autorefresh
 # Page Config
 # ----------------------------
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
-st_autorefresh(interval=120000, key="datarefresh")  # refresh every 2 minutes
+st_autorefresh(interval=120000, key="datarefresh")
 
 today = datetime.now().date()
 
@@ -22,11 +23,11 @@ st.markdown("""
 <style>
 #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:600px}
-.card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
+.card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:5px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.2rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4;white-space: pre-wrap;}
 .team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem;white-space: pre-wrap;}
-.btn-row {display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.btn-row {display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .btn {background:#800000;color:white!important;font-weight:bold;font-size:0.7rem;padding:10px 14px;border-radius:6px;text-decoration:none}
 label { color:white !important; font-weight:bold; }
 .stMultiselect, .stSelectbox { width: 100% !important; }
@@ -78,11 +79,10 @@ def load_data():
         return pd.DataFrame()
 
 # ----------------------------
-# Load Data (ALWAYS)
+# Load Data
 # ----------------------------
 raw_df = load_data()
 
-# Manual refresh
 if st.button("🔄 REFRESH DATA"):
     st.cache_data.clear()
     st.rerun()
@@ -151,7 +151,7 @@ else:
 
         team_text = ""
         note_text = ""
-        prog_confirm_btns = []
+        buttons = []
 
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
@@ -164,18 +164,18 @@ else:
             if lbl == "TEAM" and clean_text:
                 team_text = clean_text
 
-            elif lbl == "CONFIRM":
-                for u in urls:
-                    prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">✅ CONFIRM</a>')
-
             elif lbl == "PROGRAMME":
                 for u in urls:
-                    prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">📄 PROGRAMME</a>')
+                    buttons.append(f'<a href="{u}" target="_blank" class="btn">📄 PROGRAMME</a>')
 
-            elif lbl == "INFORMATION":
+            elif lbl == "CONFIRM":
+                for u in urls:
+                    buttons.append(f'<a href="{u}" target="_blank" class="btn">✅ CONFIRM</a>')
+
+            elif lbl == "INFORMATION" and sport.lower() != "swimming":
                 note_text = clean_text
 
-        buttons_html = f'<div class="btn-row">{" ".join(prog_confirm_btns)}</div>' if prog_confirm_btns else ""
+        buttons_html = f'<div class="btn-row">{" ".join(buttons)}</div>' if buttons else ""
 
         st.markdown(f"""
         <div class="card">
@@ -183,7 +183,9 @@ else:
             <div class="t">{sport} {age}</div>
             <div style="font-size:0.85rem;color:#333">📍 {venue}</div>
             {f'<div class="team-box"><b>TEAMS:</b><br>{team_text}</div>' if team_text else ''}
-            {buttons_html}
             {f'<div class="box"><b>Note:</b><br>{note_text}</div>' if note_text else ''}
         </div>
         """, unsafe_allow_html=True)
+
+        if buttons_html:
+            components.html(buttons_html, height=60)
