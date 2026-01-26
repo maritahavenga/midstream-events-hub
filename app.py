@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Maroen & Skoon - Geen Teal nie)
+# 2. Styling (Suiwer Maroen Midstream-look)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -46,6 +46,7 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
+        # Kolom 3 is Date
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -59,10 +60,10 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.rerun()
 
 if not df_live.empty:
-    # FILTERS IS TERUG
+    # FILTERS
     url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
@@ -72,37 +73,44 @@ if not df_live.empty:
     f_df = df_live
     if view_range == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
-    if category != "All":
-        f_df = f_df[f_df.iloc[:, 0].str.contains(category, case=False, na=False)]
+    if category_sel != "All":
+        f_df = f_df[f_df.iloc[:, 0].str.contains(category_sel, case=False, na=False)]
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # --- SMART SCAN VIR SPORT EN OUDERDOM ---
-        sport_main = str(r.iloc[1])
-        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        venue = str(r.iloc[4])
+        # --- PRESIESE KOLOM TOEKENNING ---
+        act_name = str(r.iloc[1]) # Activity
+        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "" # Age Group
+        venue = str(r.iloc[4]) # Venue
         date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
         # Knoppies & Note Logika
         btns = []
         notes = []
-        labels = ["PROGRAMME", "TEAM", "CONFIRM", "INFORMATION"]
+        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Information, 9=Results
+        labels = [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]
         
-        for idx, label in enumerate(labels):
-            val = str(r.iloc[5+idx]).strip()
+        for idx, label in labels:
+            val = str(r.iloc[idx]).strip()
             if val.lower() == 'nan' or val == "": continue
             
             link = re.search(r'(https?://[^\s<>"]+)', val)
             if link:
                 btns.append(f'<a href="{link.group(0)}" target="_blank" class="btn">{label}</a>')
             else:
+                # As dit nie 'n link is nie, is dit 'n nota
                 notes.append(val)
+        
+        # Voeg Results (Kolom 9) ook by notas as daar teks is
+        results_val = str(r.iloc[9]).strip() if len(r) > 9 else "nan"
+        if results_val.lower() != 'nan' and results_val != "":
+            notes.append(f"<b>Result:</b> {results_val}")
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{sport_main} {age_group}</div>
+            <div class="t">{act_name} {age_group}</div>
             <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
             <div class="btn-row">{"".join(btns)}</div>
             {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes)}</div>' if notes else ""}
