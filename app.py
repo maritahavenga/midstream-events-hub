@@ -7,81 +7,51 @@ import requests
 import io
 import time
 import urllib.parse
+from streamlit_autorefresh import st_autorefresh
 
 # ----------------------------
 # Page Config
 # ----------------------------
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
+st_autorefresh(interval=120000, key="datarefresh")
 
 today = datetime.now().date()
 
 # ----------------------------
-# NAVBAR (FIXED)
+# Fixed Navbar (Logo only)
 # ----------------------------
 st.markdown("""
 <style>
+#MainMenu, footer, header {visibility:hidden;}
+.stApp {background:#008080;}
+
 .navbar {
     position:fixed;
     top:0;
     left:0;
     right:0;
-    background:#ffffff;
+    background:white;
     border-bottom:2px solid #800000;
+    padding:8px 16px;
     z-index:9999;
-    padding:10px 20px;
     display:flex;
-    align-items:center;
-    gap:20px;
+    justify-content:center;
 }
 .navbar img {height:48px;}
-.nav-btn {
-    background:#800000;
-    color:white;
-    border:none;
-    padding:8px 14px;
-    border-radius:8px;
-    font-weight:600;
-    cursor:pointer;
-}
-.nav-spacer {height:90px;}
-.footer {
-    background:#800000;
-    color:white;
-    text-align:center;
-    padding:14px;
-    font-size:0.85rem;
-}
+.nav-spacer {height:80px;}
+
+.block-container {max-width:600px; padding:1rem;}
+label {color:white !important; font-weight:bold;}
 </style>
 
 <div class="navbar">
     <img src="https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png">
 </div>
-
 <div class="nav-spacer"></div>
 """, unsafe_allow_html=True)
 
 # ----------------------------
-# Controls
-# ----------------------------
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    if st.button("Next 7 Days"):
-        st.session_state["range"] = "7"
-
-with col2:
-    if st.button("All Upcoming"):
-        st.session_state["range"] = "all"
-
-with col3:
-    if st.button("Results"):
-        st.session_state["range"] = "results"
-
-if "range" not in st.session_state:
-    st.session_state["range"] = "7"
-
-# ----------------------------
-# Styling
+# Card Styling
 # ----------------------------
 CARD_STYLE = """
 <style>
@@ -92,99 +62,212 @@ CARD_STYLE = """
     padding:18px;
     border-radius:18px;
     border-left:10px solid #800000;
-    margin-bottom:16px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.15);
-    font-family:'Inter', sans-serif;
+    margin-bottom:18px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.16);
+    font-family:'Inter', system-ui, sans-serif;
 }
-.title {color:#800000;font-weight:700;font-size:1.05rem;}
+
 .date-head {
-    margin:20px 0 10px;
-    font-weight:700;
     color:white;
+    font-weight:700;
+    margin:20px 0 10px;
 }
-.venue a {color:#333;text-decoration:none;font-weight:500;}
-.team {margin-top:8px;color:#800000;font-size:0.9rem;}
-.btn-row {margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
+
+.title {
+    color:#800000;
+    font-weight:700;
+    font-size:1.05rem;
+    margin-bottom:4px;
+}
+
+.venue a {
+    color:#333;
+    text-decoration:none;
+    font-weight:500;
+}
+
+.team {
+    background:#fff3f3;
+    padding:12px;
+    border-radius:12px;
+    margin-top:10px;
+    border:1px dashed #800000;
+    color:#800000;
+    font-size:0.9rem;
+    line-height:1.45;
+}
+
+.note {
+    background:#f8f9fa;
+    padding:12px;
+    border-radius:12px;
+    margin-top:10px;
+    border-left:4px solid #008080;
+    font-size:0.9rem;
+}
+
+.btn-row {
+    display:flex;
+    gap:12px;
+    margin-top:14px;
+    flex-wrap:wrap;
+}
+
 .btn {
     background:#800000;
     color:white;
-    padding:10px 18px;
-    border-radius:8px;
-    font-size:0.75rem;
+    font-weight:600;
+    font-size:0.78rem;
+    padding:11px 20px;
+    border-radius:10px;
     text-decoration:none;
 }
 </style>
 """
 
 # ----------------------------
-# Data
+# Data Source
 # ----------------------------
-URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
-URL_REGEX = re.compile(r"(https?://[^\s]+)")
+URL_DATA = (
+    "https://docs.google.com/spreadsheets/d/e/"
+    "2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-"
+    "YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub"
+    "?gid=0&single=true&output=csv"
+)
 
+URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
+
+def extract_urls(text):
+    return URL_REGEX.findall(text)
+
+# ----------------------------
+# Load Data
+# ----------------------------
 @st.cache_data(ttl=120)
 def load_data():
-    df = pd.read_csv(URL_DATA)
+    r = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
+    df = pd.read_csv(io.StringIO(r.content.decode("utf-8")))
     df.columns = [c.strip() for c in df.columns]
 
+    year = datetime.now().year
     def parse_dt(x):
-        if pd.isna(x): return pd.NaT
-        return pd.to_datetime(str(x) + f" {datetime.now().year}", dayfirst=True, errors="coerce")
+        s = str(x).strip()
+        if not s or s.lower() == "nan":
+            return pd.NaT
+        if not re.search(r"\d{4}", s):
+            s = f"{s} {year}"
+        return pd.to_datetime(s, dayfirst=True, errors="coerce")
 
     df["dt_fixed"] = df.iloc[:,3].apply(parse_dt)
     return df
 
-df = load_data()
+raw_df = load_data()
 
 # ----------------------------
-# Filter by Range
+# Filters (UNCHANGED)
 # ----------------------------
-if st.session_state["range"] == "7":
-    df = df[df["dt_fixed"].dt.date.between(today, today + timedelta(days=7))]
-elif st.session_state["range"] == "all":
-    df = df[df["dt_fixed"].dt.date >= today]
+if "activity_filter" not in st.session_state:
+    st.session_state.activity_filter = []
+
+activities = raw_df.iloc[:,1].dropna().unique()
+activities = sorted([a for a in activities if str(a).lower() != "nan"])
+
+activity_selection = st.multiselect(
+    "Select Activities:",
+    activities,
+    st.session_state.activity_filter
+)
+st.session_state.activity_filter = activity_selection
+
+col1, col2 = st.columns(2)
+with col1:
+    view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
+with col2:
+    cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+
+seven_days = st.toggle("Show next 7 days only", value=True)
+
+search = st.text_input("Search").lower().strip()
+
+# ----------------------------
+# Filtering Logic
+# ----------------------------
+df = raw_df.copy()
+
+if view == "Upcoming":
+    df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date >= today)]
 else:
-    df = df[df["dt_fixed"].dt.date < today]
+    df = df[df["dt_fixed"].notna() & (df["dt_fixed"].dt.date < today)]
 
-df = df.sort_values("dt_fixed")
+if seven_days and view == "Upcoming":
+    df = df[df["dt_fixed"].dt.date <= today + timedelta(days=7)]
+
+if cat != "All":
+    df = df[df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower())]
+
+if activity_selection:
+    df = df[df.iloc[:,1].astype(str).str.lower().isin([a.lower() for a in activity_selection])]
+
+if search:
+    df = df[df.astype(str).apply(lambda r: r.str.lower().str.contains(search, na=False)).any(axis=1)]
+
+df = df.sort_values("dt_fixed", na_position="last")
 
 # ----------------------------
-# Group by Date
+# Display grouped by date
 # ----------------------------
 for date, group in df.groupby(df["dt_fixed"].dt.date):
-    st.markdown(f"<div class='date-head'>{date.strftime('%A, %d %B %Y')}</div>", unsafe_allow_html=True)
+    date_label = date.strftime("%A, %d %B %Y") if pd.notnull(date) else "TBA"
+    st.markdown(f"<div class='date-head'>{date_label}</div>", unsafe_allow_html=True)
 
     for _, r in group.iterrows():
-        sport = r.iloc[1]
-        age = "" if pd.isna(r.iloc[2]) else r.iloc[2]
-        venue = r.iloc[4]
-        maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+        sport = str(r.iloc[1]).strip()
+        age = "" if str(r.iloc[2]).lower() == "nan" else str(r.iloc[2])
+        venue = str(r.iloc[4]).strip()
+        date_str = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
 
-        team = "" if pd.isna(r.iloc[6]) else r.iloc[6]
+        maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
 
-        buttons = []
-        for idx, label in [(5,"PROGRAMME"), (7,"CONFIRM")]:
-            val = str(r.iloc[idx])
-            urls = URL_REGEX.findall(val)
-            for u in urls:
-                buttons.append(f"<a class='btn' href='{u}' target='_blank'>{label}</a>")
+        team, note, buttons = "", "", []
+
+        for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
+            val = str(r.iloc[idx]).strip()
+            if not val or val.lower() == "nan":
+                continue
+
+            urls = extract_urls(val)
+            text = re.sub(URL_REGEX, "", val).strip()
+
+            if lbl == "TEAM":
+                team = text
+            elif lbl == "PROGRAMME":
+                for u in urls:
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
+            elif lbl == "CONFIRM":
+                for u in urls:
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
+            elif lbl == "INFO" and sport.lower() != "swimming":
+                note = text
 
         html = f"""
+        <meta charset="UTF-8">
+        {CARD_STYLE}
         <div class="card">
             <div class="title">{sport} {age}</div>
-            <div class="venue"><a href="{maps}" target="_blank">{venue}</a></div>
-            {f"<div class='team'><b>Teams:</b><br>{team}</div>" if team else ""}
-            <div class="btn-row">{''.join(buttons)}</div>
+            <div class="venue"><a href="{maps_link}" target="_blank">{venue}</a></div>
+            {f'<div class="team"><b>TEAMS</b><br>{team}</div>' if team else ''}
+            {f'<div class="note">{note}</div>' if note else ''}
+            {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
         </div>
         """
 
-        components.html(f"<meta charset='UTF-8'>{CARD_STYLE}{html}", height=420, scrolling=True)
+        components.html(html, height=700, scrolling=True)
 
 # ----------------------------
 # Footer
 # ----------------------------
 st.markdown("""
-<div class="footer">
-    Midstream College Primary · Tel: 012 940 2222 · info@midstreamprimary.co.za
+<div style="background:#800000;color:white;text-align:center;padding:14px;margin-top:30px;font-size:0.85rem;">
+Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222
 </div>
 """, unsafe_allow_html=True)
