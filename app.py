@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling - Absolute removal of tabs and header clutter
+# 2. Styling
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -75,32 +75,29 @@ def smart_filter(df, query):
     return df
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-df, today_date, update_time = load_live_data()
+df_live, today_date, update_time = load_live_data()
 
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
-if not df.empty:
-    # --- PERSISTENT LOGIC ---
-    # Check URL for existing range selection
+if not df_live.empty:
+    # --- URL SYNCED FILTERS ---
     v_idx = 1 if st.query_params.get("range") == "7" else 0
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=v_idx, key="range_v")
     st.query_params["range"] = "7" if view_opt == "Next 7 Days" else "all"
 
-    # The Refresh Button now clears cache but keeps URL Params
     if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_v"):
         st.cache_data.clear()
         st.rerun()
 
-    # Check URL for existing search term
-    q_params = st.query_params.get("search", "")
-    raw_s = st.text_input("🔍 Search:", value=q_params, placeholder="e.g. u13 hockey", key="search_v")
+    q_search = st.query_params.get("search", "")
+    raw_s = st.text_input("🔍 Search:", value=q_search, placeholder="e.g. u13 hockey", key="search_v")
     st.query_params["search"] = raw_s
     
     c = st.columns([1, 1, 1])
     with c[0]: 
         cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
     
-    f_df = df if cat == "All" else df[df.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    f_df = df_live if cat == "All" else df_live[df_live.iloc[:, 0].str.contains(cat, case=False, na=False)]
     if view_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
