@@ -8,12 +8,37 @@ import requests
 import io
 import time
 from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 
 # 1. Page Configuration
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Alles "hard-coded" om skoon te lyk)
+# 2. JavaScript om filters op die foon te STOOR en te LEES
+# Hierdie is die "geheue" wat op die foon self bly
+js_code = """
+<script>
+    const saveFilters = (search, act, age) => {
+        localStorage.setItem('lmcp_search', search);
+        localStorage.setItem('lmcp_act', JSON.stringify(act));
+        localStorage.setItem('lmcp_age', JSON.stringify(age));
+    }
+
+    const loadFilters = () => {
+        return {
+            search: localStorage.getItem('lmcp_search') || "",
+            act: JSON.parse(localStorage.getItem('lmcp_act')) || [],
+            age: JSON.parse(localStorage.getItem('lmcp_age')) || []
+        };
+    }
+    
+    // Stuur die data na Streamlit toe
+    window.parent.postMessage({type: 'LOAD_FILTERS', data: loadFilters()}, "*");
+</script>
+"""
+components.html(js_code, height=0)
+
+# 3. Styling
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -21,15 +46,12 @@ header {visibility: hidden;}
 .stTabs {display: none !important;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
-.t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
-.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4;white-space: pre-wrap;}
-.btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:15px!important; width:100%!important;}
-.btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:12px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
-h2 { color: white !important; text-align: center; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px;}
-div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
+.t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
+.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;white-space: pre-wrap;}
+div[data-baseweb="select"] > div { background-color:#800000 !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
-.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; height:45px; font-weight:bold; margin-bottom:10px;}
+.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; font-weight:bold;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -39,7 +61,6 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Fresh fetch sodat data altyd nuut is
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         def parse_dt(x):
@@ -48,9 +69,7 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # Slegs vandag en toekoms
-        df = df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed')
-        return df, now, datetime.now(SA_TIME)
+        return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
@@ -60,63 +79,44 @@ df_live, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # --- HARD-CODED FILTERS (Ouers hoef niks te doen nie) ---
+    # 1. Search Box
+    raw_s = st.text_input("🔍 Search Activity:", key="search_v")
     
-    # Hierdie knoppie is net om handmatig te verfris
-    if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_v"):
+    c = st.columns([1, 1])
+    
+    # 2. Activity Filter
+    all_acts = sorted(df_live.iloc[:, 1].dropna().unique())
+    with c[0]:
+        sel_acts = st.multiselect("Activity:", all_acts, key="act_v")
+    
+    # 3. Age Group Filter
+    all_ages = sorted(df_live.iloc[:, 2].dropna().unique())
+    with c[1]:
+        sel_ages = st.multiselect("Age Group:", all_ages, key="age_v")
+
+    if st.button(f"🔄 REFRESH DATA", key="ref_v"):
         st.cache_data.clear()
         st.rerun()
 
-    # Ons "hard-code" die soektog om dadelik dinge soos Tennis, Swimming en Athletics te wys
-    # As jy dit leeg laat, wys hy ALLES wat in die sheet is vir vandag en die toekoms.
-    raw_s = st.text_input("🔍 Search Sport/Activity:", placeholder="e.g. Swimming")
-
-    # Wys filters net as jy dit regtig nodig het, andersins wys die app net die lys
-    expander = st.expander("Show Age & Type Filters")
-    with expander:
-        c = st.columns(2)
-        with c[0]:
-            cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"])
-        with c[1]:
-            # Ons laai die Age Groups maar dit begin op 'leeg' sodat alles wys
-            sel_ages = st.multiselect("Age Group:", sorted(df_live.iloc[:, 2].dropna().unique()))
-
-    # --- DIE DATA FILTER LOGIKA ---
+    # --- FILTER LOGIKA ---
     f_df = df_live
-    
-    # 1. Filtreer volgens die Search boks
     if raw_s:
         f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
-    
-    # 2. Filtreer volgens Type
-    if cat != "All":
-        f_df = f_df[f_df.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    
-    # 3. Filtreer volgens Age
+    if sel_acts:
+        f_df = f_df[f_df.iloc[:, 1].isin(sel_acts)]
     if sel_ages:
         f_df = f_df[f_df.iloc[:, 2].isin(sel_ages)]
 
-    # --- DIE FINALE LYS ---
-    if not f_df.empty:
-        for i, r in f_df.iterrows():
-            age_val = str(r.iloc[2]).strip()
-            title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
-            dat = r['dt_fixed'].strftime('%d %B %Y')
-            ven = str(r.iloc[4])
-            info_val = str(r.iloc[8]).strip()
-            
-            mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-            
-            # Card Display
-            st.markdown(f"""
-            <div class="card">
-                <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
-                <div class="t">{title}</div>
-                <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-                {f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and 'http' not in info_val) else ""}
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("Geen items gevind nie. Probeer 'n ander soektog.")
+    # --- DISPLAY ---
+    for i, r in f_df.iterrows():
+        title = f"{r.iloc[1]} {str(r.iloc[2])}"
+        dat = r['dt_fixed'].strftime('%d %B %Y')
+        info = str(r.iloc[8]).strip()
+        st.markdown(f"""<div class="card">
+            <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
+            <div class="t">{title}</div>
+            <div style="font-size:0.85rem;color:#333">📍 {r.iloc[4]}</div>
+            {f'<div class="box"><b>Note:</b><br>{info}</div>' if info.lower()!='nan' else ""}
+        </div>""", unsafe_allow_html=True)
 else:
-    st.info("Geen opkomende items in die lys nie.")
+    st.info("No upcoming fixtures.")
