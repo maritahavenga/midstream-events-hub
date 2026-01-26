@@ -19,18 +19,67 @@ today = datetime.now().date()
 # ----------------------------
 # Styling
 # ----------------------------
+BASE_STYLE = """
+<style>
+body { background:#008080; }
+.card {
+    background:white;
+    padding:18px;
+    border-radius:16px;
+    border-left:12px solid #800000;
+    margin-bottom:18px;
+    box-shadow:0 6px 14px rgba(0,0,0,0.18);
+    font-family:Arial, sans-serif;
+}
+.date { font-size:0.8rem; color:#777; }
+.title { color:#800000; font-weight:700; font-size:1.15rem; margin:6px 0; }
+.venue { font-size:0.85rem; color:#333; }
+.team {
+    background:#fff3f3;
+    padding:10px;
+    border-radius:10px;
+    margin-top:8px;
+    border:1px dashed #800000;
+    font-size:0.85rem;
+    color:#800000;
+}
+.note {
+    background:#f8f9fa;
+    padding:12px;
+    border-radius:10px;
+    margin-top:10px;
+    border-left:5px solid #008080;
+    font-size:0.85rem;
+    color:#333;
+}
+.btn-row {
+    display:flex;
+    gap:10px;
+    margin-top:14px;
+    flex-wrap:wrap;
+}
+.btn {
+    background:#800000;
+    color:white;
+    font-weight:700;
+    font-size:0.7rem;
+    padding:10px 16px;
+    border-radius:8px;
+    text-decoration:none;
+    letter-spacing:0.4px;
+}
+.btn:hover {
+    background:#5e0000;
+}
+</style>
+"""
+
 st.markdown("""
 <style>
-#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-.stApp{background:#008080}.block-container{padding:1rem;max-width:600px}
-.card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:5px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
-.t{color:#800000!important;font-weight:bold;font-size:1.2rem;margin:5px 0}
-.box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;line-height:1.4;white-space: pre-wrap;}
-.team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem;white-space: pre-wrap;}
-.btn-row {display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-.btn {background:#800000;color:white!important;font-weight:bold;font-size:0.7rem;padding:10px 14px;border-radius:6px;text-decoration:none}
+#MainMenu, footer, header { visibility:hidden; }
+.stApp { background:#008080; }
+.block-container { max-width:600px; padding:1rem; }
 label { color:white !important; font-weight:bold; }
-.stMultiselect, .stSelectbox { width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,43 +93,36 @@ URL_DATA = (
     "?gid=0&single=true&output=csv"
 )
 
-# ----------------------------
-# Regex Helper
-# ----------------------------
 URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
 
-def extract_urls(text: str):
+def extract_urls(text):
     return URL_REGEX.findall(text)
 
 # ----------------------------
-# Load Data with caching
+# Load Data
 # ----------------------------
 @st.cache_data(ttl=120)
 def load_data():
     try:
-        response = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
-        df = pd.read_csv(io.StringIO(response.content.decode("utf-8")))
-        df.columns = [str(c).strip() for c in df.columns]
+        r = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
+        df = pd.read_csv(io.StringIO(r.content.decode("utf-8")))
+        df.columns = [c.strip() for c in df.columns]
 
-        current_year = datetime.now().year
+        year = datetime.now().year
 
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == "nan":
                 return pd.NaT
             if not re.search(r"\d{4}", s):
-                s = f"{s} {current_year}"
+                s = f"{s} {year}"
             return pd.to_datetime(s, dayfirst=True, errors="coerce")
 
-        df["dt_fixed"] = df.iloc[:, 3].apply(parse_dt)
+        df["dt_fixed"] = df.iloc[:,3].apply(parse_dt)
         return df
-
-    except Exception:
+    except:
         return pd.DataFrame()
 
-# ----------------------------
-# Load Data
-# ----------------------------
 raw_df = load_data()
 
 if st.button("🔄 REFRESH DATA"):
@@ -88,104 +130,93 @@ if st.button("🔄 REFRESH DATA"):
     st.rerun()
 
 # ----------------------------
-# Sticky Activity Filter
+# Filters
 # ----------------------------
 if "activity_filter" not in st.session_state:
     st.session_state.activity_filter = []
 
-all_activities = raw_df.iloc[:, 1].dropna().unique() if not raw_df.empty else []
-all_activities = sorted([str(a).strip() for a in all_activities if str(a).strip().lower() != "nan"])
+activities = raw_df.iloc[:,1].dropna().unique() if not raw_df.empty else []
+activities = sorted([a for a in activities if str(a).lower() != "nan"])
 
-safe_default = [a for a in st.session_state.activity_filter if a in all_activities]
-
-activity_selection = st.multiselect(
-    "Select Activities (sticky filter):",
-    options=all_activities,
-    default=safe_default
+selection = st.multiselect(
+    "Select Activities:",
+    activities,
+    st.session_state.activity_filter
 )
-st.session_state.activity_filter = activity_selection
+st.session_state.activity_filter = selection
 
-# ----------------------------
-# Other Filters
-# ----------------------------
 col1, col2 = st.columns(2)
 with col1:
-    view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
+    view = st.radio("View:", ["Upcoming","Results"], horizontal=True)
 with col2:
-    cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    cat = st.selectbox("Category:", ["All","Sport","Culture","Academics"])
 
-search_q = st.text_input("🔍 Search:", placeholder="e.g. u13 hockey").lower().strip()
+search = st.text_input("🔍 Search").lower().strip()
 
 # ----------------------------
-# Filtering Logic
+# Filtering
 # ----------------------------
 if raw_df.empty:
-    st.error("No data found. Please check your connection.")
+    st.error("No data available.")
 else:
     if view == "Upcoming":
         df = raw_df[raw_df["dt_fixed"].isna() | (raw_df["dt_fixed"].dt.date >= today)]
     else:
         df = raw_df[raw_df["dt_fixed"].notna() & (raw_df["dt_fixed"].dt.date < today)]
 
+    if cat != "All":
+        df = df[df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower())]
+
+    if selection:
+        df = df[df.iloc[:,1].astype(str).str.lower().isin([s.lower() for s in selection])]
+
+    if search:
+        df = df[df.astype(str).apply(lambda r: r.str.lower().str.contains(search, na=False)).any(axis=1)]
+
     df = df.sort_values("dt_fixed", na_position="last")
 
-    if cat != "All":
-        df = df[df.iloc[:, 0].astype(str).str.lower().str.contains(cat.lower())]
-
-    if activity_selection:
-        df = df[df.iloc[:, 1].astype(str).str.lower().isin([a.lower() for a in activity_selection])]
-
-    if search_q:
-        mask = df.astype(str).apply(lambda c: c.str.lower().str.contains(search_q, na=False))
-        df = df[mask.any(axis=1)]
-
     # ----------------------------
-    # Display Cards
+    # Cards
     # ----------------------------
     for _, r in df.iterrows():
         sport = str(r.iloc[1]).strip()
-        age_raw = str(r.iloc[2]).strip()
-        age = age_raw if age_raw.lower() != "nan" else ""
-        date_str = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
+        age = "" if str(r.iloc[2]).lower()=="nan" else str(r.iloc[2])
         venue = str(r.iloc[4]).strip()
+        date = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
 
-        team_text = ""
-        note_text = ""
+        team = ""
+        note = ""
         buttons = []
 
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+        for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
             val = str(r.iloc[idx]).strip()
-            if not val or val.lower() == "nan":
+            if not val or val.lower()=="nan":
                 continue
 
             urls = extract_urls(val)
-            clean_text = re.sub(URL_REGEX, "", val).strip()
+            text = re.sub(URL_REGEX,"",val).strip()
 
-            if lbl == "TEAM" and clean_text:
-                team_text = clean_text
-
-            elif lbl == "PROGRAMME":
+            if lbl=="TEAM":
+                team = text
+            elif lbl=="PROGRAMME":
                 for u in urls:
-                    buttons.append(f'<a href="{u}" target="_blank" class="btn">📄 PROGRAMME</a>')
-
-            elif lbl == "CONFIRM":
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">📄 PROGRAMME</a>')
+            elif lbl=="CONFIRM":
                 for u in urls:
-                    buttons.append(f'<a href="{u}" target="_blank" class="btn">✅ CONFIRM</a>')
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">✅ CONFIRM</a>')
+            elif lbl=="INFO" and sport.lower()!="swimming":
+                note = text
 
-            elif lbl == "INFORMATION" and sport.lower() != "swimming":
-                note_text = clean_text
-
-        buttons_html = f'<div class="btn-row">{" ".join(buttons)}</div>' if buttons else ""
-
-        st.markdown(f"""
+        html = f"""
+        {BASE_STYLE}
         <div class="card">
-            <div style="font-size:0.85rem;color:#666">🗓️ {date_str}</div>
-            <div class="t">{sport} {age}</div>
-            <div style="font-size:0.85rem;color:#333">📍 {venue}</div>
-            {f'<div class="team-box"><b>TEAMS:</b><br>{team_text}</div>' if team_text else ''}
-            {f'<div class="box"><b>Note:</b><br>{note_text}</div>' if note_text else ''}
+            <div class="date">🗓️ {date}</div>
+            <div class="title">{sport} {age}</div>
+            <div class="venue">📍 {venue}</div>
+            {f'<div class="team"><b>TEAMS:</b><br>{team}</div>' if team else ''}
+            {f'<div class="note"><b>Note:</b><br>{note}</div>' if note else ''}
+            {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
         </div>
-        """, unsafe_allow_html=True)
+        """
 
-        if buttons_html:
-            components.html(buttons_html, height=60)
+        components.html(html, height=260)
