@@ -53,11 +53,6 @@ def load_live_data():
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
-def get_l(val):
-    t = str(val).strip()
-    m = re.search(r'https?://[^\s<>"]+', t)
-    return m.group(0) if m else None
-
 def smart_filter(df, query):
     if not query: return df
     q = query.lower().strip()
@@ -67,10 +62,7 @@ def smart_filter(df, query):
     for term in terms:
         clean = term.replace("o/","").replace("u/","").replace(" ","")
         if not clean: continue
-        if clean in ['b', 'g']:
-            mask = df.iloc[:, 2].astype(str).str.lower().str.contains(clean, na=False)
-        else:
-            mask = df.apply(lambda r: clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
+        mask = df.apply(lambda r: clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
         df = df[mask]
     return df
 
@@ -80,8 +72,9 @@ df_live, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # --- URL SYNCED FILTERS ---
-    v_idx = 1 if st.query_params.get("range") == "7" else 0
+    # 1. URL Sync for Range
+    url_range = st.query_params.get("range", "all")
+    v_idx = 1 if url_range == "7" else 0
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=v_idx, key="range_v")
     st.query_params["range"] = "7" if view_opt == "Next 7 Days" else "all"
 
@@ -89,8 +82,9 @@ if not df_live.empty:
         st.cache_data.clear()
         st.rerun()
 
-    q_search = st.query_params.get("search", "")
-    raw_s = st.text_input("🔍 Search:", value=q_search, placeholder="e.g. u13 hockey", key="search_v")
+    # 2. URL Sync for Search
+    url_search = st.query_params.get("search", "")
+    raw_s = st.text_input("🔍 Search:", value=url_search, placeholder="e.g. u13 hockey", key="search_v")
     st.query_params["search"] = raw_s
     
     c = st.columns([1, 1, 1])
@@ -101,35 +95,43 @@ if not df_live.empty:
     if view_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
-    with c[1]: sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="act_v")
-    with c[2]: sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="age_v")
+    # --- THE CRISIS FIX: ACTIVITY URL SYNC ---
+    all_acts = sorted(f_df.iloc[:, 1].dropna().unique())
+    url_acts = st.query_params.get_all("act")
+    # Only use defaults if they actually exist in the current list
+    default_acts = [a for a in url_acts if a in all_acts]
+    
+    with c[1]: 
+        sel_acts = st.multiselect("Activity:", all_acts, default=default_acts, key="act_v")
+    st.query_params["act"] = sel_acts
 
-    final_df = smart_filter(f_df, raw_s)
-    if sel_acts: final_df = final_df[final_df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages: final_df = final_df[final_df.iloc[:, 2].isin(sel_ages)]
+    # --- AGE GROUP URL SYNC ---
+    all_ages = sorted(f_df.iloc[:, 2].dropna().unique())
+    url_ages = st.query_params.get_all("age")
+    default_ages = [a for a in url_ages if a in all_ages]
 
-    if not final_df.empty:
-        for i, r in final_df.iterrows():
+    with c[2]: 
+        sel_ages = st.multiselect("Age Group:", all_ages, default=default_ages, key="age_v")
+    st.query_params["age"] = sel_ages
+
+    # Final Filtering logic
+    df = smart_filter(f_df, raw_s)
+    if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
+    if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
+
+    if not df.empty:
+        for i, r in df.iterrows():
             age_val = str(r.iloc[2]).strip()
             title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
             dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-            ven = str(r.iloc[4])
-            prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
-            team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
-            info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
+            ven, prog_l = str(r.iloc[4]), str(r.iloc[5]).strip()
+            team_val, conf_l = str(r.iloc[6]).strip(), str(r.iloc[7]).strip()
+            info_val = str(r.iloc[8]).strip()
+            
             mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and 'http' not in info_val) else ""
+            tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and 'http' not in team_val) else ""
             
-            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and not info_l) else ""
-            tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and not team_l) else ""
-            
-            btns = '<div class="btn-row">'
-            if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
-            if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
-            if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
-            if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
-            btns += '</div>'
-            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
-    else:
-        st.info("No current or upcoming events found.")
+            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}</div>', unsafe_allow_html=True)
 else:
     st.info("No upcoming fixtures found.")
