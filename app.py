@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Die stabiele Midstream-look)
+# 2. Styling
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -37,8 +37,8 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        past_limit = now - timedelta(days=10) # Laat Results toe
         
+        # ONS WYS NOU NET VANAF VANDAG (26 JAN)
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
@@ -49,14 +49,14 @@ def load_live_data():
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        return df[df['dt_fixed'].dt.date >= past_limit].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
+        # Slegs vandag en toekoms
+        return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# Refresh Button
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
@@ -64,16 +64,13 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # --- ALLE FILTERS IS TERUG ---
+    # FILTERS
     url_acts = st.query_params.get_all("act")
-    
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
-    
-    # Update URL vir Sticky Filters
     st.query_params["act"] = sel_acts
 
     # Filter Logika
@@ -88,9 +85,9 @@ if not df_live.empty:
     for i, r in f_df.iterrows():
         act, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
         ven = str(r.iloc[4])
-        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        dat = r['dt_fixed'].strftime('%d %B %Y')
         
-        # Detective Logika vir links in kolomme 5, 6, 7 en 8
+        # Detective Logika vir links (Kolomme F, G, H, I)
         found_btns = []
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
@@ -110,4 +107,4 @@ if not df_live.empty:
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.info("No fixtures found.")
+    st.info("No upcoming fixtures found.")
