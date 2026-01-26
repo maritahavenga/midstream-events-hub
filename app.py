@@ -8,37 +8,12 @@ import requests
 import io
 import time
 from streamlit_autorefresh import st_autorefresh
-import streamlit.components.v1 as components
 
 # 1. Page Configuration
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. JavaScript om filters op die foon te STOOR en te LEES
-# Hierdie is die "geheue" wat op die foon self bly
-js_code = """
-<script>
-    const saveFilters = (search, act, age) => {
-        localStorage.setItem('lmcp_search', search);
-        localStorage.setItem('lmcp_act', JSON.stringify(act));
-        localStorage.setItem('lmcp_age', JSON.stringify(age));
-    }
-
-    const loadFilters = () => {
-        return {
-            search: localStorage.getItem('lmcp_search') || "",
-            act: JSON.parse(localStorage.getItem('lmcp_act')) || [],
-            age: JSON.parse(localStorage.getItem('lmcp_age')) || []
-        };
-    }
-    
-    // Stuur die data na Streamlit toe
-    window.parent.postMessage({type: 'LOAD_FILTERS', data: loadFilters()}, "*");
-</script>
-"""
-components.html(js_code, height=0)
-
-# 3. Styling
+# 2. Styling
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -63,6 +38,7 @@ def load_live_data():
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
+        df = df.dropna(subset=[df.columns[1], df.columns[3]]) 
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
@@ -79,44 +55,53 @@ df_live, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # 1. Search Box
-    raw_s = st.text_input("🔍 Search Activity:", key="search_v")
-    
+    # --- DIE FILTER AFDELING ---
     c = st.columns([1, 1])
     
-    # 2. Activity Filter
-    all_acts = sorted(df_live.iloc[:, 1].dropna().unique())
-    with c[0]:
-        sel_acts = st.multiselect("Activity:", all_acts, key="act_v")
+    # Kry alle unieke aktiwiteite
+    all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     
-    # 3. Age Group Filter
-    all_ages = sorted(df_live.iloc[:, 2].dropna().unique())
+    # HARD-CODE DIE DEFAULTS (Hierdie is die geheime sous)
+    # Ons sê vir die app: "Kies ALTYD hierdie, tensy die ouer dit self doodruk"
+    perma_filters = ["Swimming", "Athletics", "Swem", "Atletiek"]
+    default_selection = [a for a in perma_filters if a in all_acts]
+    
+    with c[0]:
+        sel_acts = st.multiselect("Activity:", all_acts, default=default_selection, key="act_v")
+    
+    all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
     with c[1]:
         sel_ages = st.multiselect("Age Group:", all_ages, key="age_v")
 
-    if st.button(f"🔄 REFRESH DATA", key="ref_v"):
+    raw_s = st.text_input("🔍 Search Activity (e.g. Tennis):", key="search_v")
+
+    if st.button(f"🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
 
     # --- FILTER LOGIKA ---
     f_df = df_live
+    if sel_acts:
+        f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
+    if sel_ages:
+        f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
     if raw_s:
         f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
-    if sel_acts:
-        f_df = f_df[f_df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages:
-        f_df = f_df[f_df.iloc[:, 2].isin(sel_ages)]
 
-    # --- DISPLAY ---
+    # --- VERTOON ---
     for i, r in f_df.iterrows():
-        title = f"{r.iloc[1]} {str(r.iloc[2])}"
+        act_name = str(r.iloc[1])
+        age_name = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        title = f"{act_name} {age_name}".strip()
         dat = r['dt_fixed'].strftime('%d %B %Y')
-        info = str(r.iloc[8]).strip()
+        ven = str(r.iloc[4])
+        info = str(r.iloc[8]).strip() if str(r.iloc[8]).lower() != 'nan' else ""
+        
         st.markdown(f"""<div class="card">
             <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
             <div class="t">{title}</div>
-            <div style="font-size:0.85rem;color:#333">📍 {r.iloc[4]}</div>
-            {f'<div class="box"><b>Note:</b><br>{info}</div>' if info.lower()!='nan' else ""}
+            <div style="font-size:0.85rem;color:#333">📍 {ven}</div>
+            {f'<div class="box"><b>Note:</b><br>{info}</div>' if info else ""}
         </div>""", unsafe_allow_html=True)
 else:
-    st.info("No upcoming fixtures.")
+    st.info("Geen fixtures gevind nie.")
