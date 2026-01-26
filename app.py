@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Alles herstel na die stabiele weergawe)
+# 2. Styling
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -23,8 +23,8 @@ header {visibility: hidden;}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.9rem;white-space: pre-wrap;}
-.btn-row {display:flex!important; gap:6px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important;}
-.btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
+.btn-row {display: flex !important; flex-wrap: wrap !important; gap: 6px !important; margin-top: 10px !important; width: 100% !important;}
+.btn {flex: 1 1 auto !important; background: #800000 !important; color: white !important; text-align: center !important; text-decoration: none !important; font-weight: bold !important; font-size: 0.7rem !important; padding: 10px 5px !important; border-radius: 6px !important; min-width: 80px !important; display: inline-block !important; border: 1px solid #00cccc !important;}
 h2 { color: white !important; text-align: center; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px;}
 div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
@@ -60,24 +60,16 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
-
 if not df_live.empty:
-    # --- 1. SEVEN DAY / ALL TOGGLE (TERUG) ---
+    # 1. 7-Day Toggle
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_sel")
-
-    if st.button(f"🔄 REFRESH DATA"):
-        st.cache_data.clear()
-        st.rerun()
-
-    # --- 2. CATEGORIES (TERUG) ---
+    
+    # 2. Category Select
     cat = st.selectbox("Category (Type):", ["All", "Sport", "Culture", "Academics"], key="type_sel")
 
-    # --- 3. ACTIVITY & AGE FILTERS (MET DEFAULTS) ---
+    # 3. Multiselects met "Hard-coded" Defaults
     c = st.columns([1, 1])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    
-    # Hard-code: Hierdie sportsoorte is ALTYD klaar gekies as die app oopmaak
     perma_filters = ["Swimming", "Athletics", "Swem", "Atletiek"]
     default_selection = [a for a in perma_filters if a in all_acts]
     
@@ -87,9 +79,7 @@ if not df_live.empty:
         all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
         sel_ages = st.multiselect("Age Group:", all_ages, key="age_sel")
 
-    raw_s = st.text_input("🔍 Search Activity:", key="search_sel")
-
-    # --- FILTER LOGIKA ---
+    # Filter Logika
     f_df = df_live
     if view_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
@@ -99,17 +89,15 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
     if sel_ages:
         f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
-    if raw_s:
-        f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
 
-    # --- VERTOON ---
+    # Vertoon Kaartjies
     for i, r in f_df.iterrows():
         act_name = str(r.iloc[1])
         age_name = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        title = f"{act_name} {age_name}".strip()
         dat = r['dt_fixed'].strftime('%d %B %Y')
         ven = str(r.iloc[4])
         
+        # Knoppies
         prog_l = get_l(r.iloc[5])
         team_l = get_l(r.iloc[6])
         conf_l = get_l(r.iloc[7])
@@ -117,21 +105,25 @@ if not df_live.empty:
         info_text = str(r.iloc[8]).strip()
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        box_html = f'<div class="box"><b>Note:</b><br>{info_text}</div>' if (info_text.lower()!='nan' and not info_l) else ""
         
-        btns_html = '<div class="btn-row">'
-        if prog_l: btns_html += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
-        if team_l: btns_html += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
-        if conf_l: btns_html += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
-        if info_l: btns_html += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
-        btns_html += '</div>'
-        
-        st.markdown(f"""<div class="card">
+        # HTML bou vir knoppies
+        btns_html = ""
+        if any([prog_l, team_l, conf_l, info_l]):
+            btns_html = '<div class="btn-row">'
+            if prog_l: btns_html += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
+            if team_l: btns_html += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+            if conf_l: btns_html += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+            if info_l: btns_html += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
+            btns_html += '</div>'
+
+        st.markdown(f"""
+        <div class="card">
             <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
-            <div class="t">{title}</div>
+            <div class="t">{act_name} {age_name}</div>
             <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
-            {box_html}
-            {btns_html if any([prog_l, team_l, conf_l, info_l]) else ""}
-        </div>""", unsafe_allow_html=True)
+            {f'<div class="box"><b>Note:</b><br>{info_text}</div>' if (info_text.lower()!='nan' and not info_l) else ""}
+            {btns_html}
+        </div>
+        """, unsafe_allow_html=True)
 else:
     st.info("Geen fixtures gevind nie.")
