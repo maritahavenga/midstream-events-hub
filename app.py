@@ -17,23 +17,31 @@ st_autorefresh(interval=120000, key="datarefresh")
 today = datetime.now().date()
 
 # ----------------------------
-# Styling
+# Global Styling
 # ----------------------------
-BASE_STYLE = """
+st.markdown("""
 <style>
-body { background:#008080; }
+#MainMenu, footer, header {visibility:hidden;}
+.stApp {background:#008080;}
+.block-container {max-width:600px; padding:1rem;}
+label {color:white !important; font-weight:bold;}
+</style>
+""", unsafe_allow_html=True)
+
+CARD_STYLE = """
+<style>
 .card {
     background:white;
-    padding:18px;
+    padding:16px;
     border-radius:16px;
-    border-left:12px solid #800000;
-    margin-bottom:18px;
-    box-shadow:0 6px 14px rgba(0,0,0,0.18);
+    border-left:10px solid #800000;
+    margin-bottom:16px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.18);
     font-family:Arial, sans-serif;
 }
-.date { font-size:0.8rem; color:#777; }
-.title { color:#800000; font-weight:700; font-size:1.15rem; margin:6px 0; }
-.venue { font-size:0.85rem; color:#333; }
+.date {font-size:0.8rem; color:#777;}
+.title {color:#800000; font-weight:700; font-size:1.15rem; margin:6px 0;}
+.venue {font-size:0.85rem; color:#333;}
 .team {
     background:#fff3f3;
     padding:10px;
@@ -45,43 +53,31 @@ body { background:#008080; }
 }
 .note {
     background:#f8f9fa;
-    padding:12px;
+    padding:10px;
     border-radius:10px;
-    margin-top:10px;
-    border-left:5px solid #008080;
+    margin-top:8px;
+    border-left:4px solid #008080;
     font-size:0.85rem;
     color:#333;
 }
 .btn-row {
     display:flex;
     gap:10px;
-    margin-top:14px;
+    margin-top:12px;
     flex-wrap:wrap;
 }
 .btn {
     background:#800000;
     color:white;
-    font-weight:700;
+    font-weight:600;
     font-size:0.7rem;
-    padding:10px 16px;
+    padding:10px 18px;
     border-radius:8px;
     text-decoration:none;
-    letter-spacing:0.4px;
 }
-.btn:hover {
-    background:#5e0000;
-}
+.btn:hover {background:#5e0000;}
 </style>
 """
-
-st.markdown("""
-<style>
-#MainMenu, footer, header { visibility:hidden; }
-.stApp { background:#008080; }
-.block-container { max-width:600px; padding:1rem; }
-label { color:white !important; font-weight:bold; }
-</style>
-""", unsafe_allow_html=True)
 
 # ----------------------------
 # Data Source
@@ -109,10 +105,9 @@ def load_data():
         df.columns = [c.strip() for c in df.columns]
 
         year = datetime.now().year
-
         def parse_dt(x):
             s = str(x).strip()
-            if not s or s.lower() == "nan":
+            if not s or s.lower()=="nan":
                 return pd.NaT
             if not re.search(r"\d{4}", s):
                 s = f"{s} {year}"
@@ -125,7 +120,7 @@ def load_data():
 
 raw_df = load_data()
 
-if st.button("🔄 REFRESH DATA"):
+if st.button("REFRESH DATA"):
     st.cache_data.clear()
     st.rerun()
 
@@ -136,13 +131,9 @@ if "activity_filter" not in st.session_state:
     st.session_state.activity_filter = []
 
 activities = raw_df.iloc[:,1].dropna().unique() if not raw_df.empty else []
-activities = sorted([a for a in activities if str(a).lower() != "nan"])
+activities = sorted([a for a in activities if str(a).lower()!="nan"])
 
-selection = st.multiselect(
-    "Select Activities:",
-    activities,
-    st.session_state.activity_filter
-)
+selection = st.multiselect("Select Activities:", activities, st.session_state.activity_filter)
 st.session_state.activity_filter = selection
 
 col1, col2 = st.columns(2)
@@ -151,20 +142,22 @@ with col1:
 with col2:
     cat = st.selectbox("Category:", ["All","Sport","Culture","Academics"])
 
-search = st.text_input("🔍 Search").lower().strip()
+search = st.text_input("Search").lower().strip()
 
 # ----------------------------
-# Filtering
+# Filtering + Display
 # ----------------------------
 if raw_df.empty:
     st.error("No data available.")
 else:
-    if view == "Upcoming":
-        df = raw_df[raw_df["dt_fixed"].isna() | (raw_df["dt_fixed"].dt.date >= today)]
-    else:
-        df = raw_df[raw_df["dt_fixed"].notna() & (raw_df["dt_fixed"].dt.date < today)]
+    df = raw_df.copy()
 
-    if cat != "All":
+    if view=="Upcoming":
+        df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date >= today)]
+    else:
+        df = df[df["dt_fixed"].notna() & (df["dt_fixed"].dt.date < today)]
+
+    if cat!="All":
         df = df[df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower())]
 
     if selection:
@@ -175,24 +168,18 @@ else:
 
     df = df.sort_values("dt_fixed", na_position="last")
 
-    # ----------------------------
-    # Cards
-    # ----------------------------
     for _, r in df.iterrows():
         sport = str(r.iloc[1]).strip()
         age = "" if str(r.iloc[2]).lower()=="nan" else str(r.iloc[2])
         venue = str(r.iloc[4]).strip()
         date = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
 
-        team = ""
-        note = ""
-        buttons = []
+        team, note, buttons = "", "", []
 
         for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower()=="nan":
                 continue
-
             urls = extract_urls(val)
             text = re.sub(URL_REGEX,"",val).strip()
 
@@ -200,23 +187,23 @@ else:
                 team = text
             elif lbl=="PROGRAMME":
                 for u in urls:
-                    buttons.append(f'<a class="btn" href="{u}" target="_blank">📄 PROGRAMME</a>')
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
             elif lbl=="CONFIRM":
                 for u in urls:
-                    buttons.append(f'<a class="btn" href="{u}" target="_blank">✅ CONFIRM</a>')
+                    buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
             elif lbl=="INFO" and sport.lower()!="swimming":
                 note = text
 
         html = f"""
-        {BASE_STYLE}
+        {CARD_STYLE}
         <div class="card">
-            <div class="date">🗓️ {date}</div>
+            <div class="date">{date}</div>
             <div class="title">{sport} {age}</div>
-            <div class="venue">📍 {venue}</div>
-            {f'<div class="team"><b>TEAMS:</b><br>{team}</div>' if team else ''}
-            {f'<div class="note"><b>Note:</b><br>{note}</div>' if note else ''}
+            <div class="venue">{venue}</div>
+            {f'<div class="team"><b>TEAMS</b><br>{team}</div>' if team else ''}
+            {f'<div class="note">{note}</div>' if note else ''}
             {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
         </div>
         """
 
-        components.html(html, height=260)
+        components.html(html)
