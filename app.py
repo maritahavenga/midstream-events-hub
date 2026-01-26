@@ -12,13 +12,13 @@ from streamlit_autorefresh import st_autorefresh
 # ----------------------------
 # Page Config
 # ----------------------------
-st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
+st.set_page_config(page_title="LMCP Events Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
 today = datetime.now().date()
 
 # ----------------------------
-# Fixed Navbar (Logo only)
+# Navbar
 # ----------------------------
 st.markdown("""
 <style>
@@ -32,20 +32,30 @@ st.markdown("""
     right:0;
     background:white;
     border-bottom:2px solid #800000;
-    padding:8px 16px;
+    padding:10px 16px;
     z-index:9999;
     display:flex;
-    justify-content:center;
+    align-items:center;
+    gap:14px;
 }
-.navbar img {height:48px;}
-.nav-spacer {height:80px;}
+.navbar img {height:46px;}
+.nav-title {
+    font-family:'Cinzel', serif;
+    font-size:1.3rem;
+    font-weight:700;
+    color:#800000;
+}
+.nav-spacer {height:90px;}
 
 .block-container {max-width:600px; padding:1rem;}
 label {color:white !important; font-weight:bold;}
 </style>
 
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+
 <div class="navbar">
     <img src="https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png">
+    <div class="nav-title">Events Hub</div>
 </div>
 <div class="nav-spacer"></div>
 """, unsafe_allow_html=True)
@@ -59,18 +69,18 @@ CARD_STYLE = """
 
 .card {
     background:white;
-    padding:18px;
-    border-radius:18px;
+    padding:16px;
+    border-radius:16px;
     border-left:10px solid #800000;
-    margin-bottom:18px;
-    box-shadow:0 4px 14px rgba(0,0,0,0.16);
+    margin-bottom:14px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.15);
     font-family:'Inter', system-ui, sans-serif;
 }
 
-.date-head {
-    color:white;
-    font-weight:700;
-    margin:20px 0 10px;
+.date-in {
+    font-size:0.85rem;
+    color:#666;
+    margin-bottom:4px;
 }
 
 .title {
@@ -109,7 +119,7 @@ CARD_STYLE = """
 .btn-row {
     display:flex;
     gap:12px;
-    margin-top:14px;
+    margin-top:12px;
     flex-wrap:wrap;
 }
 
@@ -118,7 +128,7 @@ CARD_STYLE = """
     color:white;
     font-weight:600;
     font-size:0.78rem;
-    padding:11px 20px;
+    padding:10px 18px;
     border-radius:10px;
     text-decoration:none;
 }
@@ -126,7 +136,7 @@ CARD_STYLE = """
 """
 
 # ----------------------------
-# Data Source
+# Data
 # ----------------------------
 URL_DATA = (
     "https://docs.google.com/spreadsheets/d/e/"
@@ -140,9 +150,6 @@ URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
 def extract_urls(text):
     return URL_REGEX.findall(text)
 
-# ----------------------------
-# Load Data
-# ----------------------------
 @st.cache_data(ttl=120)
 def load_data():
     r = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
@@ -169,8 +176,7 @@ raw_df = load_data()
 if "activity_filter" not in st.session_state:
     st.session_state.activity_filter = []
 
-activities = raw_df.iloc[:,1].dropna().unique()
-activities = sorted([a for a in activities if str(a).lower() != "nan"])
+activities = sorted(raw_df.iloc[:,1].dropna().unique())
 
 activity_selection = st.multiselect(
     "Select Activities:",
@@ -185,12 +191,12 @@ with col1:
 with col2:
     cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
-seven_days = st.toggle("Show next 7 days only", value=True)
+seven_days = st.toggle("Limit to next 7 days (turn OFF to see all upcoming fixtures)", value=True)
 
 search = st.text_input("Search").lower().strip()
 
 # ----------------------------
-# Filtering Logic
+# Filtering
 # ----------------------------
 df = raw_df.copy()
 
@@ -200,7 +206,7 @@ else:
     df = df[df["dt_fixed"].notna() & (df["dt_fixed"].dt.date < today)]
 
 if seven_days and view == "Upcoming":
-    df = df[df["dt_fixed"].dt.date <= today + timedelta(days=7)]
+    df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date <= today + timedelta(days=7))]
 
 if cat != "All":
     df = df[df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower())]
@@ -214,54 +220,51 @@ if search:
 df = df.sort_values("dt_fixed", na_position="last")
 
 # ----------------------------
-# Display grouped by date
+# Display
 # ----------------------------
-for date, group in df.groupby(df["dt_fixed"].dt.date):
-    date_label = date.strftime("%A, %d %B %Y") if pd.notnull(date) else "TBA"
-    st.markdown(f"<div class='date-head'>{date_label}</div>", unsafe_allow_html=True)
+for _, r in df.iterrows():
+    sport = str(r.iloc[1]).strip()
+    age = "" if str(r.iloc[2]).lower() == "nan" else str(r.iloc[2])
+    venue = str(r.iloc[4]).strip()
+    date_str = r["dt_fixed"].strftime("%A, %d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
 
-    for _, r in group.iterrows():
-        sport = str(r.iloc[1]).strip()
-        age = "" if str(r.iloc[2]).lower() == "nan" else str(r.iloc[2])
-        venue = str(r.iloc[4]).strip()
-        date_str = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
+    maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
 
-        maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+    team, note, buttons = "", "", []
 
-        team, note, buttons = "", "", []
+    for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
+        val = str(r.iloc[idx]).strip()
+        if not val or val.lower() == "nan":
+            continue
 
-        for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
-            val = str(r.iloc[idx]).strip()
-            if not val or val.lower() == "nan":
-                continue
+        urls = extract_urls(val)
+        text = re.sub(URL_REGEX, "", val).strip()
 
-            urls = extract_urls(val)
-            text = re.sub(URL_REGEX, "", val).strip()
+        if lbl == "TEAM":
+            team = text
+        elif lbl == "PROGRAMME":
+            for u in urls:
+                buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
+        elif lbl == "CONFIRM":
+            for u in urls:
+                buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
+        elif lbl == "INFO" and sport.lower() != "swimming":
+            note = text
 
-            if lbl == "TEAM":
-                team = text
-            elif lbl == "PROGRAMME":
-                for u in urls:
-                    buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
-            elif lbl == "CONFIRM":
-                for u in urls:
-                    buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
-            elif lbl == "INFO" and sport.lower() != "swimming":
-                note = text
+    html = f"""
+    <meta charset="UTF-8">
+    {CARD_STYLE}
+    <div class="card">
+        <div class="date-in">📅 {date_str}</div>
+        <div class="title">{sport} {age}</div>
+        <div class="venue"><a href="{maps_link}" target="_blank">📍 {venue}</a></div>
+        {f'<div class="team"><b>TEAMS</b><br>{team}</div>' if team else ''}
+        {f'<div class="note">{note}</div>' if note else ''}
+        {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
+    </div>
+    """
 
-        html = f"""
-        <meta charset="UTF-8">
-        {CARD_STYLE}
-        <div class="card">
-            <div class="title">{sport} {age}</div>
-            <div class="venue"><a href="{maps_link}" target="_blank">{venue}</a></div>
-            {f'<div class="team"><b>TEAMS</b><br>{team}</div>' if team else ''}
-            {f'<div class="note">{note}</div>' if note else ''}
-            {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
-        </div>
-        """
-
-        components.html(html, height=700, scrolling=True)
+    components.html(html, height=520, scrolling=True)
 
 # ----------------------------
 # Footer
