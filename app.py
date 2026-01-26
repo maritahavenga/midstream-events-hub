@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import re
 from datetime import datetime
-import pytz
 import requests
 import io
 import time
@@ -13,6 +12,8 @@ from streamlit_autorefresh import st_autorefresh
 # ----------------------------
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")  # refresh every 2 minutes
+
+today = datetime.now().date()
 
 # ----------------------------
 # Styling
@@ -59,31 +60,32 @@ def load_data():
         response = requests.get(f"{URL_DATA}&cb={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.content.decode("utf-8")))
         df.columns = [str(c).strip() for c in df.columns]
+
         current_year = datetime.now().year
+
         def parse_dt(x):
             s = str(x).strip()
-            if not s or s.lower() == "nan": return pd.NaT
-            if not re.search(r"\d{4}", s): s = f"{s} {current_year}"
+            if not s or s.lower() == "nan":
+                return pd.NaT
+            if not re.search(r"\d{4}", s):
+                s = f"{s} {current_year}"
             return pd.to_datetime(s, dayfirst=True, errors="coerce")
-        df["dt_fixed"] = df.iloc[:,3].apply(parse_dt)
+
+        df["dt_fixed"] = df.iloc[:, 3].apply(parse_dt)
         return df
-    except:
+
+    except Exception:
         return pd.DataFrame()
 
 # ----------------------------
-# Refresh Data Button
+# Load Data (ALWAYS)
 # ----------------------------
-if "refresh_data" not in st.session_state:
-    st.session_state.refresh_data = False
+raw_df = load_data()
 
+# Manual refresh
 if st.button("🔄 REFRESH DATA"):
-    st.session_state.refresh_data = True
     st.cache_data.clear()
-
-# As refresh flag aan is, laai data weer
-if "refresh_data" in st.session_state and st.session_state.refresh_data:
-    raw_df = load_data()
-    st.session_state.refresh_data = False
+    st.rerun()
 
 # ----------------------------
 # Sticky Activity Filter
@@ -91,8 +93,9 @@ if "refresh_data" in st.session_state and st.session_state.refresh_data:
 if "activity_filter" not in st.session_state:
     st.session_state.activity_filter = []
 
-all_activities = raw_df.iloc[:,1].dropna().unique()
+all_activities = raw_df.iloc[:, 1].dropna().unique() if not raw_df.empty else []
 all_activities = sorted([str(a).strip() for a in all_activities if str(a).strip().lower() != "nan"])
+
 safe_default = [a for a in st.session_state.activity_filter if a in all_activities]
 
 activity_selection = st.multiselect(
@@ -107,9 +110,9 @@ st.session_state.activity_filter = activity_selection
 # ----------------------------
 col1, col2 = st.columns(2)
 with col1:
-    view = st.radio("View:", ["Upcoming","Results"], horizontal=True)
+    view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
 with col2:
-    cat = st.selectbox("Category:", ["All","Sport","Culture","Academics"])
+    cat = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
 search_q = st.text_input("🔍 Search:", placeholder="e.g. u13 hockey").lower().strip()
 
@@ -120,17 +123,17 @@ if raw_df.empty:
     st.error("No data found. Please check your connection.")
 else:
     if view == "Upcoming":
-        df = raw_df[ raw_df["dt_fixed"].isna() | (raw_df["dt_fixed"].dt.date >= today) ]
+        df = raw_df[raw_df["dt_fixed"].isna() | (raw_df["dt_fixed"].dt.date >= today)]
     else:
-        df = raw_df[ raw_df["dt_fixed"].notna() & (raw_df["dt_fixed"].dt.date < today) ]
+        df = raw_df[raw_df["dt_fixed"].notna() & (raw_df["dt_fixed"].dt.date < today)]
 
     df = df.sort_values("dt_fixed", na_position="last")
 
     if cat != "All":
-        df = df[ df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower()) ]
+        df = df[df.iloc[:, 0].astype(str).str.lower().str.contains(cat.lower())]
 
     if activity_selection:
-        df = df[ df.iloc[:,1].astype(str).str.lower().isin([a.lower() for a in activity_selection]) ]
+        df = df[df.iloc[:, 1].astype(str).str.lower().isin([a.lower() for a in activity_selection])]
 
     if search_q:
         mask = df.astype(str).apply(lambda c: c.str.lower().str.contains(search_q, na=False))
@@ -150,7 +153,7 @@ else:
         note_text = ""
         prog_confirm_btns = []
 
-        for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFORMATION")]:
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower() == "nan":
                 continue
@@ -158,21 +161,21 @@ else:
             urls = extract_urls(val)
             clean_text = re.sub(URL_REGEX, "", val).strip()
 
-            if lbl == "TEAM":
-                if clean_text:
-                    team_text = clean_text
+            if lbl == "TEAM" and clean_text:
+                team_text = clean_text
+
             elif lbl == "CONFIRM":
                 for u in urls:
                     prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">✅ CONFIRM</a>')
+
             elif lbl == "PROGRAMME":
                 for u in urls:
                     prog_confirm_btns.append(f'<a href="{u}" target="_blank" class="btn">📄 PROGRAMME</a>')
+
             elif lbl == "INFORMATION":
                 note_text = clean_text
 
-        buttons_html = ""
-        if prog_confirm_btns:
-            buttons_html = f'<div class="btn-row">{" ".join(prog_confirm_btns)}</div>'
+        buttons_html = f'<div class="btn-row">{" ".join(prog_confirm_btns)}</div>' if prog_confirm_btns else ""
 
         st.markdown(f"""
         <div class="card">
