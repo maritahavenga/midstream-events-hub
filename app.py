@@ -13,19 +13,17 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Maroen & Skoon Midstream-look)
+# 2. Styling (Skoon Maroen)
 st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
-.card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
-.t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
+.card{background:white;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
+.t{color:#800000;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
 .team-box{border:2px dashed #800000; padding:10px; border-radius:8px; margin:10px 0; background:#fff9f9; color:#800000; font-weight:bold; font-size:0.85rem; text-align:left;}
-.btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
-.btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:none!important; margin-bottom:4px;}
+.btn-row {display:flex; gap:6px; justify-content:flex-start; margin-top:10px; flex-wrap: wrap;}
+.btn {background:#800000; color:white!important; text-align:center; text-decoration:none; font-weight:bold; font-size:0.75rem; padding:8px 12px; border-radius:6px; display:inline-block; border:none; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
 h2 { color: white !important; text-align: center; text-transform: uppercase;}
 .stButton>button { width:100%; background-color:#800000; color:white; border:none; border-radius:10px; font-weight:bold;}
@@ -40,13 +38,11 @@ def load_live_data():
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
-        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
-        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -60,7 +56,6 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.rerun()
 
 if not df_live.empty:
-    # FILTERS
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
@@ -74,48 +69,44 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
-    for i, r in f_df.iterrows():
-        # Kolomme volgens jou lys: 1=Act, 2=Age, 4=Venue
+    for _, r in f_df.iterrows():
+        # Kolomme: 1=Act, 2=Age, 4=Venue
         act_n = str(r.iloc[1])
         age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue_s = str(r.iloc[4])
         
-        btns_html = ""
-        team_display = ""
-        notes_list = []
-        
-        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Info, 9=Res
-        for col_idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
-            val = str(r.iloc[col_idx]).strip()
-            if val.lower() == 'nan' or val == "": continue
-            
-            # Verbeterde Regex om Google Forms/Drive en links te vang
-            link_match = re.search(r'(https?://[^\s<>"]+)', val)
-            
-            if link_match:
-                url = link_match.group(0)
-                btns_html += f'<a href="{url}" target="_blank" class="btn">{label}</a>'
-                # Check of daar belangrike teks saam met die link is
-                clean_txt = val.replace(url, "").strip()
-                if clean_txt and label != "TEAM": notes_list.append(clean_txt)
+        # 1. Bou Knoppies
+        btn_list = []
+        team_txt = ""
+        notes = []
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
+            if val.lower() == 'nan' or not val: continue
+            link = re.search(r'(https?://[^\s<>"]+)', val)
+            if link:
+                btn_list.append(f'<a href="{link.group(0)}" target="_blank" class="btn">{lbl}</a>')
             else:
-                if label == "TEAM": team_display = val
-                else: notes_list.append(val)
+                if lbl == "TEAM": team_txt = val
+                else: notes.append(val)
         
-        # Results (Kolom 9)
-        res_val = str(r.iloc[9]).strip() if len(r) > 9 else ""
-        if res_val.lower() != 'nan' and res_val != "":
-            notes_list.append(f"<b>Result:</b> {res_val}")
+        # 2. Resultaat
+        res = str(r.iloc[9]).strip() if len(r) > 9 else ""
+        if res.lower() != 'nan' and res: notes.append(f"<b>Result:</b> {res}")
+
+        # 3. Vertoon Finale Kaart
+        btn_html = f'<div class="btn-row">{"".join(btn_list)}</div>' if btn_list else ""
+        team_html = f'<div class="team-box"><b>TEAMS:</b><br>{team_txt}</div>' if team_txt else ""
+        note_html = f'<div class="box"><b>Note:</b><br>{"<br>".join(notes)}</div>' if notes else ""
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_s}</div>
             <div class="t">{act_n} {age_n}</div>
             <div style="color:#333; font-size:0.85rem;">📍 {venue_s}</div>
-            {f'<div class="team-box"><b>TEAMS:</b><br>{team_display}</div>' if team_display else ""}
-            <div class="btn-row">{btns_html}</div>
-            {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes_list)}</div>' if notes_list else ""}
+            {team_html}
+            {btn_html}
+            {note_html}
         </div>
         """, unsafe_allow_html=True)
 else:
