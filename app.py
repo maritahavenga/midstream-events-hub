@@ -32,8 +32,7 @@ label { color:white !important; font-weight:bold; }
 
 URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-# --- PERSISTENCE ENGINE (LOCAL STORAGE) ---
-# This reads the "Post-it note" from the phone
+# --- GEHEUE STELSEL ---
 saved_act = st_javascript("localStorage.getItem('saved_act');")
 saved_age = st_javascript("localStorage.getItem('saved_age');")
 
@@ -63,24 +62,23 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
 if not df_live.empty:
     c = st.columns(2)
     
-    # Activity Filter
+    # Aktiwiteit Filter
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     
-    # Process saved memory
+    # Laai ou keuse of gebruik default
     default_act = []
     if saved_act and saved_act != "null":
         default_act = [a for a in saved_act.split(',') if a in all_acts]
-    if not default_act: # Fallback for your specific crisis
+    if not default_act:
         default_act = [a for a in ["Swimming", "Athletics", "Swem", "Atletiek"] if a in all_acts]
 
     with c[0]:
         sel_acts = st.multiselect("Activity:", all_acts, default=default_act, key="act_v")
     
-    # Save choice to phone immediately
     if sel_acts:
         st_javascript(f"localStorage.setItem('saved_act', '{','.join(sel_acts)}');")
 
-    # Age Group Filter
+    # Ouderdom Filter
     all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
     default_age = []
     if saved_age and saved_age != "null":
@@ -92,12 +90,12 @@ if not df_live.empty:
     if sel_ages:
         st_javascript(f"localStorage.setItem('saved_age', '{','.join(sel_ages)}');")
 
-    # Filter Logic
+    # Filter Logika
     f_df = df_live
     if sel_acts: f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
     if sel_ages: f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
 
-    # 3. Display
+    # Vertoon
     for i, r in f_df.iterrows():
         st.markdown(f"""
         <div class="card">
@@ -107,7 +105,7 @@ if not df_live.empty:
         </div>
         """, unsafe_allow_html=True)
         
-        # Native Buttons for Athletics & Swimming
+        # Knoppies
         btn_cols = st.columns(4)
         labels = ["PROGRAMME", "TEAM", "CONFIRM", "INFO"]
         for idx, label in enumerate(labels):
@@ -122,4 +120,4 @@ if not df_live.empty:
             st.markdown(f'<div class="box"><b>Note:</b><br>{note}</div>', unsafe_allow_html=True)
         st.markdown("---")
 else:
-    st.info("No fixtures found.")
+    st.info("Geen fixtures gevind nie.")
