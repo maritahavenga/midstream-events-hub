@@ -13,21 +13,19 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Suiwer Maroen - Geen Teal nie)
+# 2. Styling (Suiwer Maroen - Geen Teal Outlines)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
-/* Kaartjie met Maroen rand */
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
-/* Note-boksie met Maroen rand */
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
-/* Knoppies is nou suiwer maroen sonder teal outline */
-.btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:1px solid #800000!important; margin-bottom:4px;}
+/* Knoppies is maroen sonder enige teal */
+.btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:none!important; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
 h2 { color: white !important; text-align: center; text-transform: uppercase;}
 .stButton>button { width:100%; background-color:#800000; color:white; border:none; border-radius:10px; font-weight:bold;}
@@ -40,7 +38,6 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Dwing vars data
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
@@ -82,34 +79,38 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # --- AGE GROUP HERSTEL ---
-        act_val = str(r.iloc[1])
-        age_val = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        venue_val = str(r.iloc[4])
+        # --- AGE GROUP EXPLISIET ---
+        # Kolom 1 is Sport, Kolom 2 is Age Group
+        act_display = str(r.iloc[1])
+        age_display = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        venue_display = str(r.iloc[4])
         date_display = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
-        # Knoppies
+        # Knoppies & Information Logika
         found_btns = []
         has_info_link = False
+        
         # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Information
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
+            # Kyk vir 'n skakel
             match = re.search(r'(https?://[^\s<>"]+)', val)
             if match:
                 found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
                 if label == "INFORMATION": has_info_link = True
 
-        # Note Boksie (Information to follow)
-        note_text = str(r.iloc[8]).strip()
+        # Note/Swimming Info Logika
+        raw_info_val = str(r.iloc[8]).strip()
         info_box_html = ""
-        if note_text.lower() != 'nan' and note_text != "" and not has_info_link:
-            info_box_html = f'<div class="box"><b>Note:</b><br>{note_text}</div>'
+        # As daar teks is, maar NIE 'n skakel nie, wys die boksie
+        if raw_info_val.lower() != 'nan' and raw_info_val != "" and not has_info_link:
+            info_box_html = f'<div class="box"><b>Note:</b><br>{raw_info_val}</div>'
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_display}</div>
-            <div class="t">{act_val} {age_val}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue_val}</div>
+            <div class="t">{act_display} {age_display}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue_display}</div>
             <div class="btn-row">
                 {"".join(found_btns)}
             </div>
