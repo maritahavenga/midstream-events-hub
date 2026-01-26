@@ -19,6 +19,17 @@ st_autorefresh(interval=120000, key="refresh")
 today = datetime.now().date()
 
 # --------------------------------------------------
+# SAFE REFRESH PATTERN
+# Must happen BEFORE any widgets are rendered
+# --------------------------------------------------
+if "refresh_flag" not in st.session_state:
+    st.session_state.refresh_flag = False
+
+if st.session_state.refresh_flag:
+    st.session_state.refresh_flag = False
+    st.experimental_rerun()
+
+# --------------------------------------------------
 # STYLES, FULL-WIDTH LOGO + GREEN HEADER
 # --------------------------------------------------
 st.markdown("""
@@ -206,20 +217,13 @@ def load_data():
 raw_df = load_data()
 
 # --------------------------------------------------
-# REFRESH BUTTON (safe)
+# REFRESH BUTTON
 # --------------------------------------------------
-if "refresh_flag" not in st.session_state:
-    st.session_state.refresh_flag = False
-
 st.markdown('<div style="text-align:right; margin-bottom:10px;">', unsafe_allow_html=True)
 if st.button("🔄 Refresh Data"):
     st.session_state.refresh_flag = True
     st.cache_data.clear()
 st.markdown('</div>', unsafe_allow_html=True)
-
-if st.session_state.refresh_flag:
-    st.session_state.refresh_flag = False
-    st.experimental_rerun()
 
 # --------------------------------------------------
 # FILTER PANEL
