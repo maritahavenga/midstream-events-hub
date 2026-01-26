@@ -20,10 +20,8 @@ st.markdown("""
 footer {visibility: hidden;}
 header {visibility: hidden;}
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
-/* Kaartjie met Maroen rand */
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
-/* Note-boksie met Maroen rand */
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:1px solid #00cccc!important; margin-bottom:4px;}
@@ -80,12 +78,12 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # Trek Sport (1) en Ouderdom (2)
         act_n = str(r.iloc[1])
         age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         ven_n = str(r.iloc[4])
         dat_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
+        # Knoppies
         found_btns = []
         has_info_link = False
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
@@ -95,7 +93,7 @@ if not df_live.empty:
                 found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
                 if label == "INFORMATION": has_info_link = True
 
-        # Note-boksie met Maroen rand
+        # Die Note-boksie logika
         note_txt = str(r.iloc[8]).strip()
         info_box_html = ""
         if note_txt.lower() != 'nan' and note_txt != "" and not has_info_link:
