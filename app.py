@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Herstel die uitleg en knoppies)
+# 2. Styling (Alles herstel na die stabiele weergawe)
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -26,7 +26,7 @@ header {visibility: hidden;}
 .btn-row {display:flex!important; gap:6px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important;}
 .btn { flex:1!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 2px!important; border-radius:6px!important; display:block!important; white-space:nowrap!important;}
 h2 { color: white !important; text-align: center; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px;}
-div[data-baseweb="select"] > div { background-color:#800000 !important; }
+div[data-baseweb="select"] > div { background-color:#800000 !important; border:none !important; }
 div[data-baseweb="select"] * { color:white !important; }
 label { color:white !important; font-weight:bold; }
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; font-size:0.9rem; border-radius:10px; font-weight:bold;}
@@ -46,7 +46,6 @@ def load_live_data():
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
-        # Vee rye uit waar aktiwiteit of datum leeg is
         df = df.dropna(subset=[df.columns[1], df.columns[3]]) 
         def parse_dt(x):
             s = str(x).strip()
@@ -64,31 +63,31 @@ df_live, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # 1. RANGE FILTER (7 Dae / Alles)
-    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_v")
-    
+    # --- 1. SEVEN DAY / ALL TOGGLE (TERUG) ---
+    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_sel")
+
     if st.button(f"🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
 
-    # 2. CATEGORIES
-    cat = st.selectbox("Category (Type):", ["All", "Sport", "Culture", "Academics"], key="cat_v")
+    # --- 2. CATEGORIES (TERUG) ---
+    cat = st.selectbox("Category (Type):", ["All", "Sport", "Culture", "Academics"], key="type_sel")
 
-    # 3. AKTIVITEIT DEFAULTS (Hard-coded vir stabiliteit)
+    # --- 3. ACTIVITY & AGE FILTERS (MET DEFAULTS) ---
     c = st.columns([1, 1])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     
-    # Hierdie is die filters wat ALTYD klaar gekies is
+    # Hard-code: Hierdie sportsoorte is ALTYD klaar gekies as die app oopmaak
     perma_filters = ["Swimming", "Athletics", "Swem", "Atletiek"]
     default_selection = [a for a in perma_filters if a in all_acts]
     
     with c[0]:
-        sel_acts = st.multiselect("Activity:", all_acts, default=default_selection, key="act_v")
+        sel_acts = st.multiselect("Activity:", all_acts, default=default_selection, key="act_sel")
     with c[1]:
         all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
-        sel_ages = st.multiselect("Age Group:", all_ages, key="age_v")
+        sel_ages = st.multiselect("Age Group:", all_ages, key="age_sel")
 
-    raw_s = st.text_input("🔍 Manual Search:", key="search_v")
+    raw_s = st.text_input("🔍 Search Activity:", key="search_sel")
 
     # --- FILTER LOGIKA ---
     f_df = df_live
@@ -111,7 +110,6 @@ if not df_live.empty:
         dat = r['dt_fixed'].strftime('%d %B %Y')
         ven = str(r.iloc[4])
         
-        # Haal skakels uit kolomme 5, 6, 7 en 8
         prog_l = get_l(r.iloc[5])
         team_l = get_l(r.iloc[6])
         conf_l = get_l(r.iloc[7])
@@ -119,11 +117,8 @@ if not df_live.empty:
         info_text = str(r.iloc[8]).strip()
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-        
-        # Wys Note slegs as dit nie 'n link is nie
         box_html = f'<div class="box"><b>Note:</b><br>{info_text}</div>' if (info_text.lower()!='nan' and not info_l) else ""
         
-        # Knoppie-ry
         btns_html = '<div class="btn-row">'
         if prog_l: btns_html += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
         if team_l: btns_html += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
@@ -139,4 +134,4 @@ if not df_live.empty:
             {btns_html if any([prog_l, team_l, conf_l, info_l]) else ""}
         </div>""", unsafe_allow_html=True)
 else:
-    st.info("Geen opkomende items gevind nie.")
+    st.info("Geen fixtures gevind nie.")
