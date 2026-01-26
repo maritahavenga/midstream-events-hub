@@ -73,15 +73,17 @@ def load_data():
 # ----------------------------
 # Refresh Data Button
 # ----------------------------
+if "refresh_data" not in st.session_state:
+    st.session_state.refresh_data = False
+
 if st.button("🔄 REFRESH DATA"):
+    st.session_state.refresh_data = True
     st.cache_data.clear()
-    st.experimental_rerun()
 
-raw_df = load_data()
-SA_TIME = pytz.timezone("Africa/Johannesburg")
-today = datetime.now(SA_TIME).date()
-
-st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
+# As refresh flag aan is, laai data weer
+if "refresh_data" in st.session_state and st.session_state.refresh_data:
+    raw_df = load_data()
+    st.session_state.refresh_data = False
 
 # ----------------------------
 # Sticky Activity Filter
