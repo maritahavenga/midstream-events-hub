@@ -7,7 +7,7 @@ import requests, io, time, urllib.parse
 from streamlit_autorefresh import st_autorefresh
 
 # --------------------------------------------------
-# CONFIG
+# PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 st_autorefresh(interval=120000, key="refresh")
@@ -19,38 +19,38 @@ today = datetime.now().date()
 # --------------------------------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
 
 #MainMenu, footer, header {visibility:hidden;}
 .stApp {background:#008080;}
-.block-container {max-width:640px; padding-top:140px;}
+.block-container {max-width:650px; padding-top:140px;}
 
 .navbar {
     position:fixed;
     top:0; left:0; right:0;
     background:white;
     border-bottom:3px solid #800000;
-    padding:14px 18px;
+    padding:14px 20px;
     display:flex;
     align-items:center;
-    gap:16px;
+    gap:18px;
     z-index:9999;
 }
 .navbar img {height:52px;}
 .nav-title {
-    font-family:'Inter', sans-serif;
+    font-family:'Source Sans 3', sans-serif;
     font-weight:700;
     font-size:1.15rem;
     color:#800000;
-    line-height:1.2;
+    line-height:1.25;
 }
 
 .filter-box {
     background:white;
-    padding:16px;
-    border-radius:16px;
-    box-shadow:0 4px 10px rgba(0,0,0,0.15);
-    margin-bottom:30px;
+    padding:18px;
+    border-radius:18px;
+    box-shadow:0 6px 14px rgba(0,0,0,0.18);
+    margin-bottom:40px;
 }
 
 label {color:#333 !important; font-weight:600;}
@@ -66,18 +66,18 @@ label {color:#333 !important; font-weight:600;}
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# CARD STYLE
+# CARD STYLES
 # --------------------------------------------------
 CARD_STYLE = """
 <style>
 .card {
     background:white;
-    padding:20px;
-    border-radius:18px;
+    padding:22px;
+    border-radius:20px;
     border-left:12px solid #800000;
-    margin-bottom:60px;
-    box-shadow:0 6px 14px rgba(0,0,0,0.18);
-    font-family:'Inter', sans-serif;
+    margin-bottom:70px;
+    box-shadow:0 8px 18px rgba(0,0,0,0.18);
+    font-family:'Source Sans 3', sans-serif;
 }
 
 .card-date {
@@ -101,27 +101,27 @@ CARD_STYLE = """
 
 .team {
     background:#fff3f3;
-    padding:14px;
-    border-radius:12px;
-    margin-top:14px;
+    padding:16px;
+    border-radius:14px;
+    margin-top:16px;
     border:1px dashed #800000;
-    font-size:0.92rem;
-    line-height:1.5;
+    font-size:0.95rem;
+    line-height:1.55;
 }
 
 .note {
     background:#f8f9fa;
-    padding:14px;
-    border-radius:12px;
-    margin-top:14px;
+    padding:16px;
+    border-radius:14px;
+    margin-top:16px;
     border-left:5px solid #008080;
     font-size:0.9rem;
 }
 
 .btn-row {
     display:flex;
-    gap:14px;
-    margin-top:16px;
+    gap:16px;
+    margin-top:18px;
     flex-wrap:wrap;
 }
 
@@ -130,8 +130,8 @@ CARD_STYLE = """
     color:white;
     font-weight:600;
     font-size:0.8rem;
-    padding:10px 20px;
-    border-radius:12px;
+    padding:12px 22px;
+    border-radius:14px;
     text-decoration:none;
 }
 </style>
@@ -149,7 +149,8 @@ URL_DATA = (
 
 URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
 
-def extract_urls(t): return URL_REGEX.findall(t)
+def extract_urls(text):
+    return URL_REGEX.findall(text)
 
 @st.cache_data(ttl=120)
 def load_data():
@@ -160,8 +161,10 @@ def load_data():
 
     def parse_dt(x):
         s = str(x).strip()
-        if not s or s.lower()=="nan": return pd.NaT
-        if not re.search(r"\d{4}", s): s = f"{s} {year}"
+        if not s or s.lower() == "nan":
+            return pd.NaT
+        if not re.search(r"\d{4}", s):
+            s = f"{s} {year}"
         return pd.to_datetime(s, dayfirst=True, errors="coerce")
 
     df["dt_fixed"] = df.iloc[:,3].apply(parse_dt)
@@ -185,11 +188,11 @@ with st.container():
 
     c1, c2 = st.columns(2)
     with c1:
-        view = st.radio("View", ["Upcoming","Results"], horizontal=True)
+        view = st.radio("View", ["Upcoming", "Results"], horizontal=True)
     with c2:
-        cat = st.selectbox("Category", ["All","Sport","Culture","Academics"])
+        cat = st.selectbox("Category", ["All", "Sport", "Culture", "Academics"])
 
-    seven = st.toggle("Show only next 7 days", value=True)
+    seven_days = st.toggle("Show only next 7 days", value=True)
     search = st.text_input("Search").lower().strip()
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -199,15 +202,15 @@ with st.container():
 # --------------------------------------------------
 df = raw_df.copy()
 
-if view=="Upcoming":
+if view == "Upcoming":
     df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date >= today)]
 else:
     df = df[df["dt_fixed"].notna() & (df["dt_fixed"].dt.date < today)]
 
-if seven and view=="Upcoming":
+if seven_days and view == "Upcoming":
     df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date <= today + timedelta(days=7))]
 
-if cat!="All":
+if cat != "All":
     df = df[df.iloc[:,0].astype(str).str.lower().str.contains(cat.lower())]
 
 if activity:
@@ -219,52 +222,57 @@ if search:
 df = df.sort_values("dt_fixed", na_position="last")
 
 # --------------------------------------------------
-# DISPLAY
+# DISPLAY CARDS
 # --------------------------------------------------
 for _, r in df.iterrows():
     sport = str(r.iloc[1]).strip()
-    age = "" if str(r.iloc[2]).lower()=="nan" else str(r.iloc[2])
+    age = "" if str(r.iloc[2]).lower() == "nan" else str(r.iloc[2])
     venue = str(r.iloc[4]).strip()
-    date = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
+    date_str = r["dt_fixed"].strftime("%d %B %Y") if pd.notnull(r["dt_fixed"]) else "TBA"
 
-    maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+    maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
 
     team, note, buttons = "", "", []
 
-    for i,l in [(5,"PROG"),(6,"TEAM"),(7,"CONF"),(8,"INFO")]:
-        v = str(r.iloc[i]).strip()
-        if not v or v.lower()=="nan": continue
-        urls = extract_urls(v)
-        text = re.sub(URL_REGEX,"",v).strip()
+    for idx, lbl in [(5,"PROGRAMME"),(6,"TEAM"),(7,"CONFIRM"),(8,"INFO")]:
+        val = str(r.iloc[idx]).strip()
+        if not val or val.lower() == "nan":
+            continue
 
-        if l=="TEAM": team=text
-        elif l=="PROG":
-            for u in urls: buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
-        elif l=="CONF":
-            for u in urls: buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
-        elif l=="INFO" and sport.lower()!="swimming":
-            note=text
+        urls = extract_urls(val)
+        clean = re.sub(URL_REGEX, "", val).strip()
+
+        if lbl == "TEAM":
+            team = clean
+        elif lbl == "PROGRAMME":
+            for u in urls:
+                buttons.append(f'<a class="btn" href="{u}" target="_blank">PROGRAMME</a>')
+        elif lbl == "CONFIRM":
+            for u in urls:
+                buttons.append(f'<a class="btn" href="{u}" target="_blank">CONFIRM</a>')
+        elif lbl == "INFO" and sport.lower() != "swimming":
+            note = clean
 
     html = f"""
     <meta charset="UTF-8">
     {CARD_STYLE}
     <div class="card">
-        <div class="card-date">📅 {date}</div>
+        <div class="card-date">📅 {date_str}</div>
         <div class="card-title">{sport} {age}</div>
-        <div class="venue"><a href="{maps}" target="_blank">📍 {venue}</a></div>
+        <div class="venue"><a href="{maps_link}" target="_blank">📍 {venue}</a></div>
         {f'<div class="team"><b>Teams</b><br>{team}</div>' if team else ''}
         {f'<div class="note">{note}</div>' if note else ''}
         {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
     </div>
     """
 
-    components.html(html, height=560, scrolling=False)
+    components.html(html, height=600, scrolling=False)
 
 # --------------------------------------------------
 # FOOTER
 # --------------------------------------------------
 st.markdown("""
-<div style="background:#800000;color:white;text-align:center;padding:16px;margin-top:40px;font-size:0.85rem;">
+<div style="background:#800000;color:white;text-align:center;padding:18px;margin-top:50px;font-size:0.85rem;">
 Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222
 </div>
 """, unsafe_allow_html=True)
