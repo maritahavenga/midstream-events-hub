@@ -26,6 +26,7 @@ header {visibility: hidden;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:1px solid #00cccc!important; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
+h2 { color: white !important; text-align: center; text-transform: uppercase;}
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; border-radius:10px; font-weight:bold;}
 </style>
 """, unsafe_allow_html=True)
@@ -36,7 +37,7 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        past_limit = now - timedelta(days=10)
+        past_limit = now - timedelta(days=10) # Laat Results toe
         
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
@@ -55,32 +56,47 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
+# Refresh Button
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
-if not df_live.empty:
-    all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    sel_acts = st.multiselect("Activity:", all_acts)
+st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
+if not df_live.empty:
+    # --- ALLE FILTERS IS TERUG ---
+    url_acts = st.query_params.get_all("act")
+    
+    view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+
+    all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
+    sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
+    
+    # Update URL vir Sticky Filters
+    st.query_params["act"] = sel_acts
+
+    # Filter Logika
     f_df = df_live
+    if view_range == "Next 7 Days":
+        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+    if category != "All":
+        f_df = f_df[f_df.iloc[:, 0].str.contains(category, case=False, na=False)]
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        act = str(r.iloc[1])
-        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        act, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
         ven = str(r.iloc[4])
+        dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
-        # --- DIE "DETECTIVE" LOGIKA ---
-        # Ons kyk na kolomme 5, 6, 7 en 8 vir enige skakels
-        links = []
-        for col_idx in [5, 6, 7, 8]:
-            val = str(r.iloc[col_idx]).strip()
+        # Detective Logika vir links in kolomme 5, 6, 7 en 8
+        found_btns = []
+        for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
             match = re.search(r'(https?://[^\s<>"]+)', val)
             if match:
-                links.append((col_idx, match.group(0)))
+                found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
 
         st.markdown(f"""
         <div class="card">
@@ -88,7 +104,7 @@ if not df_live.empty:
             <div class="t">{act} {age}</div>
             <div style="color:#333; font-size:0.85rem;">📍 {ven}</div>
             <div class="btn-row">
-                {"".join([f'<a href="{url}" target="_blank" class="btn">{"PROGRAMME" if idx==5 else "TEAM" if idx==6 else "CONFIRM" if idx==7 else "INFORMATION"}</a>' for idx, url in links])}
+                {"".join(found_btns)}
             </div>
             {f'<div class="box"><b>Note:</b><br>{r.iloc[8]}</div>' if (str(r.iloc[8]).lower()!='nan' and "http" not in str(r.iloc[8])) else ""}
         </div>
