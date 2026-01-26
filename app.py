@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Die heel eerste Midstream-look)
+# 2. Styling (Die stabiele oorspronklike look)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -35,6 +35,7 @@ URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA
 def get_link(val):
     s = str(val).strip()
     if not s or s.lower() == 'nan': return None
+    # Hierdie soek die skakel maar hou die hele SharePoint link bymekaar
     m = re.search(r'(https?://[^\s<>"]+)', s)
     return m.group(0) if m else None
 
@@ -42,10 +43,10 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        # Ons laat die data van die laaste 7 dae toe vir die 'Results'
-        past_limit = now - timedelta(days=7)
+        # Wys alles van 10 dae gelede af vir die Results
+        past_limit = now - timedelta(days=10)
         
-        response = requests.get(f"{URL_DATA}&cb={time.time()}", timeout=10)
+        response = requests.get(f"{URL_DATA}&cache_boost={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
         def parse_dt(x):
@@ -55,20 +56,20 @@ def load_live_data():
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # Filter: Wys alles vanaf 7 dae gelede (soos Results) tot in die toekoms
         return df[df['dt_fixed'].dt.date >= past_limit].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
-    except:
+    except Exception as e:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
+# Refresh knoppie
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
 if not df_live.empty:
-    # FILTERS
+    # 1. Activity Filter
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     sel_acts = st.multiselect("Activity:", all_acts)
 
@@ -76,13 +77,14 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
+    # 2. Vertoon die kaarte
     for i, r in f_df.iterrows():
         act_n = str(r.iloc[1])
         age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         ven_n = str(r.iloc[4])
-        dat_s = r['dt_fixed'].strftime('%d %B %Y')
+        dat_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
-        # Knoppies: Trek uit kolomme F, G, H, I
+        # Trek links uit kolomme F, G, H, I
         p_l = get_link(r.iloc[5])
         t_l = get_link(r.iloc[6])
         c_l = get_link(r.iloc[7])
@@ -91,6 +93,7 @@ if not df_live.empty:
         
         mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven_n + ' Midstream')}"
         
+        # HTML vir die rooi knoppies
         btns_html = ""
         if any([p_l, t_l, c_l, i_l]):
             btns_html = '<div class="btn-row">'
@@ -110,4 +113,4 @@ if not df_live.empty:
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.info("No fixtures found.")
+    st.info("No fixtures found at the moment.")
