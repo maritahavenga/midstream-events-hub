@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling (Alles "hard-coded" om skoon te lyk)
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -35,11 +35,11 @@ label { color:white !important; font-weight:bold; }
 
 URL_DATA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=60)
 def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
+        # Fresh fetch sodat data altyd nuut is
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         def parse_dt(x):
@@ -48,6 +48,7 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
+        # Slegs vandag en toekoms
         df = df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed')
         return df, now, datetime.now(SA_TIME)
     except:
@@ -59,44 +60,63 @@ df_live, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # 1. Radio Button (7 dae vs Alles)
-    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_v")
+    # --- HARD-CODED FILTERS (Ouers hoef niks te doen nie) ---
     
+    # Hierdie knoppie is net om handmatig te verfris
     if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_v"):
         st.cache_data.clear()
         st.rerun()
 
-    # 2. Search Bar
-    raw_s = st.text_input("🔍 Search:", key="search_v")
-    
-    c = st.columns([1, 1, 1])
-    with c[0]: 
-        cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
-    
-    f_df = df_live if cat == "All" else df_live[df_live.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    if view_opt == "Next 7 Days":
-        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+    # Ons "hard-code" die soektog om dadelik dinge soos Tennis, Swimming en Athletics te wys
+    # As jy dit leeg laat, wys hy ALLES wat in die sheet is vir vandag en die toekoms.
+    raw_s = st.text_input("🔍 Search Sport/Activity:", placeholder="e.g. Swimming")
 
-    # 3. Multiselects met unieke keys vir geheue
-    with c[1]: 
-        sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="act_v")
-    with c[2]: 
-        sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="age_v")
+    # Wys filters net as jy dit regtig nodig het, andersins wys die app net die lys
+    expander = st.expander("Show Age & Type Filters")
+    with expander:
+        c = st.columns(2)
+        with c[0]:
+            cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"])
+        with c[1]:
+            # Ons laai die Age Groups maar dit begin op 'leeg' sodat alles wys
+            sel_ages = st.multiselect("Age Group:", sorted(df_live.iloc[:, 2].dropna().unique()))
 
-    # Filter logika
-    final_df = f_df
+    # --- DIE DATA FILTER LOGIKA ---
+    f_df = df_live
+    
+    # 1. Filtreer volgens die Search boks
     if raw_s:
-        final_df = final_df[final_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
-    if sel_acts:
-        final_df = final_df[final_df.iloc[:, 1].isin(sel_acts)]
+        f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
+    
+    # 2. Filtreer volgens Type
+    if cat != "All":
+        f_df = f_df[f_df.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    
+    # 3. Filtreer volgens Age
     if sel_ages:
-        final_df = final_df[final_df.iloc[:, 2].isin(sel_ages)]
+        f_df = f_df[f_df.iloc[:, 2].isin(sel_ages)]
 
-    if not final_df.empty:
-        for i, r in final_df.iterrows():
+    # --- DIE FINALE LYS ---
+    if not f_df.empty:
+        for i, r in f_df.iterrows():
             age_val = str(r.iloc[2]).strip()
-            title = f"{r.iloc[1]} {age_val}"
+            title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
             dat = r['dt_fixed'].strftime('%d %B %Y')
-            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 {r.iloc[4]}</div></div>', unsafe_allow_html=True)
+            ven = str(r.iloc[4])
+            info_val = str(r.iloc[8]).strip()
+            
+            mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            
+            # Card Display
+            st.markdown(f"""
+            <div class="card">
+                <div style="font-size:0.85rem;color:#333">🗓️ {dat}</div>
+                <div class="t">{title}</div>
+                <div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>
+                {f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and 'http' not in info_val) else ""}
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("No events found.")
+        st.info("Geen items gevind nie. Probeer 'n ander soektog.")
+else:
+    st.info("Geen opkomende items in die lys nie.")
