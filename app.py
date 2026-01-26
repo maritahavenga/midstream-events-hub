@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Skoon en stabiel)
+# 2. Styling (Jou stabiele Midstream kleure)
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
@@ -23,8 +23,8 @@ header {visibility: hidden;}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;border-left:5px solid #008080;color:#333;font-size:0.85rem;}
 label { color:white !important; font-weight:bold; }
-h2 { color: white !important; text-align: center; text-transform: uppercase; margin-top:0;}
-.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; border-radius:10px; font-weight:bold; margin-bottom:10px;}
+h2 { color: white !important; text-align: center; text-transform: uppercase; margin-bottom: 5px;}
+.stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; border-radius:10px; font-weight:bold;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,7 +42,6 @@ def load_live_data():
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
-        df = df.dropna(subset=[df.columns[1]]) # Verwyder leë rye
         
         def parse_dt(x):
             s = str(x).strip()
@@ -58,7 +57,7 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# Refresh Button
+# 1. Refresh Button Heel Bo
 if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
@@ -66,25 +65,33 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # FILTERS
+    # 2. Alle Filters (Terug soos dit was)
+    range_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    cat_opt = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+
     c = st.columns(2)
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    
-    # HARD-CODE: Hierdie is altyd gekies as die app oopmaak
+    # HARD-CODED DEFAULTS: Ouers hoef nie te kies nie
     defaults = [a for a in ["Athletics", "Swimming", "Atletiek", "Swem"] if a in all_acts]
     
     with c[0]:
-        sel_acts = st.multiselect("Activity:", all_acts, default=defaults, key="act_v")
+        sel_acts = st.multiselect("Activity:", all_acts, default=defaults)
     with c[1]:
         all_ages = sorted([str(a) for a in df_live.iloc[:, 2].dropna().unique() if str(a).lower() != 'nan'])
-        sel_ages = st.multiselect("Age Group:", all_ages, key="age_v")
+        sel_ages = st.multiselect("Age Group:", all_ages)
 
     # Filter Logika
     f_df = df_live
-    if sel_acts: f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
-    if sel_ages: f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
+    if range_opt == "Next 7 Days":
+        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+    if cat_opt != "All":
+        f_df = f_df[f_df.iloc[:, 0].str.contains(cat_opt, case=False, na=False)]
+    if sel_acts:
+        f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
+    if sel_ages:
+        f_df = f_df[f_df.iloc[:, 2].astype(str).isin(sel_ages)]
 
-    # VERTOON DATA
+    # 3. Vertoon Kaartjies met JOU name
     for i, r in f_df.iterrows():
         st.markdown(f"""
         <div class="card">
@@ -94,18 +101,33 @@ if not df_live.empty:
         </div>
         """, unsafe_allow_html=True)
         
-        # Knoppies (Standaard Streamlit Buttons - Hulle verdwyn nooit nie!)
+        # Knoppies gebaseer op Kolom F, G, H, I
         btn_cols = st.columns(4)
-        labels = ["PROGRAMME", "TEAM", "CONFIRM", "INFO"]
-        for idx, label in enumerate(labels):
-            link = get_link(r.iloc[5+idx])
-            if link:
-                with btn_cols[idx]:
-                    st.link_button(label, link, use_container_width=True)
         
+        # Kolom 5 (F): Programme
+        link_f = get_link(r.iloc[5])
+        if link_f:
+            with btn_cols[0]: st.link_button("PROGRAMME", link_f, use_container_width=True)
+            
+        # Kolom 6 (G): Team
+        link_g = get_link(r.iloc[6])
+        if link_g:
+            with btn_cols[1]: st.link_button("TEAM", link_g, use_container_width=True)
+            
+        # Kolom 7 (H): Confirm
+        link_h = get_link(r.iloc[7])
+        if link_h:
+            with btn_cols[2]: st.link_button("CONFIRM", link_h, use_container_width=True)
+            
+        # Kolom 8 (I): Info
+        link_i = get_link(r.iloc[8])
+        if link_i:
+            with btn_cols[3]: st.link_button("INFO", link_i, use_container_width=True)
+        
+        # Note (As dit nie 'n link is nie)
         note = str(r.iloc[8]).strip()
-        if note.lower() != 'nan' and not get_link(note):
+        if note.lower() != 'nan' and not link_i:
             st.markdown(f'<div class="box"><b>Note:</b><br>{note}</div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 else:
-    st.info("Geen fixtures gevind nie.")
+    st.info("No fixtures found.")
