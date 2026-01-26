@@ -19,7 +19,7 @@ st_autorefresh(interval=120000, key="refresh")
 today = datetime.now().date()
 
 # --------------------------------------------------
-# STYLES, NAVBAR, FULL-WIDTH LOGO, GREEN HEADER
+# STYLES, FULL-WIDTH LOGO + GREEN HEADER
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -61,7 +61,7 @@ st.markdown("""
     padding:18px;
     border-radius:18px;
     box-shadow:0 6px 14px rgba(0,0,0,0.18);
-    margin-bottom:40px;
+    margin-bottom:20px;
 }
 
 label {color:#333 !important; font-weight:600;}
@@ -100,13 +100,14 @@ CARD_STYLE = """
 <style>
 .card {
     background:white;
-    padding:28px;
+    padding:36px;
     border-radius:20px;
     border-left:12px solid #800000;
     margin-bottom:40px;
     box-shadow:0 8px 18px rgba(0,0,0,0.18);
     font-family:'Source Sans 3', sans-serif;
-    font-size:1rem;
+    font-size:1.05rem;
+    min-height:150px;
 }
 
 .card-date {
@@ -118,7 +119,7 @@ CARD_STYLE = """
 .card-title {
     color:#800000;
     font-weight:700;
-    font-size:1.25rem;
+    font-size:1.35rem;
     margin-bottom:6px;
 }
 
@@ -135,21 +136,21 @@ CARD_STYLE = """
 
 .team {
     background:#fff3f3;
-    padding:18px;
+    padding:20px;
     border-radius:14px;
     margin-top:16px;
     border:1px dashed #800000;
-    font-size:1rem;
+    font-size:1.05rem;
     line-height:1.55;
 }
 
 .note {
     background:#f8f9fa;
-    padding:18px;
+    padding:20px;
     border-radius:14px;
     margin-top:16px;
     border-left:5px solid #008080;
-    font-size:1rem;
+    font-size:1.05rem;
 }
 
 .btn-row {
@@ -210,11 +211,12 @@ raw_df = load_data()
 if "refresh_flag" not in st.session_state:
     st.session_state.refresh_flag = False
 
+st.markdown('<div style="text-align:right; margin-bottom:10px;">', unsafe_allow_html=True)
 if st.button("🔄 Refresh Data"):
     st.session_state.refresh_flag = True
     st.cache_data.clear()
+st.markdown('</div>', unsafe_allow_html=True)
 
-# Trigger rerun safely after button click
 if st.session_state.refresh_flag:
     st.session_state.refresh_flag = False
     st.experimental_rerun()
@@ -228,11 +230,12 @@ with st.container():
     if "activity_filter" not in st.session_state:
         st.session_state.activity_filter = []
 
-    activities = sorted(raw_df.iloc[:,1].dropna().unique())
+    activities = sorted(list(set([str(a).strip() for a in raw_df.iloc[:,1].dropna()])))
     activity = st.multiselect("Activity", activities, st.session_state.activity_filter)
     st.session_state.activity_filter = activity
 
-    cat = st.selectbox("Category", ["All", "Sport", "Culture", "Academics"])
+    cat_options = sorted(list(set([str(c).strip() for c in ["All","Sport","Culture","Academics"]])))
+    cat = st.selectbox("Category", cat_options)
 
     # 7 DAY / ALL VIEW BUTTONS
     col_all, col_7 = st.columns(2)
@@ -247,7 +250,7 @@ with st.container():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --------------------------------------------------
-# FILTER LOGIC (skip past events)
+# FILTER LOGIC (skip past events automatically)
 # --------------------------------------------------
 df = raw_df.copy()
 df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date >= today)]
@@ -306,7 +309,6 @@ for _, r in df.iterrows():
         {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
     </div>
     """
-
     components.html(html, height=None, scrolling=False)
 
 # --------------------------------------------------
