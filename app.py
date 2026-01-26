@@ -40,13 +40,16 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
+        # Dwing 'n vars kopie van die data af
+        response = requests.get(f"{URL_DATA}&cb={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
+        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -55,29 +58,25 @@ def load_live_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-# Refresh knoppie
-if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})"):
+if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
-st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
-
 if not df_live.empty:
-    # --- STICKY URL LOGIKA ---
-    saved_acts = st.query_params.get_all("act")
+    # --- STICKY URL (Geen JS nodig nie) ---
+    url_acts = st.query_params.get_all("act")
     
     range_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     cat_opt = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
     
-    # Gebruik URL as default (Sticky)
-    sel_acts = st.multiselect("Activity:", all_acts, default=saved_acts if (saved_acts and all(a in all_acts for a in saved_acts)) else None)
+    # Gebruik URL filters as hulle bestaan
+    sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
     
-    # Update URL onmiddellik
+    # Update die URL sodat ouers dit kan "save"
     st.query_params["act"] = sel_acts
 
-    # Filter Logika
     f_df = df_live
     if range_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
@@ -86,7 +85,6 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
-    # DISPLAY
     for i, r in f_df.iterrows():
         st.markdown(f"""
         <div class="card">
@@ -96,17 +94,16 @@ if not df_live.empty:
         </div>
         """, unsafe_allow_html=True)
         
-        # BUTTONS (F, G, H, I)
+        # --- DIE KRITIESE KNOPIES (F, G, H, I) ---
         btn_cols = st.columns(4)
-        button_names = ["PROGRAMME", "TEAM", "CONFIRM", "INFORMATION"]
+        labels = ["PROGRAMME", "TEAM", "CONFIRM", "INFORMATION"]
         
-        for idx, label in enumerate(button_names):
+        for idx, label in enumerate(labels):
             link = get_link(r.iloc[5+idx])
             if link:
                 with btn_cols[idx]:
                     st.link_button(label, link, use_container_width=True)
         
-        # Note (As dit nie 'n link is nie)
         note = str(r.iloc[8]).strip()
         if note.lower() != 'nan' and not get_link(note):
             st.markdown(f'<div class="box"><b>Note:</b><br>{note}</div>', unsafe_allow_html=True)
