@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Suiwer Maroen - Skoon)
+# 2. Styling (Met die dotted line vir Teams)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -23,6 +23,8 @@ header {visibility: hidden;}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
+/* Die spesiale dotted boksie vir Team teks */
+.team-box{border:2px dashed #800000; padding:10px; border-radius:8px; margin:10px 0; background:#fff9f9; color:#800000; font-weight:bold; font-size:0.85rem; text-align:center;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:none!important; margin-bottom:4px;}
 label { color:white !important; font-weight:bold; }
@@ -38,7 +40,8 @@ def load_live_data():
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
-        df = pd.read_csv(io.StringIO(response.text))
+        # Gebruik utf-8 om Hoërskool se 'ë' reg te lees
+        df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
         
         def parse_dt(x):
             s = str(x).strip()
@@ -46,7 +49,6 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
-        # Kolom 3 = Date
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -60,14 +62,10 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.rerun()
 
 if not df_live.empty:
-    # FILTERS
-    url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
-
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
-    st.query_params["act"] = sel_acts
+    sel_acts = st.multiselect("Activity:", all_acts)
 
     f_df = df_live
     if view_range == "Next 7 Days":
@@ -78,40 +76,44 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        # --- STRENG KOLOM TOEKENNING ---
         act_name = str(r.iloc[1])
         age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue = str(r.iloc[4])
         
-        # Knoppies Logika (Streng op kolomnommers)
+        # --- Teams & Buttons Logika ---
         btns_html = ""
+        team_text = ""
+        info_notes = []
+        
         # 5=Prog, 6=Team, 7=Confirm, 8=Info
         col_map = [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]
         
         for col_idx, label in col_map:
             val = str(r.iloc[col_idx]).strip()
-            if "http" in val.lower():
-                link = re.search(r'(https?://[^\s<>"]+)', val).group(0)
-                btns_html += f'<a href="{link}" target="_blank" class="btn">{label}</a>'
+            if val.lower() == 'nan' or val == "": continue
+            
+            link_match = re.search(r'(https?://[^\s<>"]+)', val)
+            if link_match:
+                btns_html += f'<a href="{link_match.group(0)}" target="_blank" class="btn">{label}</a>'
+            elif label == "TEAM":
+                team_text = val # Teks vir die dotted box
+            elif label == "INFORMATION":
+                info_notes.append(val)
 
-        # Note/Information Logika (Net as dit nie 'n skakel is nie)
-        info_val = str(r.iloc[8]).strip()
-        results_val = str(r.iloc[9]).strip() if len(r) > 9 else "nan"
-        
-        notes_list = []
-        if info_val.lower() != 'nan' and info_val != "" and "http" not in info_val.lower():
-            notes_list.append(info_val)
-        if results_val.lower() != 'nan' and results_val != "":
-            notes_list.append(f"<b>Result:</b> {results_val}")
+        # Results (Kolom 9)
+        res_val = str(r.iloc[9]).strip() if len(r) > 9 else "nan"
+        if res_val.lower() != 'nan' and res_val != "":
+            info_notes.append(f"<b>Result:</b> {res_val}")
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
             <div class="t">{act_name} {age_group}</div>
             <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
+            {f'<div class="team-box">🏃 {team_text}</div>' if team_text else ""}
             <div class="btn-row">{btns_html}</div>
-            {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes_list)}</div>' if notes_list else ""}
+            {f'<div class="box"><b>Note:</b><br>{"<br>".join(info_notes)}</div>' if info_notes else ""}
         </div>
         """, unsafe_allow_html=True)
 else:
