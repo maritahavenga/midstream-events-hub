@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Die finale, skoon Midstream-look)
+# 2. Styling (Maroen & Skoon Midstream-look)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -39,7 +39,6 @@ def load_live_data():
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
-        # Lees data as UTF-8 vir die 'Hoërskool' karakters
         df = pd.read_csv(io.StringIO(response.content.decode('utf-8')))
         
         def parse_dt(x):
@@ -48,7 +47,6 @@ def load_live_data():
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
-        # Kolom 3 = Datum
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
@@ -62,7 +60,7 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.rerun()
 
 if not df_live.empty:
-    # 1. Filters
+    # FILTERS
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
@@ -76,45 +74,45 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
-    # 2. Vertoon Kaarte
     for i, r in f_df.iterrows():
-        # Kolomme: 0=Cat, 1=Act, 2=Age, 3=Date, 4=Venue
-        act_name = str(r.iloc[1])
-        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-        venue_str = str(r.iloc[4])
+        # Kolomme volgens jou lys: 1=Act, 2=Age, 4=Venue
+        act_n = str(r.iloc[1])
+        age_n = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        venue_s = str(r.iloc[4])
         
-        # Knoppies & Teks (5=Prog, 6=Team, 7=Conf, 8=Info, 9=Res)
         btns_html = ""
         team_display = ""
         notes_list = []
         
-        col_map = [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]
-        
-        for idx, label in col_map:
-            cell_val = str(r.iloc[idx]).strip()
-            if cell_val.lower() == 'nan' or cell_val == "": continue
+        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Info, 9=Res
+        for col_idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[col_idx]).strip()
+            if val.lower() == 'nan' or val == "": continue
             
-            link = re.search(r'(https?://[^\s<>"]+)', cell_val)
-            if link:
-                btns_html += f'<a href="{link.group(0)}" target="_blank" class="btn">{label}</a>'
-                # As daar teks saam met die link is (behalwe vir Teams), sit dit in die notas
-                rem_text = cell_val.replace(link.group(0), "").strip()
-                if rem_text and label != "TEAM": notes_list.append(rem_text)
+            # Verbeterde Regex om Google Forms/Drive en links te vang
+            link_match = re.search(r'(https?://[^\s<>"]+)', val)
+            
+            if link_match:
+                url = link_match.group(0)
+                btns_html += f'<a href="{url}" target="_blank" class="btn">{label}</a>'
+                # Check of daar belangrike teks saam met die link is
+                clean_txt = val.replace(url, "").strip()
+                if clean_txt and label != "TEAM": notes_list.append(clean_txt)
             else:
-                if label == "TEAM": team_display = cell_val
-                else: notes_list.append(cell_val)
+                if label == "TEAM": team_display = val
+                else: notes_list.append(val)
         
-        # Resultaat (Kolom 9)
+        # Results (Kolom 9)
         res_val = str(r.iloc[9]).strip() if len(r) > 9 else ""
         if res_val.lower() != 'nan' and res_val != "":
             notes_list.append(f"<b>Result:</b> {res_val}")
 
         st.markdown(f"""
         <div class="card">
-            <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{act_name} {age_group}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue_str}</div>
+            <div style="color:#333; font-size:0.85rem;">🗓️ {date_s}</div>
+            <div class="t">{act_n} {age_n}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue_s}</div>
             {f'<div class="team-box"><b>TEAMS:</b><br>{team_display}</div>' if team_display else ""}
             <div class="btn-row">{btns_html}</div>
             {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes_list)}</div>' if notes_list else ""}
