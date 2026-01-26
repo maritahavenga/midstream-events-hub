@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling (Die mooi, skoon Midstream-look)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -37,6 +37,7 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
+        # Ons trek vars data vanaf Google
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
@@ -47,6 +48,7 @@ def load_live_data():
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
+        # Slegs vandag en vorentoe
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
@@ -58,10 +60,8 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
 
-st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
-
 if not df_live.empty:
-    # FILTERS - Dit sal AUTOMATIES alle sportsoorte en U-spanne optel uit jou Sheet
+    # 3. Filters
     url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
@@ -79,16 +79,18 @@ if not df_live.empty:
     if sel_acts:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
+    # 4. Vertoon die kaarte
     for i, r in f_df.iterrows():
-        # DATA FIX: Ons trek Activity (1) en Age Group (2) korrek
-        act_name = str(r.iloc[1])
-        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        venue = str(r.iloc[4])
-        date_str = r['dt_fixed'].strftime('%d %B %Y')
+        # Ons trek die Spanbeskrywing (o/11B ens.) uit kolom 2 (indeks 2)
+        act_display = str(r.iloc[1])
+        age_display = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        venue_display = str(r.iloc[4])
+        date_display = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         
-        # Knoppie-speurder
+        # Knoppie-logika
         found_btns = []
         has_info_link = False
+        # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Information
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             match = re.search(r'(https?://[^\s<>"]+)', val)
@@ -96,21 +98,21 @@ if not df_live.empty:
                 found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
                 if label == "INFORMATION": has_info_link = True
 
-        # Note/Information Boksie Logika
-        note_content = str(r.iloc[8]).strip()
-        info_box_html = ""
-        if note_content.lower() != 'nan' and note_content != "" and not has_info_link:
-            info_box_html = f'<div class="box"><b>Note:</b><br>{note_content}</div>'
+        # Skoon Information-raampie Logika
+        note_text = str(r.iloc[8]).strip()
+        final_info_box = ""
+        if note_text.lower() != 'nan' and note_text != "" and not has_info_link:
+            final_info_box = f'<div class="box"><b>Note:</b><br>{note_text}</div>'
 
         st.markdown(f"""
         <div class="card">
-            <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{act_name} {age_group}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
+            <div style="color:#333; font-size:0.85rem;">🗓️ {date_display}</div>
+            <div class="t">{act_display} {age_display}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue_display}</div>
             <div class="btn-row">
                 {"".join(found_btns)}
             </div>
-            {info_box_html}
+            {final_info_box}
         </div>
         """, unsafe_allow_html=True)
 else:
