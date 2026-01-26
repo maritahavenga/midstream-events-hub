@@ -1,15 +1,17 @@
 import streamlit as st
+st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
+# Test the file is running
 st.error("UI VERSION 2026-01-26 — IF YOU SEE THIS, CODE UPDATED")
 
-
-import streamlit as st
+# Other imports
 import streamlit.components.v1 as components
 import pandas as pd
 import re
 from datetime import datetime, timedelta
 import requests, io, time, urllib.parse
 from streamlit_autorefresh import st_autorefresh
+
 
 # --------------------------------------------------
 # PAGE CONFIG
