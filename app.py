@@ -9,7 +9,7 @@ import io
 import time
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Configuration & Hide Menu
+# 1. Page Configuration
 st.set_page_config(page_title="LMCP Events & Results", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
@@ -87,74 +87,65 @@ with tab_up:
     if not df_all.empty:
         df_up_raw = df_all[df_all['dt_fixed'].dt.date >= today_date].sort_values(by='dt_fixed')
         
+        # 1. 7 Days Toggle - Primary Focus
+        view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="range_v")
+
         if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_up"):
             st.cache_data.clear()
             st.rerun()
 
-        # RESTORED: All / 7 Days Toggle
-        view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=0, key="v_range")
-
-        # STICKY SEARCH BAR
-        raw_s = st.text_input("🔍 Search:", value=st.session_state.get('sticky_search', ''), placeholder="e.g. u13 hockey", key="search_input")
-        st.session_state['sticky_search'] = raw_s
-
+        # 2. Search
+        raw_s = st.text_input("🔍 Search:", placeholder="e.g. u13 tennis", key="search_v")
+        
         c = st.columns([1, 1, 1])
         with c[0]: 
-            cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="sticky_cat")
+            cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
         
         f_df = df_up_raw if cat == "All" else df_up_raw[df_up_raw.iloc[:, 0].str.contains(cat, case=False, na=False)]
         
-        # Apply 7 day filter if selected
         if view_opt == "Next 7 Days":
             f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
         with c[1]: 
-            sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="sticky_act")
+            sel_acts = st.multiselect("Activity:", sorted(f_df.iloc[:, 1].dropna().unique()), key="act_v")
         with c[2]: 
-            sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="sticky_age")
+            sel_ages = st.multiselect("Age Group:", sorted(f_df.iloc[:, 2].dropna().unique()), key="age_v")
 
+        # Filtering logic
         df = smart_filter(f_df, raw_s)
         if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
         if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
 
-        if not df.empty:
-            for i, r in df.iterrows():
-                age_val = str(r.iloc[2]).strip()
-                title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
-                dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-                ven = str(r.iloc[4])
-                prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
-                team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
-                info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
-                mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-                
-                bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and not info_l) else ""
-                tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and not team_l) else ""
-                
-                btns = '<div class="btn-row">'
-                if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
-                if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
-                if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
-                if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
-                btns += '</div>'
-                st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
-        else:
-            st.info("No events found matching your current filters.")
+        for i, r in df.iterrows():
+            age_val = str(r.iloc[2]).strip()
+            title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
+            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+            ven = str(r.iloc[4])
+            prog_l, team_val = get_l(r.iloc[5]), str(r.iloc[6]).strip()
+            team_l, conf_l = get_l(team_val), get_l(r.iloc[7])
+            info_val, info_l = str(r.iloc[8]).strip(), get_l(str(r.iloc[8]))
+            mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
+            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and not info_l) else ""
+            tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and not team_l) else ""
+            btns = '<div class="btn-row">'
+            if prog_l: btns += f'<a href="{prog_l}" target="_blank" class="btn">PROGRAMME</a>'
+            if team_l: btns += f'<a href="{team_l}" target="_blank" class="btn">TEAM</a>'
+            if conf_l: btns += f'<a href="{conf_l}" target="_blank" class="btn">CONFIRM</a>'
+            if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
+            btns += '</div>'
+            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
 
 with tab_res:
     st.markdown("<h2>Match Results</h2>", unsafe_allow_html=True)
     if not df_all.empty:
         df_past = df_all[df_all['dt_fixed'].dt.date < today_date].sort_values(by='dt_fixed', ascending=False)
-        raw_res_s = st.text_input("🔍 Search History:", value=st.session_state.get('sticky_res', ''), placeholder="Search...", key="res_input")
-        st.session_state['sticky_res'] = raw_res_s
-        
+        raw_res_s = st.text_input("🔍 Search Results:", placeholder="Search...", key="res_v")
         df_res = smart_filter(df_past, raw_res_s)
-        if not df_res.empty:
-            for i, r in df_res.iterrows():
-                res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
-                res_link = get_l(res_raw)
-                dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-                age_res = str(r.iloc[2]).strip()
-                title_res = f"{r.iloc[1]} {age_res}" if (age_res.lower() != 'nan') else str(r.iloc[1])
-                res_disp = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn" style="background:#1e7e34!important;">🏆 VIEW RESULTS</a></div>' if res_link else (f'<div class="res-box">🏆 RESULT: {res_raw}</div>' if (res_raw.lower() != 'nan' and res_raw != "") else '<div class="res-box" style="background:#f8f9fa; border-color:#ccc; color:#666;">🏆 Result Pending</div>')
-                st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {r.iloc[4]}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
+        for i, r in df_res.iterrows():
+            res_raw = str(r.iloc[9]).strip() if len(r) > 9 else ""
+            res_link = get_l(res_raw)
+            dat_res = r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+            age_res = str(r.iloc[2]).strip()
+            title_res = f"{r.iloc[1]} {age_res}" if (age_res.lower() != 'nan') else str(r.iloc[1])
+            res_disp = f'<div class="btn-row"><a href="{res_link}" target="_blank" class="btn res-btn" style="background:#1e7e34!important;">🏆 VIEW RESULTS</a></div>' if res_link else (f'<div class="res-box">🏆 RESULT: {res_raw}</div>' if (res_raw.lower() != 'nan' and res_raw != "") else '<div class="res-box" style="background:#f8f9fa; border-color:#ccc; color:#666;">🏆 Result Pending</div>')
+            st.markdown(f'<div class="card"><div style="font-size:0.85rem; color:#666;">🗓️ {dat_res} | 📍 {r.iloc[4]}</div><div class="t">{title_res}</div>{res_disp}</div>', unsafe_allow_html=True)
