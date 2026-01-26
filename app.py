@@ -98,4 +98,28 @@ if not df_live.empty:
                 btns_html += f'<a href="{link_match.group(0)}" target="_blank" class="btn">{label}</a>'
                 # As daar ook teks saam met die link is, trek dit uit vir die notas (behalwe vir knoppies)
                 clean_text = val.replace(link_match.group(0), "").strip()
-                if clean_text and label != "TEAM":
+                if clean_text and label != "TEAM": notes_list.append(clean_text)
+            else:
+                # Dis net teks
+                if label == "TEAM":
+                    team_display_text = val
+                else:
+                    notes_list.append(val)
+
+        # Results (Kolom 9)
+        res_val = str(r.iloc[9]).strip() if len(r) > 9 else ""
+        if res_val.lower() != 'nan' and res_val != "":
+            notes_list.append(f"<b>Result:</b> {res_val}")
+
+        st.markdown(f"""
+        <div class="card">
+            <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
+            <div class="t">{act_name} {age_group}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
+            {f'<div class="team-box">🏃 {team_display_text}</div>' if team_display_text else ""}
+            <div class="btn-row">{btns_html}</div>
+            {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes_list)}</div>' if notes_list else ""}
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.info("No fixtures found.")
