@@ -53,85 +53,61 @@ def load_live_data():
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
 
-def smart_filter(df, query):
-    if not query: return df
-    q = query.lower().strip()
-    translations = {"hokkie": "hockey", "atletiek": "athletics", "swem": "swimming", "muurbal": "squash", "tennis": "tennis", "seuns": "b", "meisies": "g"}
-    for k, v in translations.items(): q = q.replace(k, v)
-    terms = q.split()
-    for term in terms:
-        clean = term.replace("o/","").replace("u/","").replace(" ","")
-        if not clean: continue
-        mask = df.apply(lambda r: clean in str(r).lower().replace("o/","").replace("u/","").replace(" ",""), axis=1)
-        df = df[mask]
-    return df
-
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_live, today_date, update_time = load_live_data()
 
-st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
+# --- DIE KRISIS-OPLOSSING ---
+# Hierdie lees die filters direk uit die URL as die app oopmaak
+params = st.query_params
 
 if not df_live.empty:
-    # 1. URL Sync for Range
-    url_range = st.query_params.get("range", "all")
-    v_idx = 1 if url_range == "7" else 0
-    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=v_idx, key="range_v")
+    # 1. Range Filter
+    saved_range = params.get("range", "all")
+    r_idx = 1 if saved_range == "7" else 0
+    view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=r_idx)
     st.query_params["range"] = "7" if view_opt == "Next 7 Days" else "all"
 
-    if st.button(f"🔄 REFRESH (Update: {update_time.strftime('%H:%M')})", key="ref_v"):
-        st.cache_data.clear()
-        st.rerun()
-
-    # 2. URL Sync for Search
-    url_search = st.query_params.get("search", "")
-    raw_s = st.text_input("🔍 Search:", value=url_search, placeholder="e.g. u13 hockey", key="search_v")
+    # 2. Search Filter
+    saved_search = params.get("search", "")
+    raw_s = st.text_input("🔍 Search:", value=saved_search)
     st.query_params["search"] = raw_s
-    
-    c = st.columns([1, 1, 1])
-    with c[0]: 
-        cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
-    
-    f_df = df_live if cat == "All" else df_live[df_live.iloc[:, 0].str.contains(cat, case=False, na=False)]
-    if view_opt == "Next 7 Days":
-        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
-    # --- THE CRISIS FIX: ACTIVITY URL SYNC ---
-    all_acts = sorted(f_df.iloc[:, 1].dropna().unique())
-    url_acts = st.query_params.get_all("act")
-    # Only use defaults if they actually exist in the current list
-    default_acts = [a for a in url_acts if a in all_acts]
+    c = st.columns([1, 1, 1])
     
-    with c[1]: 
-        sel_acts = st.multiselect("Activity:", all_acts, default=default_acts, key="act_v")
+    # 3. Activity Filter (MULTIPLE)
+    all_acts = sorted(df_live.iloc[:, 1].dropna().unique())
+    saved_acts = params.get_all("act")
+    # Kyk watter van die gestoorde filters bestaan nog in die data
+    valid_acts = [a for a in saved_acts if a in all_acts]
+    
+    with c[1]:
+        sel_acts = st.multiselect("Activity:", all_acts, default=valid_acts)
     st.query_params["act"] = sel_acts
 
-    # --- AGE GROUP URL SYNC ---
-    all_ages = sorted(f_df.iloc[:, 2].dropna().unique())
-    url_ages = st.query_params.get_all("age")
-    default_ages = [a for a in url_ages if a in all_ages]
-
-    with c[2]: 
-        sel_ages = st.multiselect("Age Group:", all_ages, default=default_ages, key="age_v")
+    # 4. Age Group Filter
+    all_ages = sorted(df_live.iloc[:, 2].dropna().unique())
+    saved_ages = params.get_all("age")
+    valid_ages = [a for a in saved_ages if a in all_ages]
+    
+    with c[2]:
+        sel_ages = st.multiselect("Age Group:", all_ages, default=valid_ages)
     st.query_params["age"] = sel_ages
 
-    # Final Filtering logic
-    df = smart_filter(f_df, raw_s)
-    if sel_acts: df = df[df.iloc[:, 1].isin(sel_acts)]
-    if sel_ages: df = df[df.iloc[:, 2].isin(sel_ages)]
+    # --- FILTER DATA ---
+    f_df = df_live
+    if view_opt == "Next 7 Days":
+        f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
+    if sel_acts:
+        f_df = f_df[f_df.iloc[:, 1].isin(sel_acts)]
+    if sel_ages:
+        f_df = f_df[f_df.iloc[:, 2].isin(sel_ages)]
+    if raw_s:
+        # Simple search logic
+        f_df = f_df[f_df.apply(lambda r: raw_s.lower() in str(r).lower(), axis=1)]
 
-    if not df.empty:
-        for i, r in df.iterrows():
-            age_val = str(r.iloc[2]).strip()
-            title = f"{r.iloc[1]} {age_val}" if (age_val.lower() != 'nan') else str(r.iloc[1])
-            dat = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-            ven, prog_l = str(r.iloc[4]), str(r.iloc[5]).strip()
-            team_val, conf_l = str(r.iloc[6]).strip(), str(r.iloc[7]).strip()
-            info_val = str(r.iloc[8]).strip()
-            
-            mu = f"https://www.google.com/maps/search/?api=1&query={up.quote(ven + ' Midstream')}"
-            bx = f'<div class="box"><b>Note:</b><br>{info_val}</div>' if (info_val.lower()!='nan' and 'http' not in info_val) else ""
-            tm_bx = f'<div class="team-box"><b>Team Info:</b><br>{team_val}</div>' if (team_val.lower()!='nan' and 'http' not in team_val) else ""
-            
-            st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}</div>', unsafe_allow_html=True)
-else:
-    st.info("No upcoming fixtures found.")
+    # DISPLAY
+    for i, r in f_df.iterrows():
+        age_val = str(r.iloc[2]).strip()
+        title = f"{r.iloc[1]} {age_val}"
+        dat = r['dt_fixed'].strftime('%d %B %Y')
+        st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 {r.iloc[4]}</div></div>', unsafe_allow_html=True)
