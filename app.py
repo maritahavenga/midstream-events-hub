@@ -13,11 +13,12 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling
+# 2. Styling - Absolute removal of tabs and header clutter
 st.markdown("""<style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
+.stTabs {display: none !important;} /* Forcefully hide any tab bars */
 .stApp{background:#008080}.block-container{padding:1rem;max-width:500px}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}.v{color:#800000!important;font-weight:bold;text-decoration:underline}
@@ -39,15 +40,19 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
+        # Fresh fetch from Google Sheets
         response = requests.get(f"{URL_DATA}&refresh={int(time.time())}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} 2026"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
+        
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # ONLY KEEP FUTURE/TODAY EVENTS
+        
+        # KEY: Hard filter to keep only TODAY and FUTURE events
         df = df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed')
         return df, now, datetime.now(SA_TIME)
     except:
@@ -80,7 +85,7 @@ df, today_date, update_time = load_live_data()
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df.empty:
-    # 1. View Range Toggle - Sync with URL
+    # 1. View Range Toggle - URL Synced
     v_idx = 1 if st.query_params.get("range") == "7" else 0
     view_opt = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True, index=v_idx, key="range_v")
     st.query_params["range"] = "7" if view_opt == "Next 7 Days" else "all"
@@ -89,7 +94,7 @@ if not df.empty:
         st.cache_data.clear()
         st.rerun()
 
-    # 2. Search & URL Sync
+    # 2. Search - URL Synced
     q_params = st.query_params.get("search", "")
     raw_s = st.text_input("🔍 Search:", value=q_params, placeholder="e.g. u13 hockey", key="search_v")
     st.query_params["search"] = raw_s
@@ -99,6 +104,7 @@ if not df.empty:
         cat = st.selectbox("Type:", ["All", "Sport", "Culture", "Academics"], key="cat_v")
     
     f_df = df if cat == "All" else df[df.iloc[:, 0].str.contains(cat, case=False, na=False)]
+    
     if view_opt == "Next 7 Days":
         f_df = f_df[f_df['dt_fixed'].dt.date <= (today_date + timedelta(days=7))]
 
@@ -130,5 +136,7 @@ if not df.empty:
             if info_l: btns += f'<a href="{info_l}" target="_blank" class="btn">INFO</a>'
             btns += '</div>'
             st.markdown(f'<div class="card"><div style="font-size:0.85rem;color:#333">🗓️ {dat}</div><div class="t">{title}</div><div style="font-size:0.85rem;color:#333">📍 <a href="{mu}" target="_blank" class="v">{ven}</a></div>{bx}{tm_bx}{btns}</div>', unsafe_allow_html=True)
+    else:
+        st.info("No current or upcoming events matching your selection.")
 else:
     st.info("No upcoming fixtures found.")
