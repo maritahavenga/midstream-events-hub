@@ -13,7 +13,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Live Fixtures", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. Styling (Maroen & Left-Aligned)
+# 2. Styling (Maroen & Skoon)
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -23,7 +23,6 @@ header {visibility: hidden;}
 .card{background:white!important;padding:18px;border-radius:15px;border-left:12px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .t{color:#800000!important;font-weight:bold;font-size:1.15rem;margin:5px 0}
 .box{background:#f8f9fa;padding:12px;border-radius:8px;margin:10px 0;border-left:5px solid #800000;color:#333;font-size:0.85rem;}
-/* Team-boksie is nou links belyn */
 .team-box{border:2px dashed #800000; padding:10px; border-radius:8px; margin:10px 0; background:#fff9f9; color:#800000; font-weight:bold; font-size:0.85rem; text-align:left;}
 .btn-row {display:flex!important; gap:4px!important; justify-content:space-between!important; margin-top:10px!important; width:100%!important; flex-wrap: wrap;}
 .btn { flex:1 1 auto!important; background:#800000!important; color:white!important; text-align:center!important; text-decoration:none!important; font-weight:bold!important; font-size:0.65rem!important; padding:10px 5px!important; border-radius:6px!important; display:block!important; border:none!important; margin-bottom:4px;}
@@ -61,10 +60,13 @@ if st.button(f"🔄 FORCE REFRESH ({update_time.strftime('%H:%M')})"):
     st.rerun()
 
 if not df_live.empty:
+    # FILTERS IS TERUG
+    url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category_sel = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     all_acts = sorted([str(a) for a in df_live.iloc[:, 1].dropna().unique() if str(a).lower() != 'nan'])
-    sel_acts = st.multiselect("Activity:", all_acts)
+    sel_acts = st.multiselect("Activity:", all_acts, default=url_acts if (url_acts and all(a in all_acts for a in url_acts)) else None)
+    st.query_params["act"] = sel_acts
 
     f_df = df_live
     if view_range == "Next 7 Days":
@@ -75,14 +77,15 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        act_name = str(r.iloc[1])
-        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        # --- DATA FIX ---
+        sport = str(r.iloc[1])
+        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_str = r['dt_fixed'].strftime('%d %B %Y')
         venue = str(r.iloc[4])
         
         btns_html = ""
-        team_display_text = ""
-        notes_list = []
+        team_display = ""
+        info_display = []
         
         # Kolomme: 5=Prog, 6=Team, 7=Confirm, 8=Info
         col_map = [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]
@@ -91,34 +94,34 @@ if not df_live.empty:
             val = str(r.iloc[col_idx]).strip()
             if val.lower() == 'nan' or val == "": continue
             
-            # Kyk of daar 'n skakel is
-            link_match = re.search(r'(https?://[^\s<>"]+)', val)
+            # Kyk vir skakel
+            link = re.search(r'(https?://[^\s<>"]+)', val)
             
-            if link_match:
-                btns_html += f'<a href="{link_match.group(0)}" target="_blank" class="btn">{label}</a>'
-                # As daar ook teks saam met die link is, trek dit uit vir die notas (behalwe vir knoppies)
-                clean_text = val.replace(link_match.group(0), "").strip()
-                if clean_text and label != "TEAM": notes_list.append(clean_text)
+            if link:
+                btns_html += f'<a href="{link.group(0)}" target="_blank" class="btn">{label}</a>'
+                # As daar teks saam met die link is, trek dit uit vir die boksie
+                clean_text = val.replace(link.group(0), "").strip()
+                if clean_text:
+                    if label == "TEAM": team_display = clean_text
+                    else: info_display.append(clean_text)
             else:
                 # Dis net teks
-                if label == "TEAM":
-                    team_display_text = val
-                else:
-                    notes_list.append(val)
+                if label == "TEAM": team_display = val
+                else: info_display.append(val)
 
         # Results (Kolom 9)
         res_val = str(r.iloc[9]).strip() if len(r) > 9 else ""
         if res_val.lower() != 'nan' and res_val != "":
-            notes_list.append(f"<b>Result:</b> {res_val}")
+            info_display.append(f"<b>Result:</b> {res_val}")
 
         st.markdown(f"""
         <div class="card">
             <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
-            <div class="t">{act_name} {age_group}</div>
+            <div class="t">{sport} {age}</div>
             <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
-            {f'<div class="team-box">🏃 {team_display_text}</div>' if team_display_text else ""}
+            {f'<div class="team-box"><b>TEAMS:</b><br>{team_display}</div>' if team_display else ""}
             <div class="btn-row">{btns_html}</div>
-            {f'<div class="box"><b>Note:</b><br>{"<br>".join(notes_list)}</div>' if notes_list else ""}
+            {f'<div class="box"><b>Note:</b><br>{"<br>".join(info_display)}</div>' if info_display else ""}
         </div>
         """, unsafe_allow_html=True)
 else:
