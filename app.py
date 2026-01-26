@@ -177,4 +177,9 @@ else:
         <div class="card">
             <div style="font-size:0.85rem;color:#666">🗓️ {date_str}</div>
             <div class="t">{sport} {age}</div>
-            <div style="
+            <div style="font-size:0.85rem;color:#333">📍 {venue}</div>
+            {f'<div class="team-box"><b>TEAMS:</b><br>{team_text}</div>' if team_text else ''}
+            {buttons_html}
+            {f'<div class="box"><b>Note:</b><br>{note_text}</div>' if note_text else ''}
+        </div>
+        """, unsafe_allow_html=True)
