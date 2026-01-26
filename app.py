@@ -37,8 +37,6 @@ def load_live_data():
     try:
         SA_TIME = pytz.timezone('Africa/Johannesburg')
         now = datetime.now(SA_TIME).date()
-        
-        # ONS WYS NOU NET VANAF VANDAG (26 JAN)
         response = requests.get(f"{URL_DATA}&refresh={time.time()}", timeout=10)
         df = pd.read_csv(io.StringIO(response.text))
         
@@ -49,7 +47,6 @@ def load_live_data():
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
         df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
-        # Slegs vandag en toekoms
         return df[df['dt_fixed'].dt.date >= now].sort_values(by='dt_fixed'), now, datetime.now(SA_TIME)
     except:
         return pd.DataFrame(), datetime.now().date(), datetime.now()
@@ -64,7 +61,7 @@ if st.button(f"🔄 REFRESH DATA ({update_time.strftime('%H:%M')})"):
 st.markdown("<h2>Upcoming Fixtures</h2>", unsafe_allow_html=True)
 
 if not df_live.empty:
-    # FILTERS
+    # FILTERS - Dit sal AUTOMATIES alle sportsoorte en U-spanne optel uit jou Sheet
     url_acts = st.query_params.get_all("act")
     view_range = st.radio("View Range:", ["All Upcoming", "Next 7 Days"], horizontal=True)
     category = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
@@ -83,27 +80,37 @@ if not df_live.empty:
         f_df = f_df[f_df.iloc[:, 1].astype(str).isin(sel_acts)]
 
     for i, r in f_df.iterrows():
-        act, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
-        ven = str(r.iloc[4])
-        dat = r['dt_fixed'].strftime('%d %B %Y')
+        # DATA FIX: Ons trek Activity (1) en Age Group (2) korrek
+        act_name = str(r.iloc[1])
+        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        venue = str(r.iloc[4])
+        date_str = r['dt_fixed'].strftime('%d %B %Y')
         
-        # Detective Logika vir links (Kolomme F, G, H, I)
+        # Knoppie-speurder
         found_btns = []
+        has_info_link = False
         for idx, label in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             match = re.search(r'(https?://[^\s<>"]+)', val)
             if match:
                 found_btns.append(f'<a href="{match.group(0)}" target="_blank" class="btn">{label}</a>')
+                if label == "INFORMATION": has_info_link = True
+
+        # Note/Information Boksie Logika
+        note_content = str(r.iloc[8]).strip()
+        info_box_html = ""
+        if note_content.lower() != 'nan' and note_content != "" and not has_info_link:
+            info_box_html = f'<div class="box"><b>Note:</b><br>{note_content}</div>'
 
         st.markdown(f"""
         <div class="card">
-            <div style="color:#333; font-size:0.85rem;">🗓️ {dat}</div>
-            <div class="t">{act} {age}</div>
-            <div style="color:#333; font-size:0.85rem;">📍 {ven}</div>
+            <div style="color:#333; font-size:0.85rem;">🗓️ {date_str}</div>
+            <div class="t">{act_name} {age_group}</div>
+            <div style="color:#333; font-size:0.85rem;">📍 {venue}</div>
             <div class="btn-row">
                 {"".join(found_btns)}
             </div>
-            {f'<div class="box"><b>Note:</b><br>{r.iloc[8]}</div>' if (str(r.iloc[8]).lower()!='nan' and "http" not in str(r.iloc[8])) else ""}
+            {info_box_html}
         </div>
         """, unsafe_allow_html=True)
 else:
