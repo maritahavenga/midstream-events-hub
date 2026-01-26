@@ -24,6 +24,7 @@ st.markdown("""
 .team-box{background:#fff3f3;padding:10px;border-radius:8px;margin:5px 0;border:1px dashed #800000;color:#800000;font-size:0.85rem;white-space: pre-wrap;}
 .btn-row {display: flex; gap: 6px; justify-content: flex-start; margin-top: 10px; flex-wrap: wrap;}
 .btn {background: #800000; color: white !important; text-align: center; text-decoration: none; font-weight: bold; font-size: 0.7rem; padding: 10px 14px; border-radius: 6px; display: inline-block; border: none; margin-bottom: 5px;}
+.prog-btn-container {margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;}
 label { color:white !important; font-weight:bold; }
 .stButton>button { width:100%; background-color:#800000; color:white; border:2px solid #00cccc; border-radius:10px; font-weight:bold; height: 45px;}
 </style>
@@ -50,7 +51,7 @@ def load_data():
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df, today, up_time = load_data()
 
-# 3. REFRESH & FILTERS (Nou weer heel bo)
+# 3. REFRESH & FILTERS
 if st.button(f"🔄 REFRESH DATA (Updated: {up_time.strftime('%H:%M')})"):
     st.cache_data.clear()
     st.rerun()
@@ -62,7 +63,6 @@ if not df.empty:
     with c2:
         cat_filter = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
 
-    # Filter die data
     if view_range == "Upcoming":
         f_df = df[df['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
     else:
@@ -78,11 +78,15 @@ if not df.empty:
     # 4. Wys die Kaarte
     for _, r in f_df.iterrows():
         sport = str(r.iloc[1])
-        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        # Age Group Brute Force
+        age_raw = str(r.iloc[2]).strip()
+        age = age_raw if (age_raw.lower() != 'nan' and age_raw != "") else ""
+        
         date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue = str(r.iloc[4])
         
-        btns_html = ""
+        other_btns = ""
+        prog_btn = ""
         team_html = ""
         info_html = ""
         
@@ -93,7 +97,11 @@ if not df.empty:
             
             link = re.search(r'(https?://[^\s<>"]+)', val)
             if link:
-                btns_html += f'<a href="{link.group(0)}" target="_blank" class="btn">{lbl}</a>'
+                btn_tag = f'<a href="{link.group(0)}" target="_blank" class="btn">{lbl}</a>'
+                if lbl == "PROGRAMME":
+                    prog_btn = btn_tag
+                else:
+                    other_btns += btn_tag
             else:
                 if lbl == "TEAM":
                     team_html = f'<div class="team-box"><b>TEAMS:</b><br>{val}</div>'
@@ -106,9 +114,10 @@ if not df.empty:
             <div class="t">{sport} {age}</div>
             <div style="font-size:0.85rem;color:#333">📍 {venue}</div>
             {team_html}
-            <div class="btn-row">{btns_html}</div>
+            <div class="btn-row">{other_btns}</div>
             {info_html}
+            {f'<div class="prog-btn-container"><div class="btn-row">{prog_btn}</div></div>' if prog_btn else ""}
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.error("No connection to data. Please check your Google Sheet link.")
+    st.error("No connection to data.")
