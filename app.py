@@ -9,17 +9,17 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import requests, io, time, urllib.parse
-from streamlit_autorefresh import st_autorefresh
 
 # --------------------------------------------------
 # AUTORELOAD EVERY 2 MINUTES
 # --------------------------------------------------
+from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=120000, key="refresh")
 
 today = datetime.now().date()
 
 # --------------------------------------------------
-# STYLES & NAVBAR
+# STYLES, NAVBAR, GREEN HEADER
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -34,19 +34,23 @@ st.markdown("""
     top:0; left:0; right:0;
     background:white;
     border-bottom:3px solid #800000;
-    padding:14px 20px;
+    padding:10px 20px;
     display:flex;
     align-items:center;
     gap:18px;
     z-index:9999;
 }
 .navbar img {height:52px;}
-.nav-title {
+
+.green-header {
+    background:#008080;
+    color:white;
+    text-align:center;
+    padding:14px 10px;
     font-family:'Source Sans 3', sans-serif;
     font-weight:700;
     font-size:1.15rem;
-    color:#800000;
-    line-height:1.25;
+    margin-top:64px;
 }
 
 .filter-box {
@@ -62,10 +66,9 @@ label {color:#333 !important; font-weight:600;}
 
 <div class="navbar">
     <img src="https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png">
-    <div class="nav-title">
-        Laerskool Midstream College Primary<br>
-        Event Hub
-    </div>
+</div>
+<div class="green-header">
+    Laerskool Midstream College Primary — Event Hub
 </div>
 """, unsafe_allow_html=True)
 
@@ -79,7 +82,7 @@ CARD_STYLE = """
     padding:22px;
     border-radius:20px;
     border-left:12px solid #800000;
-    margin-bottom:70px;
+    margin-bottom:40px;
     box-shadow:0 8px 18px rgba(0,0,0,0.18);
     font-family:'Source Sans 3', sans-serif;
 }
@@ -101,6 +104,11 @@ CARD_STYLE = """
     text-decoration:none;
     color:#333;
     font-weight:500;
+    cursor:pointer;
+}
+
+.venue a:hover {
+    text-decoration:underline;
 }
 
 .team {
@@ -193,8 +201,17 @@ with st.container():
     with c2:
         cat = st.selectbox("Category", ["All", "Sport", "Culture", "Academics"])
 
-    seven_days = st.toggle("Show only next 7 days", value=True)
-    search = st.text_input("Search").lower().strip()
+    # -------------------------
+    # 7 DAY / ALL VIEW BUTTONS
+    # -------------------------
+    col_all, col_7 = st.columns(2)
+    if "days_filter" not in st.session_state:
+        st.session_state.days_filter = "7 days"
+
+    if col_all.button("All View"):
+        st.session_state.days_filter = "all"
+    if col_7.button("Next 7 Days"):
+        st.session_state.days_filter = "7 days"
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -208,7 +225,7 @@ if view == "Upcoming":
 else:
     df = df[df["dt_fixed"].notna() & (df["dt_fixed"].dt.date < today)]
 
-if seven_days and view == "Upcoming":
+if st.session_state.days_filter == "7 days" and view == "Upcoming":
     df = df[df["dt_fixed"].isna() | (df["dt_fixed"].dt.date <= today + timedelta(days=7))]
 
 if cat != "All":
@@ -216,9 +233,6 @@ if cat != "All":
 
 if activity:
     df = df[df.iloc[:,1].astype(str).str.lower().isin([a.lower() for a in activity])]
-
-if search:
-    df = df[df.astype(str).apply(lambda r: r.str.lower().str.contains(search, na=False)).any(axis=1)]
 
 df = df.sort_values("dt_fixed", na_position="last")
 
@@ -267,7 +281,7 @@ for _, r in df.iterrows():
     </div>
     """
 
-    components.html(html, height=600, scrolling=False)
+    components.html(html, height=None, scrolling=False)
 
 # --------------------------------------------------
 # FOOTER
