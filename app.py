@@ -46,10 +46,8 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
-    # Search
-    search_q = st.text_input("🔍 Search (e.g. u13 hokkie):", placeholder="Type here...").lower()
+    search_q = st.text_input("🔍 Search (e.g. u7 or Athletics):", placeholder="Type here...").lower().strip()
     
-    # Category & Multi-Activity Filter
     col1, col2 = st.columns(2)
     with col1:
         cat_options = ["All", "Sport", "Culture", "Academics"]
@@ -58,7 +56,6 @@ with st.container():
         all_activities = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
         act_filter = st.multiselect("Select Activities:", all_activities, placeholder="e.g. Swimming, Athletics")
     
-    # Range & Refresh
     c3, c4 = st.columns([2, 1])
     with c3:
         view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
@@ -80,10 +77,23 @@ if not df_raw.empty:
         df = df[df.iloc[:, 0].str.contains(cat_filter, case=False, na=False)]
     if act_filter:
         df = df[df.iloc[:, 1].isin(act_filter)]
+        
+    # VERBETERDE SMART SEARCH
     if search_q:
-        df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
+        def smart_match(row):
+            text_pool = str(row.values).lower()
+            # As ouer "u7" (of u8 ens) tik, en die sport is Athletics of Swimming, wys dit altyd
+            is_age_search = re.search(r'u\s?\d+', search_q)
+            is_mass_sport = any(x in str(row.iloc[1]).lower() for x in ['athletics', 'swimming', 'atletiek', 'swem', 'gala'])
+            
+            if search_q in text_pool:
+                return True
+            if is_age_search and is_mass_sport:
+                return True
+            return False
+            
+        df = df[df.apply(smart_match, axis=1)]
 
-    # CSS for the internal scrollable area
     INTERNAL_STYLE = """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
@@ -99,44 +109,4 @@ if not df_raw.empty:
     </style>
     """
 
-    cards_html = INTERNAL_STYLE
-    for _, r in df.iterrows():
-        sport_name = str(r.iloc[1])
-        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
-        date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-        venue_name = str(r.iloc[4])
-        
-        t_box, b_row, n_box = "", "", ""
-        
-        # Mapping: 5=Prog, 6=Team, 7=Confirm, 8=Info
-        # Ons verwerk nou alle knoppies gelyktydig
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
-            val = str(r.iloc[idx]).strip()
-            if not val or val.lower() == 'nan': continue
-            
-            link_match = re.search(r'(https?://[^\s<>"]+)', val)
-            if link_match:
-                url = link_match.group(0)
-                b_row += f"<a href='{url}' target='_blank' class='btn'>{lbl}</a> "
-            else:
-                if lbl == "TEAM":
-                    t_box = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
-                elif lbl == "INFORMATION":
-                    n_box = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
-
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(venue_name + ' Midstream')}"
-        cards_html += f"""
-        <div class="card">
-            <div class="card-date">🗓️ {date_s}</div>
-            <div class="card-title">{sport_name} {age_group}</div>
-            <div class="venue"><a href="{maps_url}" target="_blank" style="color:#008080; text-decoration:none;">📍 {venue_name}</a></div>
-            {t_box}
-            <div class="btn-row">{b_row}</div>
-            {n_box}
-        </div>"""
-    
-    components.html(cards_html, height=2000, scrolling=True)
-else:
-    st.info("Geen data tans beskikbaar nie.")
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Midstream College Primary · info@midstreamprimary.co.za</div>", unsafe_allow_html=True)
+    cards_
