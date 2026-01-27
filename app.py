@@ -33,8 +33,27 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. UI Header
-st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;}</style>", unsafe_allow_html=True)
+# 2. UI Header & Maroon Button Style
+st.markdown("""
+<style>
+    [data-testid='stHeader'] {display: none;} 
+    .block-container {padding:0 !important;}
+    div.stButton > button {
+        background-color: #800000 !important;
+        color: white !important;
+        border-radius: 10px;
+        border: none;
+        width: 100%;
+        font-weight: bold;
+        height: 3em;
+    }
+    div.stButton > button:hover {
+        background-color: #a00000 !important;
+        border: 1px solid white;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
@@ -57,7 +76,7 @@ with st.container():
     with c3:
         view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
     with c4:
-        if st.button("🔄 REFRESH DATA"):
+        if st.button("🔄 REFRESH"):
             st.cache_data.clear()
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
@@ -67,15 +86,23 @@ if not df_raw.empty:
     df = df_raw[df_raw['dt_fixed'].dt.date >= today]
     if view == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= today + timedelta(days=7)]
-    if cat_f != "All": df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
-    if act_f: df = df[df.iloc[:, 1].isin(act_f)]
+    if cat_f != "All": 
+        df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
+    if act_f: 
+        df = df[df.iloc[:, 1].isin(act_f)]
+        
     if search_q:
         def match(r):
-            pool = str(r.values).lower()
-            is_age = re.search(r'u\s?\d+', search_q)
-            is_mass = any(x in str(r.iloc[1]).lower() for x in ['athletics', 'swimming', 'atletiek', 'swem', 'gala'])
-            return (search_q in pool) or (is_age and is_mass)
-        df = df[df.apply(match, axis=1)]
+            try:
+                # Maak seker ons kyk net na rye wat data het
+                pool = " ".join(str(v) for v in r.values).lower()
+                is_age = re.search(r'u\s?\d+', search_q)
+                is_mass = any(x in str(r.iloc[1]).lower() for x in ['athletics', 'swimming', 'atletiek', 'swem', 'gala'])
+                return (search_q in pool) or (is_age and is_mass)
+            except:
+                return False
+        # Verwyder enige rye wat foute kan veroorsaak
+        df = df[df.apply(match, axis=1).fillna(False)]
 
     h = """<style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
@@ -98,7 +125,6 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # --- Ry-wye Dollar Trigger ---
         row_content = str(r.values).upper()
         if "$" in row_content or "NEW" in row_content or "NUUT" in row_content:
             badge = "<div class='new-badge'>Recent Update</div>"
@@ -120,7 +146,7 @@ if not df_raw.empty:
             {badge}
             <div style="color:#666;font-size:0.85rem">🗓️ {dt_s}</div>
             <div class="card-title">{sport} {age}</div>
-            <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none">📍 {ven}</a></div>
+            <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none;">📍 {ven}</a></div>
             {t_b}<div class="btn-row">{b_r}</div>{n_b}
         </div>"""
     
