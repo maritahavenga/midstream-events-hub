@@ -55,7 +55,6 @@ with st.container():
     
     c3, c4 = st.columns([2, 1])
     with c3:
-        # "Upcoming" is nou weer die standaard (default)
         view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
     with c4:
         if st.button("🔄 REFRESH DATA"):
@@ -68,11 +67,8 @@ if not df_raw.empty:
     df = df_raw[df_raw['dt_fixed'].dt.date >= today]
     if view == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= today + timedelta(days=7)]
-    if cat_f != "All": 
-        df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
-    if act_f: 
-        df = df[df.iloc[:, 1].isin(act_f)]
-        
+    if cat_f != "All": df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
+    if act_f: df = df[df.iloc[:, 1].isin(act_f)]
     if search_q:
         def match(r):
             pool = str(r.values).lower()
@@ -102,9 +98,9 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # --- DOLLAR TRIGGER ONLY ---
-        check_text = (str(r.iloc[6]) + " " + str(r.iloc[8])).upper()
-        if "$" in check_text or "NEW" in check_text or "NUUT" in check_text:
+        # --- Ry-wye Dollar Trigger ---
+        row_content = str(r.values).upper()
+        if "$" in row_content or "NEW" in row_content or "NUUT" in row_content:
             badge = "<div class='new-badge'>Recent Update</div>"
 
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
@@ -116,7 +112,6 @@ if not df_raw.empty:
             else:
                 if lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
                 elif lbl == "INFORMATION":
-                    # Verwyder $ uit die vertoon
                     clean = re.sub(r'(?i)new|nuut|\$', '', val).strip()
                     n_b = f"<div class='note-box'><b>Note:</b><br>{clean}</div>"
 
