@@ -33,7 +33,7 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. UI Header & Sticky Filters
+# 2. UI Header
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;}</style>", unsafe_allow_html=True)
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
@@ -71,13 +71,12 @@ if not df_raw.empty:
             return (search_q in pool) or (is_age and is_mass)
         df = df[df.apply(match, axis=1)]
 
-    # HTML Build with "New" Badge CSS
     h = """<style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
     body { background:#008080; font-family:'Source Sans 3', sans-serif; margin:0; padding:15px; }
     .card { background:white; padding:25px; border-radius:22px; border-left:12px solid #800000; margin-bottom:20px; box-shadow:0 6px 15px rgba(0,0,0,0.15); position: relative; }
-    .new-badge { position: absolute; top: 15px; right: 15px; background: #ffcc00; color: #800000; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; animation: flash 1.5s infinite; }
-    @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    .new-badge { position: absolute; top: 15px; right: 15px; background: #ffcc00; color: #800000; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; animation: flash 1.5s infinite; border: 1px solid #800000; }
+    @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     .card-title { color:#800000; font-size:1.4rem; font-weight:700; margin: 5px 0; }
     .venue { color:#008080; font-weight:600; text-decoration:none; font-size: 0.9rem; }
     .team-box { background:#fff3f3; padding:12px; border-radius:10px; margin:10px 0; border:1px dashed #800000; color:#800000; font-size:0.85rem; }
@@ -92,27 +91,9 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # HARDCODE: As die event vandag of môre gebeur, wys "UPDATE" badge
-        if pd.notnull(r['dt_fixed']) and r['dt_fixed'].date() <= today + timedelta(days=1):
-            badge = "<div class='new-badge'>Recent Update</div>"
-
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
-            val = str(r.iloc[idx]).strip()
-            if not val or val.lower() == 'nan': continue
-            link = re.search(r'(https?://[^\s<>"]+)', val)
-            if link: b_r += f"<a href='{link.group(0)}' target='_blank' class='btn'>{lbl}</a> "
-            elif lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
-            elif lbl == "INFORMATION": n_b = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
-
-        m_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ven + ' Midstream')}"
-        h += f"""<div class="card">
-            {badge}
-            <div style="color:#666;font-size:0.85rem">🗓️ {dt_s}</div>
-            <div class="card-title">{sport} {age}</div>
-            <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none">📍 {ven}</a></div>
-            {t_b}<div class="btn-row">{b_r}</div>{n_b}
-        </div>"""
-    
-    components.html(h + "</div>", height=2000, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Midstream College Primary · info@midstreamprimary.co.za</div>", unsafe_allow_html=True)
+        # --- SMART BADGE LOGIC ---
+        info_text = str(r.iloc[8]).lower()
+        team_text = str(r.iloc[6]).lower()
+        # Wys badge as die datum vandag/môre is OF as jy "NEW", "NUUT" of "!" in die teks tik
+        if (pd.notnull(r['dt_fixed']) and r['dt_fixed'].date() <= today + timedelta(days=1)) or \
+           any(word in info_text or word in team_text for word in ["new", "nuut", "!"]):
