@@ -6,7 +6,7 @@ import pytz
 import requests
 import io
 import urllib.parse
-import streamlit.components.v1.html as html_component
+import streamlit.components.v1 as components # Korrekte manier om dit in te laai
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
@@ -54,7 +54,6 @@ def load_data():
 
 # 4. App UI
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;}</style>", unsafe_allow_html=True)
-st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
@@ -65,7 +64,10 @@ with st.container():
     search_q = st.text_input("🔍 Search Activity or Age Group:", placeholder="e.g. u13 hockey").lower()
     c1, c2 = st.columns(2)
     with c1: view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
-    with c2: cat_filter = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    with c2: 
+        cat_options = ["All", "Sport", "Culture", "Academics"]
+        cat_filter = st.selectbox("Category:", cat_options)
+    
     if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
@@ -86,7 +88,8 @@ if not df_raw.empty:
     cards_html = f"{STYLE}<div class='navbar'><img src='https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png'></div><div class='header-title'>Laerskool Midstream College Primary Event Hub</div><div style='padding:15px;'>"
     
     for _, r in df.iterrows():
-        sport, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
+        sport = str(r.iloc[1])
+        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue = str(r.iloc[4])
         t_box, b_row, n_box, p_row = "", "", "", ""
@@ -115,5 +118,7 @@ if not df_raw.empty:
     
     cards_html += "</div><div class='footer'>Midstream College Primary · info@midstreamprimary.co.za</div>"
     
-    # Dwing die browser om die HTML te lees (Fix vir die rou string probleem)
-    html_component(cards_html, height=1200, scrolling=True)
+    # Gebruik nou die korrekte inlaai-metode
+    components.html(cards_html, height=2500, scrolling=True)
+else:
+    st.info("No data available.")
