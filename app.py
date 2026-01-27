@@ -31,8 +31,7 @@ def load_data():
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
-now_sa = datetime.now(SA_TIME)
-today = now_sa.date()
+today = datetime.now(SA_TIME).date()
 
 # 2. UI Header
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;}</style>", unsafe_allow_html=True)
@@ -47,13 +46,11 @@ with st.container():
     with col1:
         cat_f = st.selectbox("Select Category:", ["All", "Sport", "Culture", "Academics"])
     with col2:
-        # Smart Filter: Wys slegs relevante aktiwiteite
         if cat_f != "All" and not df_raw.empty:
             filtered_list = df_raw[df_raw.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
             act_opts = sorted(filtered_list.iloc[:, 1].dropna().unique().tolist())
         else:
             act_opts = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
-        
         act_f = st.multiselect("Select Activities:", act_opts)
     
     c3, c4 = st.columns([2, 1])
@@ -104,28 +101,19 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # --- BADGE LOGIC ---
-        row_str = str(r.values).upper()
-        has_trigger = any(w in row_str for w in ["!", "NEW", "NUUT"])
-        
-        is_imminent = False
-        if pd.notnull(dt_fixed):
-            time_diff = dt_fixed.replace(tzinfo=SA_TIME) - now_sa
-            if timedelta(0) <= time_diff <= timedelta(hours=12): is_imminent = True
-        
-        if has_trigger or is_imminent:
+        # --- MANUAL BADGE TRIGGER ONLY ---
+        all_text_upper = str(r.values).upper()
+        if any(w in all_text_upper for w in ["!", "NEW", "NUUT"]):
             badge = "<div class='new-badge'>Recent Update</div>"
 
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower() == 'nan': continue
-            
             link_m = re.search(r'(https?://[^\s<>"]+)', val)
             if link_m:
                 b_r += f"<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
             else:
-                if lbl == "TEAM":
-                    t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
+                if lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
                 elif lbl == "INFORMATION":
                     clean = re.sub(r'(?i)new|nuut|!', '', val).strip()
                     n_b = f"<div class='note-box'><b>Note:</b><br>{clean}</div>"
