@@ -68,4 +68,73 @@ with st.container():
     
     c1, c2 = st.columns(2)
     with c1:
-        view
+        view = st.radio("View Range:", ["Upcoming", "Results"], horizontal=True)
+    with c2:
+        # Trek ALLE kategorieë uit die rou data, nie net toekomstige nie
+        cat_options = ["All"] + sorted(df_raw.iloc[:, 0].dropna().unique().tolist()) if not df_raw.empty else ["All"]
+        cat_filter = st.selectbox("Category:", cat_options)
+    
+    if st.button("🔄 REFRESH DATA"):
+        st.cache_data.clear()
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# 5. Rendering Engine
+if not df_raw.empty:
+    # Pas filters toe op die rou data
+    if view == "Upcoming":
+        df = df_raw[df_raw['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
+    else:
+        df = df_raw[df_raw['dt_fixed'].dt.date < today].sort_values(by='dt_fixed', ascending=False)
+    
+    if cat_filter != "All":
+        df = df[df.iloc[:, 0].str.contains(cat_filter, case=False, na=False)]
+    if search_q:
+        df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
+
+    for _, r in df.iterrows():
+        # Kolomme: 1=Activity, 2=Age
+        sport = str(r.iloc[1])
+        age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
+        date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        venue = str(r.iloc[4])
+        
+        other_btns = []
+        prog_btn = ""
+        team_html = ""
+        note_html = ""
+
+        # Verwerk kolomme 5 tot 8
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
+            if val.lower() == 'nan' or not val: continue
+            
+            link = re.search(r'(https?://[^\s<>"]+)', val)
+            if link:
+                url = link.group(0)
+                btn_tag = f'<a href="{url}" target="_blank" class="btn">{lbl}</a>'
+                if lbl == "PROGRAMME": prog_btn = btn_tag
+                else: other_btns.append(btn_tag)
+            else:
+                if lbl == "TEAM":
+                    team_html = f'<div class="team-box"><b>TEAMS:</b><br>{val}</div>'
+                elif lbl == "INFORMATION":
+                    note_html = f'<div class="note-box"><b>Note:</b><br>{val}</div>'
+
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(venue + ' Midstream')}"
+
+        # DIE KRITIEKE FIX: Een skoon blok HTML
+        content_html = f"""
+        <div class="card">
+            <div class="card-date">🗓️ {date_str}</div>
+            <div class="card-title">{sport} {age}</div>
+            <div class="venue"><a href="{maps_url}" target="_blank">📍 {venue}</a></div>
+            {team_html}
+            <div class="btn-row">{" ".join(other_btns)}</div>
+            {note_html}
+            {f'<div class="prog-container"><div class="btn-row">{prog_btn}</div></div>' if prog_btn else ""}
+        </div>
+        """
+        st.markdown(content_html, unsafe_allow_html=True)
+
+st.markdown('<div class="footer">Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222</div>', unsafe_allow_html=True)
