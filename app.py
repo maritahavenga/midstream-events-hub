@@ -112,4 +112,35 @@ if not df_raw.empty:
         t_box, b_row, n_box, p_row = "", "", "", ""
         
         # Mapping: 5=Prog, 6=Team, 7=Confirm, 8=Info
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
+            if not val or val.lower() == 'nan': continue
+            
+            link_match = re.search(r'(https?://[^\s<>"]+)', val)
+            if link_match:
+                url = link_match.group(0)
+                btn_code = f"<a href='{url}' target='_blank' class='btn'>{lbl}</a>"
+                if lbl == "PROGRAMME":
+                    p_row = f"<div class='prog-container'><div class='btn-row'>{btn_code}</div></div>"
+                else:
+                    b_row += btn_code + " "
+            else:
+                if lbl == "TEAM":
+                    t_box = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
+                elif lbl == "INFORMATION":
+                    n_box = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
+
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(venue_name + ' Midstream')}"
+        cards_html += f"""
+        <div class="card">
+            <div class="card-date">🗓️ {date_s}</div>
+            <div class="card-title">{sport_name} {age_group}</div>
+            <div class="venue"><a href="{maps_url}" target="_blank" style="color:#008080; text-decoration:none;">📍 {venue_name}</a></div>
+            {t_box}<div class="btn-row">{b_row}</div>{n_box}{p_row}
+        </div>"""
+    
+    components.html(cards_html, height=2000, scrolling=True)
+else:
+    st.info("Geen data tans beskikbaar nie.")
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Midstream College Primary · info@midstreamprimary.co.za</div>", unsafe_allow_html=True)
