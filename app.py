@@ -8,11 +8,11 @@ import io
 import urllib.parse
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Configuration
+# 1. Page Configuration (MOET heel bo wees)
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# 2. CSS Styling (Stywer margins & Skoner UI)
+# 2. CSS Styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
@@ -21,7 +21,7 @@ html, body, .stApp { background:#008080; font-family:'Source Sans 3', sans-serif
 .block-container { max-width:820px; padding: 0 !important; margin: 0 auto; }
 .navbar { background:white; border-bottom:5px solid #800000; text-align:center; line-height: 0; }
 .navbar img { width:100%; max-height:140px; object-fit:contain; }
-.header-title { background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; margin-top:-2px; }
+.header-title { background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; }
 .filter-box { background:white; padding:20px; border-radius:20px; margin:10px 0 20px 0; box-shadow:0 6px 18px rgba(0,0,0,0.18); }
 .card { background:white; padding:25px; border-radius:22px; border-left:12px solid #800000; margin-bottom:25px; box-shadow:0 6px 18px rgba(0,0,0,0.18); }
 .card-date { color:#666; font-size:0.9rem; }
@@ -42,7 +42,6 @@ label { color: #333 !important; font-weight: bold; }
 # 3. Data Loading
 DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=60)
 def load_data():
     try:
         r = requests.get(f"{DATA_URL}&cb={datetime.now().timestamp()}", timeout=10)
@@ -58,20 +57,19 @@ def load_data():
         return pd.DataFrame()
 
 df_raw = load_data()
-SA_TIME = pytz.timezone('Africa/Johannesburg')
-today = datetime.now(SA_TIME).date()
+st.sidebar.write("App Version: 9.1") # Kyk vir hierdie aan die kant!
 
-# 4. Filter UI (Gelyk-kolomme vir balans)
+# 4. Filter UI
 with st.container():
     st.markdown('<div class="filter-box">', unsafe_allow_html=True)
     search_q = st.text_input("🔍 Search Activity or Age Group:", placeholder="e.g. u13 hockey").lower()
     
-    c1, c2 = st.columns(2)
-    with c1:
+    col1, col2 = st.columns(2)
+    with col1:
         view = st.radio("View Range:", ["Upcoming", "Results"], horizontal=True)
-    with c2:
-        # Trek ALLE kategorieë uit die rou data, nie net toekomstige nie
-        cat_options = ["All"] + sorted(df_raw.iloc[:, 0].dropna().unique().tolist()) if not df_raw.empty else ["All"]
+    with col2:
+        # Dwing alle kategorieë om te wys
+        cat_options = ["All", "Sport", "Culture", "Academics"]
         cat_filter = st.selectbox("Category:", cat_options)
     
     if st.button("🔄 REFRESH DATA"):
@@ -79,9 +77,11 @@ with st.container():
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# 5. Rendering Engine
+# 5. Render Engine
+SA_TIME = pytz.timezone('Africa/Johannesburg')
+today = datetime.now(SA_TIME).date()
+
 if not df_raw.empty:
-    # Pas filters toe op die rou data
     if view == "Upcoming":
         df = df_raw[df_raw['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
     else:
@@ -93,18 +93,18 @@ if not df_raw.empty:
         df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
 
     for _, r in df.iterrows():
-        # Kolomme: 1=Activity, 2=Age
         sport = str(r.iloc[1])
         age = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue = str(r.iloc[4])
         
-        other_btns = []
-        prog_btn = ""
-        team_html = ""
-        note_html = ""
-
-        # Verwerk kolomme 5 tot 8
+        # Versamel alle HTML elemente VOORAF
+        t_html = ""
+        b_html = ""
+        n_html = ""
+        p_html = ""
+        
+        # 5=Prog, 6=Team, 7=Confirm, 8=Info
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if val.lower() == 'nan' or not val: continue
@@ -112,29 +112,26 @@ if not df_raw.empty:
             link = re.search(r'(https?://[^\s<>"]+)', val)
             if link:
                 url = link.group(0)
-                btn_tag = f'<a href="{url}" target="_blank" class="btn">{lbl}</a>'
-                if lbl == "PROGRAMME": prog_btn = btn_tag
-                else: other_btns.append(btn_tag)
+                btn = f'<a href="{url}" target="_blank" class="btn">{lbl}</a>'
+                if lbl == "PROGRAMME": p_html = f'<div class="prog-container"><div class="btn-row">{btn}</div></div>'
+                else: b_html += btn + " "
             else:
-                if lbl == "TEAM":
-                    team_html = f'<div class="team-box"><b>TEAMS:</b><br>{val}</div>'
-                elif lbl == "INFORMATION":
-                    note_html = f'<div class="note-box"><b>Note:</b><br>{val}</div>'
+                if lbl == "TEAM": t_html = f'<div class="team-box"><b>TEAMS:</b><br>{val}</div>'
+                elif lbl == "INFORMATION": n_html = f'<div class="note-box"><b>Note:</b><br>{val}</div>'
 
         maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(venue + ' Midstream')}"
 
-        # DIE KRITIEKE FIX: Een skoon blok HTML
-        content_html = f"""
+        # Dwing Streamlit om dit as EEN blok HTML te sien
+        st.markdown(f"""
         <div class="card">
             <div class="card-date">🗓️ {date_str}</div>
             <div class="card-title">{sport} {age}</div>
             <div class="venue"><a href="{maps_url}" target="_blank">📍 {venue}</a></div>
-            {team_html}
-            <div class="btn-row">{" ".join(other_btns)}</div>
-            {note_html}
-            {f'<div class="prog-container"><div class="btn-row">{prog_btn}</div></div>' if prog_btn else ""}
+            {t_html}
+            <div class="btn-row">{b_html}</div>
+            {n_html}
+            {p_html}
         </div>
-        """
-        st.markdown(content_html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 st.markdown('<div class="footer">Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222</div>', unsafe_allow_html=True)
