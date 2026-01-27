@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 import io
 import urllib.parse
-import streamlit.components.v1 as components # Korrekte manier om dit in te laai
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Page Configuration
@@ -59,11 +59,15 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
+# FILTERS MOVED UNDER LOGO
+st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
+
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; margin-bottom:10px;'>", unsafe_allow_html=True)
     search_q = st.text_input("🔍 Search Activity or Age Group:", placeholder="e.g. u13 hockey").lower()
     c1, c2 = st.columns(2)
-    with c1: view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
+    with c1: 
+        view = st.radio("View Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
     with c2: 
         cat_options = ["All", "Sport", "Culture", "Academics"]
         cat_filter = st.selectbox("Category:", cat_options)
@@ -74,17 +78,19 @@ with st.container():
     st.markdown("</div>", unsafe_allow_html=True)
 
 if not df_raw.empty:
+    # Filtering Logic
     if view == "Upcoming":
         df = df_raw[df_raw['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
     else:
-        df = df_raw[df_raw['dt_fixed'].dt.date < today].sort_values(by='dt_fixed', ascending=False)
+        # Next 7 Days Logic
+        df = df_raw[(df_raw['dt_fixed'].dt.date >= today) & (df_raw['dt_fixed'].dt.date <= today + timedelta(days=7))].sort_values(by='dt_fixed')
     
     if cat_filter != "All":
         df = df[df.iloc[:, 0].str.contains(cat_filter, case=False, na=False)]
     if search_q:
         df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
 
-    # Bou die finale HTML
+    # Build Final HTML
     cards_html = f"{STYLE}<div class='navbar'><img src='https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png'></div><div class='header-title'>Laerskool Midstream College Primary Event Hub</div><div style='padding:15px;'>"
     
     for _, r in df.iterrows():
@@ -118,7 +124,6 @@ if not df_raw.empty:
     
     cards_html += "</div><div class='footer'>Midstream College Primary · info@midstreamprimary.co.za</div>"
     
-    # Gebruik nou die korrekte inlaai-metode
     components.html(cards_html, height=2500, scrolling=True)
 else:
     st.info("No data available.")
