@@ -37,7 +37,8 @@ html, body, .stApp {
 
 .block-container {
     max-width:820px;
-    padding-top:0 !important;
+    padding-top:0rem !important;
+    margin-top:-1rem;
 }
 
 .navbar {
@@ -77,33 +78,17 @@ html, body, .stApp {
     box-shadow:0 6px 18px rgba(0,0,0,0.18);
 }
 
-.card-date {
-    color:#666;
-    font-size:0.9rem;
-    margin-bottom:6px;
-}
+.card-date { color:#666; font-size:0.9rem; }
+.card-title { color:#800000; font-size:1.5rem; font-weight:700; }
 
-.card-title {
-    color:#800000;
-    font-size:1.5rem;
-    font-weight:700;
-    margin-bottom:6px;
-}
-
-.venue a {
-    color:#333;
-    text-decoration:none;
-    font-size:0.95rem;
-}
-
-.venue a:hover {text-decoration:underline;}
+.venue a { color:#333; text-decoration:none; }
+.venue a:hover { text-decoration:underline; }
 
 .team {
     background:#fff3f3;
     padding:18px;
     border-radius:14px;
     margin-top:18px;
-    font-size:0.95rem;
 }
 
 .btn-row {
@@ -121,8 +106,6 @@ html, body, .stApp {
     font-weight:600;
     text-decoration:none;
 }
-
-.btn:hover {opacity:0.9;}
 
 .footer {
     background:#800000;
@@ -151,12 +134,12 @@ def extract_all_urls(row):
     for val in row.values:
         if pd.notna(val):
             urls += URL_REGEX.findall(str(val))
-    return list(dict.fromkeys(urls))  # remove duplicates
+    return list(dict.fromkeys(urls))
 
 def parse_date(val):
     if pd.isna(val):
         return pd.NaT
-    s = str(val).strip()
+    s = str(val)
     if not re.search(r"\d{4}", s):
         s += f" {datetime.now().year}"
     return pd.to_datetime(s, dayfirst=True, errors="coerce")
@@ -169,12 +152,10 @@ def load_data():
     r = requests.get(DATA_URL, timeout=10)
     df = pd.read_csv(io.StringIO(r.text))
     df.columns = [c.strip().lower() for c in df.columns]
-
     if "date" in df.columns:
         df["date_fixed"] = df["date"].apply(parse_date)
     else:
         df["date_fixed"] = pd.NaT
-
     return df
 
 df = load_data()
@@ -182,37 +163,9 @@ df = load_data()
 # =========================
 # FILTER VALUES (SAFE)
 # =========================
-activities, ages, categories = [], [], []
-
-if "activity" in df.columns:
-    activities = sorted(
-        df["activity"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .loc[lambda x: x != ""]
-        .unique()
-    )
-
-if "age" in df.columns:
-    ages = sorted(
-        df["age"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .loc[lambda x: x != ""]
-        .unique()
-    )
-
-if "category" in df.columns:
-    categories = sorted(
-        df["category"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .loc[lambda x: x != ""]
-        .unique()
-    )
+activities = sorted(df["activity"].dropna().astype(str).unique()) if "activity" in df.columns else []
+ages = sorted(df["age"].dropna().astype(str).unique()) if "age" in df.columns else []
+categories = sorted(df["category"].dropna().astype(str).unique()) if "category" in df.columns else []
 
 # =========================
 # FILTER UI
@@ -225,7 +178,6 @@ with st.container():
     category_filter = st.multiselect("Category", categories)
 
     col1, col2, col3 = st.columns(3)
-
     if "range" not in st.session_state:
         st.session_state.range = "7"
 
@@ -235,7 +187,6 @@ with st.container():
         st.session_state.range = "all"
     if col3.button("Refresh"):
         st.cache_data.clear()
-        st.experimental_rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -249,10 +200,8 @@ if st.session_state.range == "7":
 
 if activity_filter:
     df = df[df["activity"].astype(str).isin(activity_filter)]
-
 if age_filter and "age" in df.columns:
     df = df[df["age"].astype(str).isin(age_filter)]
-
 if category_filter and "category" in df.columns:
     df = df[df["category"].astype(str).isin(category_filter)]
 
@@ -263,16 +212,14 @@ df = df.sort_values("date_fixed", na_position="last")
 # =========================
 for _, r in df.iterrows():
     date_str = r["date_fixed"].strftime("%d %B %Y") if pd.notna(r["date_fixed"]) else "TBA"
-    venue = str(r.get("venue", "")).strip()
+    venue = str(r.get("venue","")).strip()
 
-    maps_url = ""
+    maps = ""
     if venue:
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+        maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
 
-    urls = extract_all_urls(r)
     buttons = []
-
-    for u in urls:
+    for u in extract_all_urls(r):
         label = "OPEN"
         if "forms" in u:
             label = "CONFIRM"
@@ -288,7 +235,7 @@ for _, r in df.iterrows():
     <div class="card">
         <div class="card-date">📅 {date_str}</div>
         <div class="card-title">{r.get("activity","")} {r.get("age","")}</div>
-        {f'<div class="venue"><a href="{maps_url}" target="_blank">📍 {venue}</a></div>' if venue else ''}
+        {f'<div class="venue"><a href="{maps}" target="_blank">📍 {venue}</a></div>' if venue else ''}
         {f'<div class="team"><b>Teams</b><br>{team_text}</div>' if team_text else ''}
         {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
     </div>
