@@ -31,7 +31,8 @@ def load_data():
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
-today = datetime.now(SA_TIME).date()
+now_sa = datetime.now(SA_TIME)
+today = now_sa.date()
 
 # 2. UI Header
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;}</style>", unsafe_allow_html=True)
@@ -43,13 +44,13 @@ with st.container():
     search_q = st.text_input("🔍 Search (e.g. u7 or Athletics):", placeholder="Type here...").lower().strip()
     c1, c2 = st.columns(2)
     with c1: view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
-    with c2: 
-        cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    with c2: cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     
     act_opts = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
+    # MULTISELECT
     act_f = st.multiselect("Select Activities:", act_opts)
     
-    if st.button("🔄 REFRESH"):
+    if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
@@ -60,7 +61,11 @@ if not df_raw.empty:
     if view == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= today + timedelta(days=7)]
     if cat_f != "All": df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
-    if act_f: df = df[df.iloc[:, 1].isin(act_f)]
+    
+    # MULTI-SELECT FILTER LOGIC (FIXED)
+    if act_f:
+        df = df[df.iloc[:, 1].isin(act_f)]
+        
     if search_q:
         def match(r):
             pool = str(r.values).lower()
@@ -85,30 +90,38 @@ if not df_raw.empty:
 
     for _, r in df.sort_values('dt_fixed').iterrows():
         sport, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
-        dt_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        dt_fixed = r['dt_fixed']
+        dt_s = dt_fixed.strftime('%d %B %Y') if pd.notnull(dt_fixed) else "TBA"
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        info_raw = str(r.iloc[8])
-        team_raw = str(r.iloc[6])
+        # BADGE LOGIC (12h window OR '!' trigger)
+        all_text_str = str(r.values)
+        has_bang = "!" in all_text_str or "NEW" in all_text_str.upper() or "NUUT" in all_text_str.upper()
         
-        # Check vir die trigger woorde
-        has_new = any(w in info_raw.lower() or w in team_raw.lower() for w in ["new", "nuut", "!"])
-        is_soon = pd.notnull(r['dt_fixed']) and r['dt_fixed'].date() <= today + timedelta(days=1)
+        is_imminent = False
+        if pd.notnull(dt_fixed):
+            # Check 12 hours specifically
+            time_diff = dt_fixed.replace(tzinfo=SA_TIME) - now_sa
+            if timedelta(0) <= time_diff <= timedelta(hours=12):
+                is_imminent = True
         
-        if has_new or is_soon:
+        if has_bang or is_imminent:
             badge = "<div class='new-badge'>Recent Update</div>"
 
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower() == 'nan': continue
-            link = re.search(r'(https?://[^\s<>"]+)', val)
-            if link: b_r += f"<a href='{link.group(0)}' target='_blank' class='btn'>{lbl}</a> "
-            elif lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
-            elif lbl == "INFORMATION":
-                # Skoonmaak van die trigger woorde in die vertoon
-                display_val = re.sub(r'(?i)new|nuut|!', '', val).strip()
-                n_b = f"<div class='note-box'><b>Note:</b><br>{display_val}</div>"
+            
+            link_m = re.search(r'(https?://[^\s<>"]+)', val)
+            if link_m:
+                b_r += f"<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
+            else:
+                if lbl == "TEAM":
+                    t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
+                elif lbl == "INFORMATION":
+                    clean = re.sub(r'(?i)new|nuut|!', '', val).strip()
+                    n_b = f"<div class='note-box'><b>Note:</b><br>{clean}</div>"
 
         m_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ven + ' Midstream')}"
         h += f"""<div class="card">
