@@ -42,7 +42,7 @@ st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
-# FILTER BOX (STAYS AT THE TOP)
+# FILTER BOX
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
@@ -55,7 +55,6 @@ with st.container():
         cat_options = ["All", "Sport", "Culture", "Academics"]
         cat_filter = st.selectbox("Select Category:", cat_options)
     with col2:
-        # MULTI-SELECT vir sportsoorte (Swem en Atletiek gelyktydig)
         all_activities = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
         act_filter = st.multiselect("Select Activities:", all_activities, placeholder="e.g. Swimming, Athletics")
     
@@ -72,7 +71,6 @@ with st.container():
 
 # 4. Filter & Build HTML
 if not df_raw.empty:
-    # Logic Filtering
     if view == "Upcoming":
         df = df_raw[df_raw['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
     else:
@@ -98,7 +96,6 @@ if not df_raw.empty:
     .note-box { background:#f8f9fa; padding:12px; border-radius:10px; margin:10px 0; border-left:5px solid #008080; color:#333; font-size:0.85rem; }
     .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .btn { background:#800000; color:white !important; padding:8px 16px; border-radius:10px; font-weight:600; text-decoration:none; font-size:0.75rem; display:inline-block; }
-    .prog-container { margin-top:12px; border-top: 1px solid #eee; padding-top:10px; }
     </style>
     """
 
@@ -109,9 +106,10 @@ if not df_raw.empty:
         date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
         venue_name = str(r.iloc[4])
         
-        t_box, b_row, n_box, p_row = "", "", "", ""
+        t_box, b_row, n_box = "", "", ""
         
         # Mapping: 5=Prog, 6=Team, 7=Confirm, 8=Info
+        # Ons verwerk nou alle knoppies gelyktydig
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower() == 'nan': continue
@@ -119,11 +117,7 @@ if not df_raw.empty:
             link_match = re.search(r'(https?://[^\s<>"]+)', val)
             if link_match:
                 url = link_match.group(0)
-                btn_code = f"<a href='{url}' target='_blank' class='btn'>{lbl}</a>"
-                if lbl == "PROGRAMME":
-                    p_row = f"<div class='prog-container'><div class='btn-row'>{btn_code}</div></div>"
-                else:
-                    b_row += btn_code + " "
+                b_row += f"<a href='{url}' target='_blank' class='btn'>{lbl}</a> "
             else:
                 if lbl == "TEAM":
                     t_box = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
@@ -136,7 +130,9 @@ if not df_raw.empty:
             <div class="card-date">🗓️ {date_s}</div>
             <div class="card-title">{sport_name} {age_group}</div>
             <div class="venue"><a href="{maps_url}" target="_blank" style="color:#008080; text-decoration:none;">📍 {venue_name}</a></div>
-            {t_box}<div class="btn-row">{b_row}</div>{n_box}{p_row}
+            {t_box}
+            <div class="btn-row">{b_row}</div>
+            {n_box}
         </div>"""
     
     components.html(cards_html, height=2000, scrolling=True)
