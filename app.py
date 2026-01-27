@@ -123,4 +123,94 @@ def load_data():
     df = pd.read_csv(io.StringIO(r.text))
     df.columns = [c.strip().lower() for c in df.columns]
 
-    def parse_dat_
+    def parse_date(x):
+        if pd.isna(x):
+            return pd.NaT
+        s = str(x)
+        if not re.search(r"\d{4}", s):
+            s += f" {datetime.now().year}"
+        return pd.to_datetime(s, dayfirst=True, errors="coerce")
+
+    df["date_fixed"] = df["date"].apply(parse_date)
+    return df
+
+df = load_data()
+
+# =========================
+# FILTERS
+# =========================
+with st.container():
+    st.markdown('<div class="filter-box">', unsafe_allow_html=True)
+
+    activities = sorted(df["activity"].dropna().astype(str).unique())
+    ages = sorted(df["age"].dropna().astype(str).unique()) if "age" in df else []
+    categories = sorted(df["category"].dropna().astype(str).unique()) if "category" in df else []
+
+    activity_filter = st.multiselect("Activity", activities)
+    age_filter = st.multiselect("Age Group", ages)
+    category_filter = st.multiselect("Category", categories)
+
+    col1, col2 = st.columns(2)
+    if "range" not in st.session_state:
+        st.session_state.range = "7"
+
+    if col1.button("All Events"):
+        st.session_state.range = "all"
+    if col2.button("Next 7 Days"):
+        st.session_state.range = "7"
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =========================
+# APPLY FILTERS
+# =========================
+df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date >= today)]
+
+if st.session_state.range == "7":
+    df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date <= today + timedelta(days=7))]
+
+if activity_filter:
+    df = df[df["activity"].astype(str).isin(activity_filter)]
+if age_filter:
+    df = df[df["age"].astype(str).isin(age_filter)]
+if category_filter:
+    df = df[df["category"].astype(str).isin(category_filter)]
+
+df = df.sort_values("date_fixed", na_position="last")
+
+# =========================
+# CARDS
+# =========================
+for _, r in df.iterrows():
+    date_str = r["date_fixed"].strftime("%d %B %Y") if pd.notna(r["date_fixed"]) else "TBA"
+    venue = str(r.get("venue", ""))
+    maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+
+    buttons = []
+    for label in ["programme", "confirm"]:
+        raw = "" if pd.isna(r.get(label)) else str(r.get(label))
+        for u in URL_REGEX.findall(raw):
+            buttons.append(f'<a class="btn" href="{u}" target="_blank">{label.upper()}</a>')
+
+    team_text = ""
+    if pd.notna(r.get("team")):
+        team_text = re.sub(URL_REGEX, "", str(r.get("team"))).strip()
+
+    st.markdown(f"""
+    <div class="card">
+        <div class="card-date">📅 {date_str}</div>
+        <div class="card-title">{r.get("activity","")} {r.get("age","")}</div>
+        <div class="venue"><a href="{maps}" target="_blank">📍 {venue}</a></div>
+        {f'<div class="team"><b>Teams</b><br>{team_text}</div>' if team_text else ''}
+        {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+# =========================
+# FOOTER
+# =========================
+st.markdown("""
+<div style="background:#800000;color:white;text-align:center;padding:18px;margin-top:50px;font-size:0.85rem;">
+Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222
+</div>
+""", unsafe_allow_html=True)
