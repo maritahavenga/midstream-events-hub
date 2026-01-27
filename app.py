@@ -6,7 +6,18 @@ import re
 from datetime import datetime, timedelta
 import requests, io, urllib.parse
 
-today = datetime.now().date()
+# =========================
+# CONSTANTS
+# =========================
+DATA_URL = (
+    "https://docs.google.com/spreadsheets/d/e/"
+    "2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-"
+    "YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub"
+    "?gid=0&single=true&output=csv"
+)
+
+URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
+TODAY = datetime.now().date()
 
 # =========================
 # STYLES
@@ -23,64 +34,74 @@ html, body, .stApp {
 }
 
 #MainMenu, footer, header {visibility:hidden;}
+
 .block-container {
-    max-width:760px;
+    max-width:820px;
     padding-top:0 !important;
 }
 
 .navbar {
-    position:fixed;
-    top:0; left:0; right:0;
     background:white;
-    border-bottom:4px solid #800000;
-    z-index:9999;
+    border-bottom:5px solid #800000;
 }
+
 .navbar img {
     width:100%;
-    max-height:130px;
+    max-height:140px;
     object-fit:contain;
 }
 
-.header-green {
-    margin-top:130px;
+.header {
     background:#008080;
     color:white;
     text-align:center;
-    padding:18px;
+    padding:20px;
+    font-size:1.4rem;
     font-weight:700;
-    font-size:1.35rem;
 }
 
 .filter-box {
     background:white;
-    padding:22px;
-    border-radius:18px;
-    margin:28px 0;
-    box-shadow:0 4px 14px rgba(0,0,0,0.18);
+    padding:26px;
+    border-radius:20px;
+    margin:26px 0;
+    box-shadow:0 6px 18px rgba(0,0,0,0.18);
 }
 
 .card {
     background:white;
-    padding:34px;
-    border-radius:20px;
-    border-left:10px solid #800000;
+    padding:38px;
+    border-radius:22px;
+    border-left:12px solid #800000;
     margin-bottom:40px;
     box-shadow:0 6px 18px rgba(0,0,0,0.18);
 }
 
-.card-date {color:#666; font-size:0.9rem;}
-.card-title {color:#800000; font-size:1.45rem; font-weight:700;}
+.card-date {
+    color:#666;
+    font-size:0.9rem;
+    margin-bottom:6px;
+}
+
+.card-title {
+    color:#800000;
+    font-size:1.5rem;
+    font-weight:700;
+    margin-bottom:6px;
+}
 
 .venue a {
     color:#333;
     text-decoration:none;
+    font-size:0.95rem;
 }
+
 .venue a:hover {text-decoration:underline;}
 
 .team {
     background:#fff3f3;
-    padding:16px;
-    border-radius:12px;
+    padding:18px;
+    border-radius:14px;
     margin-top:18px;
     font-size:0.95rem;
 }
@@ -88,50 +109,72 @@ html, body, .stApp {
 .btn-row {
     display:flex;
     flex-wrap:wrap;
-    gap:14px;
+    gap:16px;
     margin-top:22px;
 }
+
 .btn {
     background:#800000;
     color:white;
-    padding:12px 26px;
-    border-radius:14px;
+    padding:12px 28px;
+    border-radius:16px;
     font-weight:600;
     text-decoration:none;
 }
+
 .btn:hover {opacity:0.9;}
+
+.footer {
+    background:#800000;
+    color:white;
+    text-align:center;
+    padding:18px;
+    font-size:0.85rem;
+    margin-top:50px;
+}
 </style>
 
 <div class="navbar">
     <img src="https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png">
 </div>
 
-<div class="header-green">
-Laerskool Midstream College Primary — Event Hub
+<div class="header">
+Laerskool Midstream College Primary Event Hub
 </div>
 """, unsafe_allow_html=True)
 
 # =========================
-# DATA
+# HELPERS
 # =========================
-DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
-URL_REGEX = re.compile(r"(https?://[^\s<>\"']+)")
+def extract_all_urls(row):
+    urls = []
+    for val in row.values:
+        if pd.notna(val):
+            urls += URL_REGEX.findall(str(val))
+    return list(dict.fromkeys(urls))  # deduplicate
 
+def parse_date(val):
+    if pd.isna(val):
+        return pd.NaT
+    s = str(val).strip()
+    if not re.search(r"\d{4}", s):
+        s += f" {datetime.now().year}"
+    return pd.to_datetime(s, dayfirst=True, errors="coerce")
+
+# =========================
+# LOAD DATA
+# =========================
 @st.cache_data(ttl=120)
 def load_data():
     r = requests.get(DATA_URL, timeout=10)
     df = pd.read_csv(io.StringIO(r.text))
     df.columns = [c.strip().lower() for c in df.columns]
 
-    def parse_date(x):
-        if pd.isna(x):
-            return pd.NaT
-        s = str(x)
-        if not re.search(r"\d{4}", s):
-            s += f" {datetime.now().year}"
-        return pd.to_datetime(s, dayfirst=True, errors="coerce")
+    if "date" in df.columns:
+        df["date_fixed"] = df["date"].apply(parse_date)
+    else:
+        df["date_fixed"] = pd.NaT
 
-    df["date_fixed"] = df["date"].apply(parse_date)
     return df
 
 df = load_data()
@@ -142,37 +185,50 @@ df = load_data()
 with st.container():
     st.markdown('<div class="filter-box">', unsafe_allow_html=True)
 
-    activities = sorted(df["activity"].dropna().astype(str).unique())
-    ages = sorted(df["age"].dropna().astype(str).unique()) if "age" in df else []
-    categories = sorted(df["category"].dropna().astype(str).unique()) if "category" in df else []
+    activities = sorted(
+        [str(a).strip() for a in df.get("activity", []).dropna().unique() if str(a).strip()]
+    )
+
+    ages = sorted(
+        [str(a).strip() for a in df.get("age", []).dropna().unique() if str(a).strip()]
+    )
+
+    categories = sorted(
+        [str(c).strip() for c in df.get("category", []).dropna().unique() if str(c).strip()]
+    )
 
     activity_filter = st.multiselect("Activity", activities)
     age_filter = st.multiselect("Age Group", ages)
     category_filter = st.multiselect("Category", categories)
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     if "range" not in st.session_state:
         st.session_state.range = "7"
 
-    if col1.button("All Events"):
-        st.session_state.range = "all"
-    if col2.button("Next 7 Days"):
+    if col1.button("Next 7 Days"):
         st.session_state.range = "7"
+    if col2.button("All Events"):
+        st.session_state.range = "all"
+    if col3.button("Refresh"):
+        st.cache_data.clear()
+        st.experimental_rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
 # APPLY FILTERS
 # =========================
-df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date >= today)]
+df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date >= TODAY)]
 
 if st.session_state.range == "7":
-    df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date <= today + timedelta(days=7))]
+    df = df[df["date_fixed"].isna() | (df["date_fixed"].dt.date <= TODAY + timedelta(days=7))]
 
 if activity_filter:
     df = df[df["activity"].astype(str).isin(activity_filter)]
+
 if age_filter:
     df = df[df["age"].astype(str).isin(age_filter)]
+
 if category_filter:
     df = df[df["category"].astype(str).isin(category_filter)]
 
@@ -183,14 +239,22 @@ df = df.sort_values("date_fixed", na_position="last")
 # =========================
 for _, r in df.iterrows():
     date_str = r["date_fixed"].strftime("%d %B %Y") if pd.notna(r["date_fixed"]) else "TBA"
-    venue = str(r.get("venue", ""))
-    maps = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+    venue = str(r.get("venue", "")).strip()
 
+    maps_url = ""
+    if venue:
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(venue)}"
+
+    urls = extract_all_urls(r)
     buttons = []
-    for label in ["programme", "confirm"]:
-        raw = "" if pd.isna(r.get(label)) else str(r.get(label))
-        for u in URL_REGEX.findall(raw):
-            buttons.append(f'<a class="btn" href="{u}" target="_blank">{label.upper()}</a>')
+
+    for u in urls:
+        label = "OPEN"
+        if "forms" in u:
+            label = "CONFIRM"
+        elif "drive" in u:
+            label = "PROGRAMME"
+        buttons.append(f'<a class="btn" href="{u}" target="_blank">{label}</a>')
 
     team_text = ""
     if pd.notna(r.get("team")):
@@ -200,7 +264,7 @@ for _, r in df.iterrows():
     <div class="card">
         <div class="card-date">📅 {date_str}</div>
         <div class="card-title">{r.get("activity","")} {r.get("age","")}</div>
-        <div class="venue"><a href="{maps}" target="_blank">📍 {venue}</a></div>
+        {f'<div class="venue"><a href="{maps_url}" target="_blank">📍 {venue}</a></div>' if venue else ''}
         {f'<div class="team"><b>Teams</b><br>{team_text}</div>' if team_text else ''}
         {f'<div class="btn-row">{"".join(buttons)}</div>' if buttons else ''}
     </div>
@@ -210,7 +274,7 @@ for _, r in df.iterrows():
 # FOOTER
 # =========================
 st.markdown("""
-<div style="background:#800000;color:white;text-align:center;padding:18px;margin-top:50px;font-size:0.85rem;">
+<div class="footer">
 Midstream College Primary · info@midstreamprimary.co.za · 012 940 2222
 </div>
 """, unsafe_allow_html=True)
