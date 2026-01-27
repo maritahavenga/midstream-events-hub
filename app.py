@@ -60,4 +60,60 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-with
+with st.container():
+    st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; margin-bottom:10px;'>", unsafe_allow_html=True)
+    search_q = st.text_input("🔍 Search Activity or Age Group:", placeholder="e.g. u13 hockey").lower()
+    c1, c2 = st.columns(2)
+    with c1: view = st.radio("View:", ["Upcoming", "Results"], horizontal=True)
+    with c2: cat_filter = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    if st.button("🔄 REFRESH DATA"):
+        st.cache_data.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+if not df_raw.empty:
+    if view == "Upcoming":
+        df = df_raw[df_raw['dt_fixed'].dt.date >= today].sort_values(by='dt_fixed')
+    else:
+        df = df_raw[df_raw['dt_fixed'].dt.date < today].sort_values(by='dt_fixed', ascending=False)
+    
+    if cat_filter != "All":
+        df = df[df.iloc[:, 0].str.contains(cat_filter, case=False, na=False)]
+    if search_q:
+        df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
+
+    # Bou die finale HTML
+    cards_html = f"{STYLE}<div class='navbar'><img src='https://midstream-primary.co.za/wp-content/uploads/2021/09/MCP-1.png'></div><div class='header-title'>Laerskool Midstream College Primary Event Hub</div><div style='padding:15px;'>"
+    
+    for _, r in df.iterrows():
+        sport, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
+        date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
+        venue = str(r.iloc[4])
+        t_box, b_row, n_box, p_row = "", "", "", ""
+        
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
+            if val.lower() == 'nan' or not val: continue
+            link = re.search(r'(https?://[^\s<>"]+)', val)
+            if link:
+                url = link.group(0)
+                btn = f"<a href='{url}' target='_blank' class='btn'>{lbl}</a>"
+                if lbl == "PROGRAMME": p_row = f"<div class='prog-container'><div class='btn-row'>{btn}</div></div>"
+                else: b_row += btn + " "
+            else:
+                if lbl == "TEAM": t_box = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
+                elif lbl == "INFORMATION": n_box = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
+
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(venue + ' Midstream')}"
+        cards_html += f"""
+        <div class="card">
+            <div class="card-date">🗓️ {date_s}</div>
+            <div class="card-title">{sport} {age}</div>
+            <div class="venue-link"><a href="{maps_url}" target="_blank" style="color:#008080; text-decoration:none;">📍 {venue}</a></div>
+            {t_box}<div class="btn-row">{b_row}</div>{n_box}{p_row}
+        </div>"""
+    
+    cards_html += "</div><div class='footer'>Midstream College Primary · info@midstreamprimary.co.za</div>"
+    
+    # Dwing die browser om die HTML te lees (Fix vir die rou string probleem)
+    html_component(cards_html, height=1200, scrolling=True)
