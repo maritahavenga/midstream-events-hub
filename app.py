@@ -42,17 +42,27 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     search_q = st.text_input("🔍 Search (e.g. u7 or Athletics):", placeholder="Type here...").lower().strip()
-    c1, c2 = st.columns(2)
-    with c1: view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
-    with c2: cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     
-    act_opts = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
-    # MULTISELECT
-    act_f = st.multiselect("Select Activities:", act_opts)
+    col1, col2 = st.columns(2)
+    with col1:
+        cat_f = st.selectbox("Select Category:", ["All", "Sport", "Culture", "Academics"])
+    with col2:
+        # Smart Filter: Wys slegs relevante aktiwiteite
+        if cat_f != "All" and not df_raw.empty:
+            filtered_list = df_raw[df_raw.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
+            act_opts = sorted(filtered_list.iloc[:, 1].dropna().unique().tolist())
+        else:
+            act_opts = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
+        
+        act_f = st.multiselect("Select Activities:", act_opts)
     
-    if st.button("🔄 REFRESH DATA"):
-        st.cache_data.clear()
-        st.rerun()
+    c3, c4 = st.columns([2, 1])
+    with c3:
+        view = st.radio("Date Range:", ["Upcoming", "Next 7 Days"], horizontal=True)
+    with c4:
+        if st.button("🔄 REFRESH DATA"):
+            st.cache_data.clear()
+            st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 # 3. Logic & Rendering
@@ -60,10 +70,9 @@ if not df_raw.empty:
     df = df_raw[df_raw['dt_fixed'].dt.date >= today]
     if view == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= today + timedelta(days=7)]
-    if cat_f != "All": df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
-    
-    # MULTI-SELECT FILTER LOGIC (FIXED)
-    if act_f:
+    if cat_f != "All": 
+        df = df[df.iloc[:, 0].str.contains(cat_f, case=False, na=False)]
+    if act_f: 
         df = df[df.iloc[:, 1].isin(act_f)]
         
     if search_q:
@@ -95,18 +104,16 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # BADGE LOGIC (12h window OR '!' trigger)
-        all_text_str = str(r.values)
-        has_bang = "!" in all_text_str or "NEW" in all_text_str.upper() or "NUUT" in all_text_str.upper()
+        # --- BADGE LOGIC ---
+        row_str = str(r.values).upper()
+        has_trigger = any(w in row_str for w in ["!", "NEW", "NUUT"])
         
         is_imminent = False
         if pd.notnull(dt_fixed):
-            # Check 12 hours specifically
             time_diff = dt_fixed.replace(tzinfo=SA_TIME) - now_sa
-            if timedelta(0) <= time_diff <= timedelta(hours=12):
-                is_imminent = True
+            if timedelta(0) <= time_diff <= timedelta(hours=12): is_imminent = True
         
-        if has_bang or is_imminent:
+        if has_trigger or is_imminent:
             badge = "<div class='new-badge'>Recent Update</div>"
 
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
