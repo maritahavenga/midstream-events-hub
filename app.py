@@ -33,7 +33,7 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. UI Header & Maroon Button Style
+# 2. UI Header & Style
 st.markdown("""
 <style>
     [data-testid='stHeader'] {display: none;} 
@@ -46,10 +46,6 @@ st.markdown("""
         width: 100%;
         font-weight: bold;
         height: 3em;
-    }
-    div.stButton > button:hover {
-        background-color: #a00000 !important;
-        border: 1px solid white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,16 +88,43 @@ if not df_raw.empty:
         df = df[df.iloc[:, 1].isin(act_f)]
         
     if search_q:
+        # Uitgebreide sinonieme vir sportsoorte
+        synonyms = {
+            "atletiek": ["athletics", "atletiek", "sprinting", "hurdles", "track"],
+            "athletics": ["atletiek", "athletics", "sprinting", "hurdles", "track"],
+            "swem": ["swimming", "swem", "gala"],
+            "swimming": ["swimming", "swem", "gala"],
+            "muurbal": ["squash", "muurbal"],
+            "squash": ["squash", "muurbal"],
+            "bergfiets": ["mtb", "mountain bike", "bergfiets", "fiets"],
+            "mountain bike": ["mtb", "mountain bike", "bergfiets", "fiets"],
+            "mtb": ["mtb", "mountain bike", "bergfiets", "fiets"],
+            "hokkie": ["hockey", "hokkie"],
+            "hockey": ["hockey", "hokkie"],
+            "tennis": ["tennis"],
+            "netbal": ["netball", "netbal"],
+            "netball": ["netball", "netbal"],
+            "rugby": ["rugby"],
+            "skaak": ["chess", "skaak"],
+            "chess": ["chess", "skaak"]
+        }
+        
+        search_terms = [search_q]
+        if search_q in synonyms:
+            search_terms.extend(synonyms[search_q])
+
         def match(r):
             try:
-                # Maak seker ons kyk net na rye wat data het
-                pool = " ".join(str(v) for v in r.values).lower()
+                row_str = " ".join(str(v) for v in r.values).lower()
+                found = any(term in row_str for term in search_terms)
                 is_age = re.search(r'u\s?\d+', search_q)
-                is_mass = any(x in str(r.iloc[1]).lower() for x in ['athletics', 'swimming', 'atletiek', 'swem', 'gala'])
-                return (search_q in pool) or (is_age and is_mass)
-            except:
-                return False
-        # Verwyder enige rye wat foute kan veroorsaak
+                if is_age:
+                    age_match = search_q in row_str
+                    is_mass = any(x in str(r.iloc[1]).lower() for x in ['athletics', 'atletiek', 'swimming', 'swem', 'gala'])
+                    return age_match or is_mass
+                return found
+            except: return False
+            
         df = df[df.apply(match, axis=1).fillna(False)]
 
     h = """<style>
