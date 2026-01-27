@@ -151,7 +151,7 @@ def extract_all_urls(row):
     for val in row.values:
         if pd.notna(val):
             urls += URL_REGEX.findall(str(val))
-    return list(dict.fromkeys(urls))  # deduplicate
+    return list(dict.fromkeys(urls))  # remove duplicates
 
 def parse_date(val):
     if pd.isna(val):
@@ -180,28 +180,52 @@ def load_data():
 df = load_data()
 
 # =========================
-# FILTERS
+# FILTER VALUES (SAFE)
+# =========================
+activities, ages, categories = [], [], []
+
+if "activity" in df.columns:
+    activities = sorted(
+        df["activity"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .loc[lambda x: x != ""]
+        .unique()
+    )
+
+if "age" in df.columns:
+    ages = sorted(
+        df["age"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .loc[lambda x: x != ""]
+        .unique()
+    )
+
+if "category" in df.columns:
+    categories = sorted(
+        df["category"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .loc[lambda x: x != ""]
+        .unique()
+    )
+
+# =========================
+# FILTER UI
 # =========================
 with st.container():
     st.markdown('<div class="filter-box">', unsafe_allow_html=True)
-
-    activities = sorted(
-        [str(a).strip() for a in df.get("activity", []).dropna().unique() if str(a).strip()]
-    )
-
-    ages = sorted(
-        [str(a).strip() for a in df.get("age", []).dropna().unique() if str(a).strip()]
-    )
-
-    categories = sorted(
-        [str(c).strip() for c in df.get("category", []).dropna().unique() if str(c).strip()]
-    )
 
     activity_filter = st.multiselect("Activity", activities)
     age_filter = st.multiselect("Age Group", ages)
     category_filter = st.multiselect("Category", categories)
 
     col1, col2, col3 = st.columns(3)
+
     if "range" not in st.session_state:
         st.session_state.range = "7"
 
@@ -226,10 +250,10 @@ if st.session_state.range == "7":
 if activity_filter:
     df = df[df["activity"].astype(str).isin(activity_filter)]
 
-if age_filter:
+if age_filter and "age" in df.columns:
     df = df[df["age"].astype(str).isin(age_filter)]
 
-if category_filter:
+if category_filter and "category" in df.columns:
     df = df[df["category"].astype(str).isin(category_filter)]
 
 df = df.sort_values("date_fixed", na_position="last")
