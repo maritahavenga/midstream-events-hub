@@ -42,7 +42,7 @@ st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
-# FILTER BOX
+# FILTER BOX (STAYS AT THE TOP)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
@@ -55,7 +55,7 @@ with st.container():
         cat_options = ["All", "Sport", "Culture", "Academics"]
         cat_filter = st.selectbox("Select Category:", cat_options)
     with col2:
-        # MULTI-SELECT vir sportsoorte
+        # MULTI-SELECT vir sportsoorte (Swem en Atletiek gelyktydig)
         all_activities = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
         act_filter = st.multiselect("Select Activities:", all_activities, placeholder="e.g. Swimming, Athletics")
     
@@ -85,7 +85,7 @@ if not df_raw.empty:
     if search_q:
         df = df[df.apply(lambda r: search_q in str(r.values).lower(), axis=1)]
 
-    # CSS for the scrollable area
+    # CSS for the internal scrollable area
     INTERNAL_STYLE = """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
@@ -97,14 +97,19 @@ if not df_raw.empty:
     .team-box { background:#fff3f3; padding:12px; border-radius:10px; margin:10px 0; border:1px dashed #800000; color:#800000; font-size:0.85rem; }
     .note-box { background:#f8f9fa; padding:12px; border-radius:10px; margin:10px 0; border-left:5px solid #008080; color:#333; font-size:0.85rem; }
     .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-    .btn { background:#800000; color:white !important; padding:8px 16px; border-radius:10px; font-weight:600; text-decoration:none; font-size:0.75rem; }
+    .btn { background:#800000; color:white !important; padding:8px 16px; border-radius:10px; font-weight:600; text-decoration:none; font-size:0.75rem; display:inline-block; }
     .prog-container { margin-top:12px; border-top: 1px solid #eee; padding-top:10px; }
     </style>
     """
 
     cards_html = INTERNAL_STYLE
     for _, r in df.iterrows():
-        sport, age = str(r.iloc[1]), (str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else "")
+        sport_name = str(r.iloc[1])
+        age_group = str(r.iloc[2]) if str(r.iloc[2]).lower() != 'nan' else ""
         date_s = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else "TBA"
-        venue = str(r.iloc[4])
-        t_box, b_
+        venue_name = str(r.iloc[4])
+        
+        t_box, b_row, n_box, p_row = "", "", "", ""
+        
+        # Mapping: 5=Prog, 6=Team, 7=Confirm, 8=Info
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (
