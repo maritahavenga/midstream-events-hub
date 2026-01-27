@@ -101,32 +101,7 @@ if not df_raw.empty:
         ven = str(r.iloc[4])
         t_b, b_r, n_b, badge = "", "", "", ""
         
-        # --- MANUAL BADGE TRIGGER ONLY ---
+        # --- NO AUTO TIMERS. ONLY MANUAL TRIGGERS ---
         all_text_upper = str(r.values).upper()
         if any(w in all_text_upper for w in ["!", "NEW", "NUUT"]):
-            badge = "<div class='new-badge'>Recent Update</div>"
-
-        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
-            val = str(r.iloc[idx]).strip()
-            if not val or val.lower() == 'nan': continue
-            link_m = re.search(r'(https?://[^\s<>"]+)', val)
-            if link_m:
-                b_r += f"<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
-            else:
-                if lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
-                elif lbl == "INFORMATION":
-                    clean = re.sub(r'(?i)new|nuut|!', '', val).strip()
-                    n_b = f"<div class='note-box'><b>Note:</b><br>{clean}</div>"
-
-        m_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ven + ' Midstream')}"
-        h += f"""<div class="card">
-            {badge}
-            <div style="color:#666;font-size:0.85rem">🗓️ {dt_s}</div>
-            <div class="card-title">{sport} {age}</div>
-            <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none">📍 {ven}</a></div>
-            {t_b}<div class="btn-row">{b_r}</div>{n_b}
-        </div>"""
-    
-    components.html(h + "</div>", height=2000, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Midstream College Primary · info@midstreamprimary.co.za</div>", unsafe_allow_html=True)
+            badge = "<div class='new-badge'>
