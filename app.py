@@ -42,18 +42,21 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
+        
+        # Kolomme: A=Time, B=Email, C=Cat, D=Act, E=Age, F=Date, G=Venue, H=Prog, I=Team, J=Confirm, K=Info
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
             if '202' not in s: s = f"{s} {datetime.now().year}"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
+        
         df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt)
         return df
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
@@ -79,44 +82,50 @@ with st.container():
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Kaartjie Vertoning
+# 4. Vertoon Logika
 if df_raw.empty:
-    st.info("No data found in the Upcoming sheet.")
+    st.info("Waiting for data...")
 else:
     df = df_raw.copy()
+    
+    # DATUM FILTER: Slegs vandag of in die toekoms
     if 'dt_fixed' in df.columns:
+        df = df[df['dt_fixed'].dt.date >= today]
         df = df.sort_values('dt_fixed', ascending=True)
-    if cat_f != "All":
-        df = df[df.iloc[:, 2] == cat_f]
-    if act_f:
-        df = df[df.iloc[:, 3].isin(act_f)]
+
+    if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
+    if act_f: df = df[df.iloc[:, 3].isin(act_f)]
     if search_q:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
         st.write("No upcoming events found.")
     else:
-        card_style = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; }</style>"""
-        h = card_style
+        h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.7rem; }</style>"""
+        
         for _, r in df.iterrows():
-            sport_h = str(r.iloc[3]).strip()
-            age_l = str(r.iloc[4]).strip()
-            raw_dt = str(r.iloc[5]).strip()
-            ven_r = str(r.iloc[6]).strip()
+            sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
+            
+            # Knoppie Logika vir H, I en K
             btns = ""
-            for i in [7, 8]:
-                if i < len(r):
-                    val = str(r.iloc[i])
-                    if "https://" in val:
-                        lbl = "PROGRAMME" if i == 7 else "TEAM LIST"
-                        btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
-            extra = ""
+            for i in [7, 8, 10]: # Kolom H, I, K
+                val = str(r.iloc[i]) if i < len(r) else ""
+                if "https://" in val:
+                    lbl = "PROGRAMME" if i == 7 else ("TEAM LIST" if i == 8 else "EVENT INFO")
+                    btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
+            
+            # Information/Notes Logika (Badge & Note)
+            badge, note = "", ""
             if len(r) > 10:
-                info_val = str(r.iloc[10])
-                if info_val.lower() != 'nan' and info_val.strip() != "":
-                    extra = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_val}</div>"
-            h += f"<div class='card'><div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div style='font-size:0.95rem; color:#444;'>📍 {ven_r}</div>{btns}{extra}</div>"
+                info_text = str(r.iloc[10])
+                if info_text.lower() != 'nan' and info_text.strip() != "":
+                    if "$" in info_text: badge = "<div class='badge'>SPECIAL NOTE</div>"
+                    if "https://" not in info_text: # Wys net as teks as dit nie 'n link is nie
+                        note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
+
+            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div style='font-size:0.95rem; color:#444;'>📍 {ven_r}</div>{btns}{note}</div>"
+        
         components.html(h, height=2500, scrolling=True)
 
 st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
