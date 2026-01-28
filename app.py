@@ -47,24 +47,13 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
-        
-        # Skoonmaak van teks
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
-        
-        # Datum Parsing (Force)
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
-            # Probeer verskillende formate
-            for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%d %B %Y"):
-                try:
-                    return pd.to_datetime(s, dayfirst=True)
-                except:
-                    continue
-            return pd.NaT
-
+            return pd.to_datetime(s, dayfirst=True, errors='coerce')
         df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt)
         return df
     except: return pd.DataFrame()
@@ -73,7 +62,7 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. Styling
+# 2. Sticky CSS & Layout
 st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%;}</style>""", unsafe_allow_html=True)
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
@@ -93,13 +82,11 @@ with st.container():
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Vertoon
+# 4. Kaartjies
 if df_raw.empty:
-    st.info("Koppel tans aan Google Sheets... Maak seker die 'Upcoming' blad het data.")
+    st.info("Waiting for data...")
 else:
     df = df_raw.copy()
-    
-    # SORTING SONDER STRENG FILTERING
     if 'dt_fixed' in df.columns:
         df = df.sort_values('dt_fixed', ascending=True)
 
@@ -109,21 +96,26 @@ else:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
-        st.write("Geen items gevind nie. Kyk of die filters reg is.")
+        st.write("No upcoming events found.")
     else:
-        h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } .map-link { color:#444; text-decoration:none; font-size:0.95rem; }</style>"""
+        h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } .map-link { color:#0000EE; text-decoration:underline; font-size:0.95rem; font-weight:500; }</style>"""
         
         for _, r in df.iterrows():
             sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
-            
-            # As die datum nie kon parse nie, wys die rou teks uit die sheet
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             
-            # Venue Maps
-            search_ven = ven_r.lower()
-            midstream_keywords = ["veld", "astro", "ouditorium", "hall", "tennis", "netbal", "bondev", "field"]
-            mq = f"Midstream+College+{ven_r.replace(' ', '+')}" if any(k in search_ven for k in midstream_keywords) and "midstream" not in search_ven else ven_r.replace(' ', '+')
-            maps_url = f"https://www.google.com/maps/search/?api=1&query={mq}"
+            prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
+            
+            # Venue/Maps Logika
+            venue_display = ""
+            if "see programme" in ven_r.lower() and prog_url:
+                venue_display = f"📍 <a class='map-link' href='{prog_url}' target='_blank'>SEE PROGRAMME (Click here)</a>"
+            else:
+                search_ven = ven_r.lower()
+                midstream_keywords = ["veld", "astro", "ouditorium", "hall", "tennis", "netbal", "bondev", "field"]
+                mq = f"Midstream+College+{ven_r.replace(' ', '+')}" if any(k in search_ven for k in midstream_keywords) and "midstream" not in search_ven else ven_r.replace(' ', '+')
+                maps_url = f"https://www.google.com/maps/search/?api=1&query={mq}"
+                venue_display = f"📍 <a class='map-link' href='{maps_url}' target='_blank'>{ven_r}</a>"
             
             btns = ""
             for i in [7, 8, 10]:
@@ -140,7 +132,7 @@ else:
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
 
-            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>📍 <a class='map-link' href='{maps_url}' target='_blank'>{ven_r}</a></div>{btns}{note}</div>"
+            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>{venue_display}</div>{btns}{note}</div>"
         
         components.html(h, height=2500, scrolling=True)
 
