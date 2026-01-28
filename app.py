@@ -38,7 +38,7 @@ def format_group_final(text):
     if age: return f"U{age}{team} {gender}".strip()
     return t
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=2) # Baie kort TTL om cache te dwing
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
@@ -104,8 +104,12 @@ if not df_raw.empty:
     
     for _, r in df.iterrows():
         venue_text = str(r.iloc[6]).strip().upper()
-        # HIER IS DIE VERANDERING: %B vir die volle maandnaam
-        formatted_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        
+        # Dwing die volle maandnaam met %B
+        if pd.notnull(r['dt_fixed']):
+            f_date = r['dt_fixed'].strftime('%d %B %Y')
+        else:
+            f_date = str(r.iloc[5])
         
         badge = "<div class='badge-style'>UPDATE</div>" if len(r) > 10 and "$" in str(r.iloc[10]) else ""
         note = f"<div style='font-size:0.85rem; color:#666; border-top:1px solid #eee; margin-top:10px; padding-top:8px;'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>" if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "http" not in str(r.iloc[10]) and str(r.iloc[10]).strip() != "" else ""
@@ -118,7 +122,7 @@ if not df_raw.empty:
         h += f"""<div class='card'>
                     {badge}
                     <div class='card-title'>{r['activity_display']} {r['group_display']}</div>
-                    <div class='info-row'>🗓️ {formatted_date}</div>
+                    <div class='info-row'>🗓️ {f_date}</div>
                     <div class='info-row'>📍 {venue_text}</div>
                     {btns}
                     {note}
