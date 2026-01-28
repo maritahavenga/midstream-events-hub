@@ -55,6 +55,7 @@ def load_data():
 st.markdown("""<style>
     .block-container {padding-top: 1rem !important;}
     div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%; border:none;}
+    .stRadio > div {gap: 20px;}
 </style>""", unsafe_allow_html=True)
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
@@ -67,23 +68,20 @@ today = datetime.now(SA_TIME).date()
 
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    
     view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    search_q = st.text_input("🔍 Search:", placeholder="Search anything...").lower().strip()
-    
+    search_q = st.text_input("🔍 Search:", placeholder="Search events...").lower().strip()
     col1, col2 = st.columns(2)
     with col1:
         cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     with col2:
         act_opts = sorted(df_raw['activity_display'].dropna().unique().tolist()) if not df_raw.empty else []
         act_f = st.multiselect("Activities:", act_opts)
-    
     if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Vertoon Logika
+# 4. Vertoon
 if not df_raw.empty:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
@@ -99,24 +97,23 @@ if not df_raw.empty:
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
-        .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin:0; } 
+        .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin:0 0 10px 0; } 
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
-        .map-link { color:#008080; text-decoration:underline; font-weight:600; font-size:0.95rem; }
-        .info-row { font-size:0.95rem; color:#333; margin: 8px 0; font-weight: 500; }
+        .map-link { color:#008080; text-decoration:underline; font-weight:600; font-size:0.95rem; display: block; margin-top: 5px;}
+        .info-row { font-size:0.95rem; color:#333; margin: 8px 0; font-weight: 500; display: flex; align-items: center; gap: 8px; }
         .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1s infinite; } 
         @keyframes blink { 0% {opacity:1;} 50% {opacity:0.3;} 100% {opacity:1;} }
     </style>"""
     
     for _, r in df.iterrows():
-        ven_raw = str(r.iloc[6])
+        ven_raw = str(r.iloc[6]).strip()
         prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "http" in str(r.iloc[7]) else None
         
-        # Kaart Logika
         if "see programme" in ven_raw.lower() and prog_url:
             ven_html = f"<a class='map-link' href='{prog_url}' target='_blank'>📍 SEE PROGRAMME</a>"
         else:
-            search_ven = f"Midstream+College+{ven_raw.replace(' ', '+')}"
-            ven_html = f"<a class='map-link' href='https://www.google.com/maps/search/?api=1&query={search_ven}' target='_blank'>📍 {ven_raw.upper()}</a>"
+            map_query = f"Midstream+College+{ven_raw.replace(' ', '+')}" if "cornwall" not in ven_raw.lower() else ven_raw.replace(' ', '+')
+            ven_html = f"<a class='map-link' href='https://www.google.com/maps/search/?api=1&query={map_query}' target='_blank'>📍 {ven_raw.upper()}</a>"
 
         badge = "<div class='badge-style'>UPDATE</div>" if len(r) > 10 and "$" in str(r.iloc[10]) else ""
         note = f"<div style='font-size:0.85rem; color:#666; border-top:1px solid #eee; margin-top:10px; padding-top:8px;'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>" if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "http" not in str(r.iloc[10]) else ""
