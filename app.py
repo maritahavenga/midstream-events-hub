@@ -19,6 +19,7 @@ def clean_text(text, is_group=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
     
+    # 1. OUDERDOMME (Dwing U-formaat)
     if is_group:
         nums = re.findall(r'\d+', t)
         if nums:
@@ -28,26 +29,29 @@ def clean_text(text, is_group=False):
             elif "boy" in t.lower(): suffix = " Boys"
             return f"U{age_num}{suffix}"
     
-    if t.isupper(): t = t.capitalize()
+    # 2. SPELFOUTE & VERTALINGS (Soek en vervang binne die string)
+    # Ons dwing hierdie regstellings eerste
+    t_lower = t.lower()
+    if "reve" in t_lower and "revue" not in t_lower:
+        t = t.lower().replace("reve", "Revue").capitalize()
     
     corrections = {
         "atletiek": "Athletics",
         "swem": "Swimming",
         "hokkie": "Hockey",
-        "revie": "Revue",
-        "reviu": "Revue",
         "muurbal": "Squash",
         "bergfiets": "Mountain Bike",
         "skaak": "Chess",
         "koor": "Choir"
     }
     
-    low_t = t.lower()
-    if low_t in corrections:
-        return corrections[low_t]
-    return t
+    for bad, good in corrections.items():
+        if bad in t.lower():
+            return good
+            
+    return t.capitalize() if t.isupper() else t
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10) # TTL tydelik verlaag vir vinniger toetsing
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
@@ -106,7 +110,7 @@ with st.container():
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 3. Logic & Cards
+# 3. Cards Logic
 if not df_raw.empty:
     df = df_raw[df_raw['dt_fixed'].dt.date >= today]
     if view == "Next 7 Days":
@@ -117,13 +121,11 @@ if not df_raw.empty:
         df = df[df.iloc[:, 1].isin(act_f)]
     if search_q:
         def match(r):
-            try:
-                row_str = " ".join(str(v) for v in r.values).lower()
-                if re.match(r'^[uo]?\d+$', search_q):
-                    num = re.findall(r'\d+', search_q)[0]
-                    return f"u{num}" in row_str.replace(" ", "").replace("-", "")
-                return search_q in row_str
-            except: return False
+            row_str = " ".join(str(v) for v in r.values).lower()
+            if re.match(r'^[uo]?\d+$', search_q):
+                num = re.findall(r'\d+', search_q)[0]
+                return f"u{num}" in row_str.replace(" ", "").replace("-", "")
+            return search_q in row_str
         df = df[df.apply(match, axis=1).fillna(False)]
 
     h = """<style>
