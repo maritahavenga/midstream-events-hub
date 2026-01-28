@@ -57,13 +57,11 @@ def load_data():
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
         
-        # Maak skoon voor ons sorteer
-        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
-        df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
-        df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
+        # Maak skoon
+        df['category_display'] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
+        df['activity_display'] = df.iloc[:, 3].apply(lambda x: clean_text(x))
+        df['group_display'] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
         
-        # Skep 'n tydelike kolom vir die aktiwiteit naam om op te sorteer
-        df['activity_name'] = df.iloc[:, 3].astype(str)
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
@@ -80,12 +78,12 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 # 3. Filters
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    search_q = st.text_input("🔍 Search Events:", placeholder="Type here...").lower().strip()
+    search_q = st.text_input("🔍 Search:", placeholder="Type here...").lower().strip()
     col1, col2 = st.columns(2)
     with col1:
         cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     with col2:
-        act_opts = sorted(df_raw.iloc[:, 3].dropna().unique().tolist()) if not df_raw.empty else []
+        act_opts = sorted(df_raw['activity_display'].dropna().unique().tolist()) if not df_raw.empty else []
         act_f = st.multiselect("Activities:", act_opts)
     if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
@@ -98,12 +96,14 @@ if df_raw.empty:
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
-        # HIER IS DIE DUBBEL-SORTEER: Datum eerste, dan Aktiwiteit
+        # Filter vir vandag of later
         df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
-        df = df.sort_values(by=['dt_fixed', 'activity_name'], ascending=[True, True], na_position='last')
+        
+        # SORTEER: Eerste op DATUM, dan op aktiwiteit NAAM (alfabeties)
+        df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True], na_position='last')
 
-    if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
-    if act_f: df = df[df.iloc[:, 3].isin(act_f)]
+    if cat_f != "All": df = df[df['category_display'] == cat_f]
+    if act_f: df = df[df['activity_display'].isin(act_f)]
     if search_q:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
@@ -122,7 +122,7 @@ else:
         </style>"""
         
         for _, r in df.iterrows():
-            sport_h, age_l = str(r.iloc[3]), str(r.iloc[4])
+            sport_h, age_l = r['activity_display'], r['group_display']
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
             ven_r = str(r.iloc[6])
             prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
