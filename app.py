@@ -37,16 +37,27 @@ def clean_text(text, is_group=False, is_category=False):
         return t.capitalize()
 
     if is_group:
-        # 1. Maak alles eers 'U' met 'n nommer (onder 12 -> U12)
-        t = re.sub(r'\b(onder|under|o/|o)\s?(\d+)', r'U\2', t, flags=re.IGNORECASE)
-        # 2. Dwing die spasie tussen U en die nommer af (U12 -> U 12)
-        t = re.sub(r'[Uu](\d+)', r'U \1', t)
-        # 3. Vertaal dogters/seuns/G/B
-        t = t.replace("dogters", "Girls").replace("seuns", "Boys").replace("dogter", "Girls").replace("seun", "Boys")
-        t = re.sub(r'\b[Gg]\b', 'Girls', t)
-        t = re.sub(r'\b[Bb]\b', 'Boys', t)
-        # 4. Dwing spasie voor Girls/Boys af as dit vas is (U 12Girls -> U 12 Girls)
-        t = re.sub(r'(\d+)([Gg]irls|[Bb]oys)', r'\1 \2', t)
+        # 1. Haal die nommer uit
+        nums = re.findall(r'\d+', t)
+        age = nums[0] if nums else ""
+        
+        # 2. Bepaal geslag
+        gender = ""
+        low_t = t.lower()
+        if "g" in low_t or "dogter" in low_t or "girl" in low_t:
+            gender = "Girls"
+        elif "b" in low_t or "seun" in low_t or "boy" in low_t:
+            gender = "Boys"
+            
+        # 3. Kyk vir span-letters (hou spasie voor letter)
+        team = ""
+        if " a" in low_t or t.endswith("A"): team = " A"
+        elif " b" in low_t or t.endswith("B"): team = " B"
+        elif " c" in low_t or t.endswith("C"): team = " C"
+        
+        # 4. Bou: U[Nommer] [Spasie] [Geslag][Span]
+        if age:
+            return f"U{age} {gender}{team}".strip()
         return t
 
     # Aktiwiteit vertaling
@@ -123,39 +134,4 @@ else:
         
         for _, r in df.iterrows():
             sport_h, age_l = r['activity_display'], r['group_display']
-            display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-            ven_r = str(r.iloc[6])
-            prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
-            
-            ven_display = ven_r
-            if "ouditorium" in ven_r.lower(): ven_display = "Auditorium"
-            elif "veld" in ven_r.lower(): ven_display = "Field"
-            elif "saal" in ven_r.lower(): ven_display = "Hall"
-
-            if "see programme" in ven_r.lower() and prog_url:
-                venue_html = f"<div class='info-row'>📍 <a class='map-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a></div>"
-            else:
-                mq = f"Midstream+College+{ven_r.replace(' ', '+')}"
-                maps_url = f"https://www.google.com/maps/search/?api=1&query={mq}"
-                venue_html = f"<div class='info-row'>📍 <a class='map-link' href='{maps_url}' target='_blank'>{ven_display.upper()}</a></div>"
-            
-            btns = ""
-            for i in [7, 8, 10]:
-                val = str(r.iloc[i]) if i < len(r) else ""
-                if "https://" in val:
-                    lbl = "PROGRAMME" if i == 7 else ("TEAM LIST" if i == 8 else "INFORMATION")
-                    btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
-            
-            badge, note = "" , ""
-            if len(r) > 10:
-                info_text = str(r.iloc[10])
-                if info_text.lower() != 'nan' and info_text.strip() != "":
-                    if "$" in info_text: badge = "<div class='badge-style'>RECENT UPDATE</div>"
-                    if "https://" not in info_text:
-                        note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
-
-            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div class='info-row'>🗓️ {display_date}</div>{venue_html}{btns}{note}</div>"
-        
-        components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
+            display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc
