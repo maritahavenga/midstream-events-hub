@@ -19,28 +19,34 @@ def clean_text(text, is_group=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
     
-    # 1. STANDAARDISEER OUDERDOMME (Slegs vir die Group kolom)
+    # 1. STANDAARDISEER OUDERDOMME (bv. 0-9 word U9)
     if is_group:
-        # Soek vir enige getal in die teks
         nums = re.findall(r'\d+', t)
         if nums:
             age_num = nums[0]
-            # Kyk of daar "girls" of "boys" by is
             suffix = ""
             if "girl" in t.lower(): suffix = " Girls"
             elif "boy" in t.lower(): suffix = " Boys"
             return f"U{age_num}{suffix}"
     
-    # 2. STANDAARDISEER SPORT NAME (Display)
+    # 2. AUTO-FIX SPELFOUTE EN VERTALINGS
     if t.isupper(): t = t.capitalize()
-    translations = {
-        "atletiek": "Athletics", "swem": "Swimming", "hokkie": "Hockey",
-        "muurbal": "Squash", "bergfiets": "Mountain Bike", "skaak": "Chess",
-        "koor": "Choir", "netbal": "Netball", "tennis": "Tennis",
-        "rugby": "Rugby", "krieket": "Cricket"
+    
+    corrections = {
+        "atletiek": "Athletics",
+        "swem": "Swimming",
+        "hokkie": "Hockey",
+        "revie": "Revue",        # Fix vir jou toets
+        "reviu": "Revue",
+        "muurbal": "Squash",
+        "bergfiets": "Mountain Bike",
+        "skaak": "Chess",
+        "koor": "Choir"
     }
+    
     low_t = t.lower()
-    if low_t in translations: return translations[low_t]
+    if low_t in corrections:
+        return corrections[low_t]
     return t
 
 @st.cache_data(ttl=30)
@@ -49,7 +55,7 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         
-        # Maak Kategorie, Aktiwiteit en Group skoon
+        # Maak Kategorie (0), Aktiwiteit (1) en Group (2) skoon
         df.iloc[:, 0] = df.iloc[:, 0].apply(lambda x: clean_text(x))
         df.iloc[:, 1] = df.iloc[:, 1].apply(lambda x: clean_text(x))
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_group=True))
@@ -88,8 +94,8 @@ st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-J
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
 with st.container():
-    st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    search_q = st.text_input("🔍 Search (e.g. u12 or Hokkie):", placeholder="Type here...").lower().strip()
+    st.markdown("<div style='background:white; padding:20px; border-radius:0-0-20px-20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
+    search_q = st.text_input("🔍 Search (e.g. u9 or Hockey):", placeholder="Type here...").lower().strip()
     
     col1, col2 = st.columns(2)
     with col1:
@@ -123,14 +129,10 @@ if not df_raw.empty:
         
     if search_q:
         synonyms = {
-            "atletiek": ["athletics", "atletiek", "sprinting", "hurdles"],
+            "atletiek": ["athletics", "atletiek"],
             "swem": ["swimming", "swem", "gala"],
-            "muurbal": ["squash", "muurbal"],
-            "bergfiets": ["mtb", "mountain bike", "bergfiets"],
             "hokkie": ["hockey", "hokkie"],
-            "skaak": ["chess", "skaak"],
-            "koor": ["choir", "koor"],
-            "krieket": ["cricket", "krieket"]
+            "revue": ["revue", "revie"]
         }
         search_terms = [search_q]
         if search_q in synonyms: search_terms.extend(synonyms[search_q])
@@ -138,10 +140,9 @@ if not df_raw.empty:
         def match(r):
             try:
                 row_str = " ".join(str(v) for v in r.values).lower()
-                # Spesiale check vir ouderdom soektog (u12 ens)
                 if re.match(r'^[uo]?\d+$', search_q):
                     num = re.findall(r'\d+', search_q)[0]
-                    return f"u{num}" in row_str.replace(" ", "")
+                    return f"u{num}" in row_str.replace(" ", "").replace("-", "")
                 return any(term in row_str for term in search_terms)
             except: return False
         df = df[df.apply(match, axis=1).fillna(False)]
@@ -150,8 +151,6 @@ if not df_raw.empty:
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
     body { background:#008080; font-family:'Source Sans 3', sans-serif; margin:0; padding:15px; }
     .card { background:white; padding:25px; border-radius:22px; border-left:12px solid #800000; margin-bottom:20px; box-shadow:0 6px 15px rgba(0,0,0,0.15); position: relative; }
-    .new-badge { position: absolute; top: 15px; right: 15px; background: #ffcc00; color: #800000; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; animation: flash 1.5s infinite; border: 1px solid #800000; }
-    @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     .card-title { color:#800000; font-size:1.4rem; font-weight:700; margin: 5px 0; }
     .venue { color:#008080; font-weight:600; text-decoration:none; font-size: 0.9rem; }
     .team-box { background:#fff3f3; padding:12px; border-radius:10px; margin:10px 0; border:1px dashed #800000; color:#800000; font-size:0.85rem; }
@@ -165,27 +164,20 @@ if not df_raw.empty:
         dt_fixed = r['dt_fixed']
         dt_s = dt_fixed.strftime('%d %B %Y') if pd.notnull(dt_fixed) else "TBA"
         ven = str(r.iloc[4])
-        t_b, b_r, n_b, badge = "", "", "", ""
+        t_b, b_r, n_b = "", "", ""
         
-        row_content = str(r.values).upper()
-        if "$" in row_content or "NEW" in row_content or "NUUT" in row_content:
-            badge = "<div class='new-badge'>Recent Update</div>"
-
         for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
             val = str(r.iloc[idx]).strip()
             if not val or val.lower() == 'nan': continue
             link_m = re.search(r'(https?://[^\s<>"]+)', val)
             if link_m:
-                b_r += f"<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
+                b_r += f<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
             else:
                 if lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
-                elif lbl == "INFORMATION":
-                    clean = re.sub(r'(?i)new|nuut|\$', '', val).strip()
-                    n_b = f"<div class='note-box'><b>Note:</b><br>{clean}</div>"
+                elif lbl == "INFORMATION": n_b = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
 
         m_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ven + ' Midstream')}"
         h += f"""<div class="card">
-            {badge}
             <div style="color:#666;font-size:0.85rem">🗓️ {dt_s}</div>
             <div class="card-title">{sport} {age}</div>
             <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none;">📍 {ven}</a></div>
