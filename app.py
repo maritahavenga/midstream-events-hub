@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import requests
 import io
@@ -25,14 +25,9 @@ def clean_text(text, is_group=False, is_category=False):
     t = str(text).strip()
     low_t = t.lower()
     corrections = {
-        "reve": "Rugby", "rugbi": "Rugby", "rugby": "Rugby",
-        "atletik": "Athletics", "atletiek": "Athletics",
-        "netbal": "Netball", "netball": "Netball",
-        "hokkie": "Hockey", "hockey": "Hockey",
-        "swem": "Swimming", "swimming": "Swimming",
-        "tennis": "Tennis", "ouditorium": "Auditorium", 
-        "auditorium": "Auditorium", "saal": "Hall", "hall": "Hall",
-        "veld": "Field", "field": "Field"
+        "reve": "Rugby", "rugbi": "Rugby", "atletik": "Athletics", "atletiek": "Athletics",
+        "netbal": "Netball", "hokkie": "Hockey", "swem": "Swimming",
+        "ouditorium": "Auditorium", "saal": "Hall", "veld": "Field"
     }
     for typo, correct in corrections.items():
         if typo in low_t:
@@ -56,21 +51,17 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
-        
-        # Skoonmaak
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
-        
-        # Forceer datum omskakeling (probeer verskillende formate)
+        # Streng datum parsing
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
-# Vandag se grens (met 'n klein buffer vir tydsones)
-safe_limit = (datetime.now(SA_TIME) - timedelta(days=1)).date()
+today = datetime.now(SA_TIME).date()
 
 # 2. Styling
 st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%;}</style>""", unsafe_allow_html=True)
@@ -94,21 +85,14 @@ with st.container():
 
 # 4. Vertoon
 if df_raw.empty:
-    st.info("No data received from Google Sheets. Check the 'Upcoming' tab.")
+    st.info("No data found.")
 else:
     df = df_raw.copy()
-    
-    # VEILIGE FILTERING
     if 'dt_fixed' in df.columns:
-        # Ons skei die goeie datums van die slegtes
-        good_dates = df[df['dt_fixed'].notnull()]
-        bad_dates = df[df['dt_fixed'].isnull()]
-        
-        # Filter goeie datums (>= gister)
-        good_dates = good_dates[good_dates['dt_fixed'].dt.date >= safe_limit]
-        
-        # Voeg hulle weer bymekaar sodat ons niks verloor nie
-        df = pd.concat([good_dates, bad_dates]).sort_values('dt_fixed', ascending=True)
+        # Gooi alle rye weg wat nie 'n datum het nie OF wat voor vandag is
+        df = df.dropna(subset=['dt_fixed'])
+        df = df[df['dt_fixed'].dt.date >= today]
+        df = df.sort_values('dt_fixed', ascending=True)
 
     if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
     if act_f: df = df[df.iloc[:, 3].isin(act_f)]
@@ -116,14 +100,15 @@ else:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
-        st.write("No events found matching your filter.")
+        st.write("No upcoming events found.")
     else:
         h = """<style>body { background:#008080; font-family: sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; }</style>"""
         for _, r in df.iterrows():
-            sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
-            display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
-            
+            sport_h, age_l, display_date = str(r.iloc[3]), str(r.iloc[4]), r['dt_fixed'].strftime('%d %B %Y')
+            ven_r = str(r.iloc[6])
             prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
+            
+            # Venue vertaling
             ven_display = ven_r
             if "ouditorium" in ven_r.lower(): ven_display = ven_r.lower().replace("ouditorium", "Auditorium")
             if "veld" in ven_r.lower(): ven_display = ven_r.lower().replace("veld", "Field")
