@@ -8,12 +8,12 @@ import io
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Instellings & Nuwe Data Bron
+# 1. Konfigurasie
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# VERVANG HIERDIE URL MET JOU NUWE PUBLISHED CSV LINK
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
+# JOU NUWE SKAKEL IS HIER GEÏMPLEMENTEER
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
 def fix_drive_link(url):
     if "drive.google.com" in str(url) and "id=" in str(url):
@@ -42,12 +42,12 @@ def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
-        if df.empty or len(df.columns) < 5: return pd.DataFrame()
+        if df.empty or len(df.columns) < 6: return pd.DataFrame()
         
-        # Skuif indekse aan omdat Email nou bygekom het
-        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True)) # Category
-        df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x)) # Activity
-        df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True)) # Age
+        # Kolom-indekse aangepas vir: A=Timestamp, B=Email, C=Category, D=Activity, E=Age, F=Date, G=Venue
+        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
+        df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
+        df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
         
         def parse_dt(x):
             s = str(x).strip()
@@ -55,21 +55,21 @@ def load_data():
             if '202' not in s: s = f"{s} {datetime.now().year}"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
-        df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt) # Date is nou kolom F (5)
+        df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt) # Datum is in kolom F
         return df
-    except Exception as e:
+    except:
         return pd.DataFrame()
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. Visuele Styl
+# 2. Opskrif & Styl
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; border: none; width: 100%; font-weight: bold; height: 3em;}</style>", unsafe_allow_html=True)
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
-# 3. Filters
+# 3. Filter Seksie
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     search_q = st.text_input("🔍 Search:", placeholder="Type here...").lower().strip()
@@ -84,9 +84,9 @@ with st.container():
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Vertoon Logika
+# 4. Kaartjie Vertoning
 if df_raw.empty:
-    st.info("No data found. Ensure your new Google Sheet is published and contains data.")
+    st.info("Waiting for data from the new Google Sheet...")
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
@@ -100,21 +100,21 @@ else:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
-        st.write("No events matching your search.")
+        st.write("No upcoming events found.")
     else:
         h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; }</style>"""
         
         for _, r in df.iterrows():
-            # AANPASSING VIR NUWE KOLOMME
-            sport_heading = str(r.iloc[3]).strip() # Activity
-            age_label = str(r.iloc[4]).strip()     # Age
-            raw_dt = str(r.iloc[5]).strip()        # Date
-            ven_raw = str(r.iloc[6]).strip()       # Venue
+            sport_h = str(r.iloc[3]).strip() # Activity
+            age_l = str(r.iloc[4]).strip()   # Age
+            raw_dt = str(r.iloc[5]).strip()  # Date
+            ven_r = str(r.iloc[6]).strip()   # Venue
             
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             
             btns = ""
-            for i in [7, 8]: # Programme is 7 (H), Team List is 8 (I)
+            # Links is in H (7) en I (8)
+            for i in [7, 8]:
                 if i < len(r):
                     val = str(r.iloc[i])
                     if "https://" in val:
@@ -122,20 +122,14 @@ else:
                         btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
             
             extra = ""
-            if len(r) > 10: # Information is nou kolom K (10)
+            # Information is in K (10)
+            if len(r) > 10:
                 info_val = str(r.iloc[10])
                 if info_val.lower() != 'nan' and info_val.strip() != "":
                     extra = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_val}</div>"
 
-            h += f"""
-            <div class='card'>
-                <div class='card-title'>{sport_heading} {age_label}</div>
-                <div style='font-size:0.95rem; color:#008080; margin-bottom:4px;'>📅 {display_date}</div>
-                <div style='font-size:0.95rem; color:#444;'>📍 {ven_raw}</div>
-                {btns}
-                {extra}
-            </div>
-            """
+            h += f"<div class='card'><div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div style='font-size:0.95rem; color:#444;'>📍 {ven_r}</div>{btns}{extra}</div>"
+        
         components.html(h, height=2500, scrolling=True)
 
 st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
