@@ -125,4 +125,15 @@ if not df_raw.empty:
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFORMATION"]):
             val = str(r.iloc[i]) if i < len(r) else ""
-            if "http" in val: btns += f"<a href='{fix_drive_link(val)}'
+            if "http" in val: btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
+
+        h += f"""<div class='card'>
+                    {badge}
+                    <div class='card-title'>{r['activity_display']} {r['group_display']}</div>
+                    <div class='info-row'>🗓️ {formatted_date}</div>
+                    <div class='info-row'>{ven_html}</div>
+                    <div style='display:block;'>{btns}</div>
+                    {note}
+                </div>"""
+    
+    components.html(h, height=2500, scrolling=True)
