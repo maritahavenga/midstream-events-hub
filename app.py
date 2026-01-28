@@ -15,11 +15,45 @@ st_autorefresh(interval=120000, key="datarefresh")
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
+def clean_text(text, is_group=False):
+    if not text or str(text).lower() == 'nan': return ""
+    t = str(text).strip()
+    
+    # 1. STANDAARDISEER OUDERDOMME (Slegs vir die Group kolom)
+    if is_group:
+        # Soek vir enige getal in die teks
+        nums = re.findall(r'\d+', t)
+        if nums:
+            age_num = nums[0]
+            # Kyk of daar "girls" of "boys" by is
+            suffix = ""
+            if "girl" in t.lower(): suffix = " Girls"
+            elif "boy" in t.lower(): suffix = " Boys"
+            return f"U{age_num}{suffix}"
+    
+    # 2. STANDAARDISEER SPORT NAME (Display)
+    if t.isupper(): t = t.capitalize()
+    translations = {
+        "atletiek": "Athletics", "swem": "Swimming", "hokkie": "Hockey",
+        "muurbal": "Squash", "bergfiets": "Mountain Bike", "skaak": "Chess",
+        "koor": "Choir", "netbal": "Netball", "tennis": "Tennis",
+        "rugby": "Rugby", "krieket": "Cricket"
+    }
+    low_t = t.lower()
+    if low_t in translations: return translations[low_t]
+    return t
+
 @st.cache_data(ttl=30)
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
+        
+        # Maak Kategorie, Aktiwiteit en Group skoon
+        df.iloc[:, 0] = df.iloc[:, 0].apply(lambda x: clean_text(x))
+        df.iloc[:, 1] = df.iloc[:, 1].apply(lambda x: clean_text(x))
+        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_group=True))
+        
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
@@ -55,7 +89,7 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    search_q = st.text_input("🔍 Search (e.g. u7 or Athletics):", placeholder="Type here...").lower().strip()
+    search_q = st.text_input("🔍 Search (e.g. u12 or Hokkie):", placeholder="Type here...").lower().strip()
     
     col1, col2 = st.columns(2)
     with col1:
@@ -88,43 +122,28 @@ if not df_raw.empty:
         df = df[df.iloc[:, 1].isin(act_f)]
         
     if search_q:
-        # Uitgebreide sinonieme vir sportsoorte
         synonyms = {
-            "atletiek": ["athletics", "atletiek", "sprinting", "hurdles", "track"],
-            "athletics": ["atletiek", "athletics", "sprinting", "hurdles", "track"],
+            "atletiek": ["athletics", "atletiek", "sprinting", "hurdles"],
             "swem": ["swimming", "swem", "gala"],
-            "swimming": ["swimming", "swem", "gala"],
             "muurbal": ["squash", "muurbal"],
-            "squash": ["squash", "muurbal"],
-            "bergfiets": ["mtb", "mountain bike", "bergfiets", "fiets"],
-            "mountain bike": ["mtb", "mountain bike", "bergfiets", "fiets"],
-            "mtb": ["mtb", "mountain bike", "bergfiets", "fiets"],
+            "bergfiets": ["mtb", "mountain bike", "bergfiets"],
             "hokkie": ["hockey", "hokkie"],
-            "hockey": ["hockey", "hokkie"],
-            "tennis": ["tennis"],
-            "netbal": ["netball", "netbal"],
-            "netball": ["netball", "netbal"],
-            "rugby": ["rugby"],
             "skaak": ["chess", "skaak"],
-            "chess": ["chess", "skaak"]
+            "koor": ["choir", "koor"],
+            "krieket": ["cricket", "krieket"]
         }
-        
         search_terms = [search_q]
-        if search_q in synonyms:
-            search_terms.extend(synonyms[search_q])
+        if search_q in synonyms: search_terms.extend(synonyms[search_q])
 
         def match(r):
             try:
                 row_str = " ".join(str(v) for v in r.values).lower()
-                found = any(term in row_str for term in search_terms)
-                is_age = re.search(r'u\s?\d+', search_q)
-                if is_age:
-                    age_match = search_q in row_str
-                    is_mass = any(x in str(r.iloc[1]).lower() for x in ['athletics', 'atletiek', 'swimming', 'swem', 'gala'])
-                    return age_match or is_mass
-                return found
+                # Spesiale check vir ouderdom soektog (u12 ens)
+                if re.match(r'^[uo]?\d+$', search_q):
+                    num = re.findall(r'\d+', search_q)[0]
+                    return f"u{num}" in row_str.replace(" ", "")
+                return any(term in row_str for term in search_terms)
             except: return False
-            
         df = df[df.apply(match, axis=1).fillna(False)]
 
     h = """<style>
