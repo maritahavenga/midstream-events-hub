@@ -29,25 +29,30 @@ def clean_text(text, is_group=False, is_category=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
     low_t = t.lower()
+    
+    # Aktiwiteit korreksies
     corrections = {
         "reve": "Rugby", "rugbi": "Rugby", "atletik": "Athletics", "atletiek": "Athletics",
-        "netbal": "Netball", "hokkie": "Hockey", "swem": "Swimming",
-        "ouditorium": "Auditorium", "saal": "Hall", "veld": "Field", "astro": "Astro"
+        "netbal": "Netball", "hokkie": "Hockey", "swem": "Swimming"
     }
-    for typo, correct in corrections.items():
-        if typo in low_t:
-            t = correct
-            break
+    
     if is_category:
         if "acad" in low_t: return "Academics"
         if "sport" in low_t: return "Sport"
         if "cult" in low_t or "kult" in low_t: return "Culture"
+        return t.capitalize()
+
     if is_group:
-        nums = re.findall(r'\d+', t)
-        if nums:
-            age_num = nums[0]
-            suffix = " Girls" if "girl" in low_t or "dogter" in low_t else (" Boys" if "boy" in low_t or "seun" in low_t else "")
-            return f"U{age_num}{suffix}"
+        # Ons hou die teks soos dit is, maar maak net vertalings vir Boys/Girls
+        t = t.replace("dogters", "Girls").replace("seuns", "Boys")
+        t = t.replace("dogter", "Girls").replace("seun", "Boys")
+        return t
+
+    # Algemene aktiwiteit skoonmaak
+    for typo, correct in corrections.items():
+        if typo in low_t:
+            return correct
+            
     return t.capitalize() if t.isupper() else t
 
 @st.cache_data(ttl=5)
@@ -57,7 +62,7 @@ def load_data():
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
         
-        # Maak skoon
+        # Skoonmaak en stoor in nuwe kolomme vir vertoon
         df['category_display'] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df['activity_display'] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df['group_display'] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
@@ -96,11 +101,9 @@ if df_raw.empty:
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
-        # Filter vir vandag of later
         df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
-        
-        # SORTEER: Eerste op DATUM, dan op aktiwiteit NAAM (alfabeties)
-        df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True], na_position='last')
+        # Sorteer op datum, dan aktiwiteit, dan groep (vir A, B, C volgorde)
+        df = df.sort_values(by=['dt_fixed', 'activity_display', 'group_display'], ascending=[True, True, True], na_position='last')
 
     if cat_f != "All": df = df[df['category_display'] == cat_f]
     if act_f: df = df[df['activity_display'].isin(act_f)]
