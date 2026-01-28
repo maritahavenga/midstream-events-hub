@@ -29,7 +29,6 @@ def clean_text(text, is_group=False, is_category=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
     low_t = t.lower()
-    # Vertalings & Korreksies
     corrections = {
         "reve": "Rugby", "rugbi": "Rugby", "atletik": "Athletics", "atletiek": "Athletics",
         "netbal": "Netball", "hokkie": "Hockey", "swem": "Swimming",
@@ -68,8 +67,16 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. Styling (Midstream Kleure)
-st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%; border:none;}</style>""", unsafe_allow_html=True)
+# 2. Styling (Midstream Kleure & Nuwe Simbole)
+st.markdown("""
+<style>
+    [data-testid="stHeader"] {display: none;}
+    .block-container {padding:0 !important;}
+    div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%; border:none;}
+</style>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+""", unsafe_allow_html=True)
+
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
@@ -94,7 +101,6 @@ if df_raw.empty:
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
-        # POOF Logika: Wys alles vandag of later, of waar datum nie gelees kon word nie
         df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
         df = df.sort_values('dt_fixed', ascending=True, na_position='last')
 
@@ -106,7 +112,6 @@ else:
     if df.empty:
         st.write("<p style='text-align:center; padding:20px;'>No upcoming events found.</p>", unsafe_allow_html=True)
     else:
-        # Hier is die "symbol fix" en skoner voorkoms
         h = """<style>
             body { background:#008080; font-family: sans-serif; padding:15px; } 
             .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
@@ -114,30 +119,28 @@ else:
             .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
             .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } 
             @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } 
-            .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; }
-            .date-row { font-size:0.95rem; color:#008080; margin: 5px 0; font-weight: 500; }
+            .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; display: flex; align-items: center; }
+            .info-row { display: flex; align-items: center; font-size:0.95rem; color:#008080; margin: 8px 0; font-weight: 500; }
+            .material-icons { font-size: 1.1rem; margin-right: 6px; vertical-align: middle; }
         </style>"""
         
         for _, r in df.iterrows():
             sport_h, age_l = str(r.iloc[3]), str(r.iloc[4])
-            # Skoner datum sonder die "17" kalender emoji
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-            
             ven_r = str(r.iloc[6])
             prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
             
-            # Venue vertaling
             ven_display = ven_r
             if "ouditorium" in ven_r.lower(): ven_display = "Auditorium"
             elif "veld" in ven_r.lower(): ven_display = "Field"
             elif "saal" in ven_r.lower(): ven_display = "Hall"
 
             if "see programme" in ven_r.lower() and prog_url:
-                venue_html = f"📍 <a class='map-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
+                venue_html = f"<div class='info-row'><span class='material-icons'>place</span><a class='map-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a></div>"
             else:
                 mq = f"Midstream+College+{ven_r.replace(' ', '+')}"
                 maps_url = f"https://www.google.com/maps/search/?api=1&query={mq}"
-                venue_html = f"📍 <a class='map-link' href='{maps_url}' target='_blank'>{ven_display.upper()}</a>"
+                venue_html = f"<div class='info-row'><span class='material-icons'>place</span><a class='map-link' href='{maps_url}' target='_blank'>{ven_display.upper()}</a></div>"
             
             btns = ""
             for i in [7, 8, 10]:
@@ -154,7 +157,13 @@ else:
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
 
-            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div class='date-row'>📅 {display_date}</div><div>{venue_html}</div>{btns}{note}</div>"
+            h += f"""<div class='card'>
+                {badge}
+                <div class='card-title'>{sport_h} {age_l}</div>
+                <div class='info-row'><span class='material-icons'>event</span> {display_date}</div>
+                {venue_html}
+                {btns}{note}
+            </div>"""
         
         components.html(h, height=2500, scrolling=True)
 
