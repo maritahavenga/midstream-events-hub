@@ -23,36 +23,22 @@ def fix_drive_link(url):
 def clean_text(text, is_group=False, is_category=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
-    
-    # --- AUTO-CORRECT LOGIKA VIR AKTIWITEITE ---
     low_t = t.lower()
-    corrections = {
-        "reve": "Rugby",
-        "rugbi": "Rugby",
-        "atletik": "Athletics",
-        "atletiek": "Athletics",
-        "netbal": "Netball",
-        "hokkie": "Hockey",
-        "skool": "School",
-        "swem": "Swimming"
-    }
+    corrections = {"reve": "Rugby", "rugbi": "Rugby", "atletik": "Athletics", "atletiek": "Athletics", "netbal": "Netball", "hokkie": "Hockey", "skool": "School", "swem": "Swimming"}
     for typo, correct in corrections.items():
         if typo in low_t:
             t = correct
             break
-
     if is_category:
         if "acad" in low_t: return "Academics"
-        if "sport" in low_t: return "Sport"
+        if "sport" in low_c if 'low_c' in locals() else "sport" in low_t: return "Sport"
         if "cult" in low_t or "kult" in low_t: return "Culture"
-    
     if is_group:
         nums = re.findall(r'\d+', t)
         if nums:
             age_num = nums[0]
             suffix = " Girls" if "girl" in low_t else (" Boys" if "boy" in low_t else "")
             return f"U{age_num}{suffix}"
-            
     return t.capitalize() if t.isupper() else t
 
 @st.cache_data(ttl=10)
@@ -67,8 +53,10 @@ def load_data():
         def parse_dt(x):
             s = str(x).strip()
             if not s or s.lower() == 'nan': return pd.NaT
-            if '202' not in s: s = f"{s} {datetime.now().year}"
-            return pd.to_datetime(s, dayfirst=True, errors='coerce')
+            try:
+                if '202' not in s: s = f"{s} {datetime.now().year}"
+                return pd.to_datetime(s, dayfirst=True, errors='coerce')
+            except: return pd.NaT
         df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt)
         return df
     except: return pd.DataFrame()
@@ -77,25 +65,12 @@ df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. Sticky CSS & Styling
-st.markdown("""
-<style>
-    [data-testid="stHeader"] {display: none;}
-    .block-container {padding:0 !important;}
-    [data-testid="stVerticalBlock"] > div:nth-child(3) {
-        position: sticky; top: 0; z-index: 999; background: #008080;
-    }
-    div.stButton > button {
-        background-color: #800000 !important; color: white !important;
-        border-radius: 10px; font-weight: bold; width: 100%;
-    }
-</style>
-""", unsafe_allow_html=True)
-
+# 2. Sticky CSS
+st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%;}</style>""", unsafe_allow_html=True)
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
-# 3. Filter Seksie
+# 3. Filters
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     search_q = st.text_input("🔍 Search:", placeholder="Type here...").lower().strip()
@@ -110,13 +85,13 @@ with st.container():
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Vertoon Logika
+# 4. Vertoon
 if df_raw.empty:
     st.info("Waiting for data...")
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
-        df = df[df['dt_fixed'].dt.date >= today]
+        # Sorteer alles, maar wys alles (geen vandag-filter vir nou)
         df = df.sort_values('dt_fixed', ascending=True)
 
     if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
@@ -125,31 +100,19 @@ else:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
-        st.write("No upcoming events found.")
+        st.write("No events found matching your filter.")
     else:
-        h = """
-        <style>
-            body { background:#008080; font-family:sans-serif; padding:15px; }
-            .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); }
-            .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; }
-            .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; }
-            .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; }
-            @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} }
-            .map-link { color:#444; text-decoration:none; font-size:0.95rem; }
-        </style>
-        """
+        h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } .map-link { color:#444; text-decoration:none; font-size:0.95rem; }</style>"""
         for _, r in df.iterrows():
             sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             maps_url = f"https://www.google.com/maps/search/?api=1&query={ven_r.replace(' ', '+')}"
-            
             btns = ""
             for i in [7, 8, 10]:
                 val = str(r.iloc[i]) if i < len(r) else ""
                 if "https://" in val:
                     lbl = "PROGRAMME" if i == 7 else ("TEAM LIST" if i == 8 else "INFORMATION")
                     btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
-            
             badge, note = "", ""
             if len(r) > 10:
                 info_text = str(r.iloc[10])
@@ -157,7 +120,6 @@ else:
                     if "$" in info_text: badge = "<div class='badge'>RECENT UPDATE</div>"
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
-
             h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>📍 <a class='map-link' href='{maps_url}' target='_blank'>{ven_r}</a></div>{btns}{note}</div>"
         components.html(h, height=2500, scrolling=True)
 
