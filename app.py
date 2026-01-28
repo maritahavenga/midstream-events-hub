@@ -24,8 +24,6 @@ def clean_text(text, is_group=False, is_category=False):
     if not text or str(text).lower() == 'nan': return ""
     t = str(text).strip()
     low_t = t.lower()
-    
-    # --- AUTO-TRANSLATE & CORRECT ---
     corrections = {
         "reve": "Rugby", "rugbi": "Rugby", "rugby": "Rugby",
         "atletik": "Athletics", "atletiek": "Athletics",
@@ -36,24 +34,20 @@ def clean_text(text, is_group=False, is_category=False):
         "auditorium": "Auditorium", "saal": "Hall", "hall": "Hall",
         "veld": "Field", "field": "Field"
     }
-    
     for typo, correct in corrections.items():
         if typo in low_t:
             t = correct
             break
-
     if is_category:
         if "acad" in low_t: return "Academics"
         if "sport" in low_t: return "Sport"
         if "cult" in low_t or "kult" in low_t: return "Culture"
-    
     if is_group:
         nums = re.findall(r'\d+', t)
         if nums:
             age_num = nums[0]
             suffix = " Girls" if "girl" in low_t or "dogter" in low_t else (" Boys" if "boy" in low_t or "seun" in low_t else "")
             return f"U{age_num}{suffix}"
-            
     return t.capitalize() if t.isupper() else t
 
 @st.cache_data(ttl=10)
@@ -65,11 +59,9 @@ def load_data():
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
-        def parse_dt(x):
-            s = str(x).strip()
-            if not s or s.lower() == 'nan': return pd.NaT
-            return pd.to_datetime(s, dayfirst=True, errors='coerce')
-        df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt)
+        
+        # Verbeterde datum verwerking
+        df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
 
@@ -97,13 +89,15 @@ with st.container():
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 4. Vertoon met Datum Filter
+# 4. Vertoon
 if df_raw.empty:
     st.info("Waiting for data...")
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
-        # HIER IS DIE POOF LOGIKA: Slegs vandag of later
+        # VERWYDER SLEGTE DATUMS VOORDAT ONS VERGELYK
+        df = df.dropna(subset=['dt_fixed'])
+        # POOF LOGIKA
         df = df[df['dt_fixed'].dt.date >= today]
         df = df.sort_values('dt_fixed', ascending=True)
 
@@ -127,10 +121,9 @@ else:
         
         for _, r in df.iterrows():
             sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
-            display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
+            display_date = r['dt_fixed'].strftime('%d %B %Y')
             prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
             
-            # Venue vertaling
             ven_display = ven_r
             if "ouditorium" in ven_r.lower(): ven_display = ven_r.lower().replace("ouditorium", "Auditorium")
             if "veld" in ven_r.lower(): ven_display = ven_r.lower().replace("veld", "Field")
@@ -160,8 +153,4 @@ else:
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
 
-            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>{venue_html}</div>{btns}{note}</div>"
-        
-        components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
+            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style
