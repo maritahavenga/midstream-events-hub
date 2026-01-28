@@ -10,7 +10,6 @@ from streamlit_autorefresh import st_autorefresh
 
 # 1. Konfigurasie
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
-# Outomatiese verfris elke 2 minute
 st_autorefresh(interval=120000, key="datarefresh")
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
@@ -45,60 +44,62 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
+        # Vertaal basiese sportsoorte maar hou ekstra teks
+        df['category_display'] = df.iloc[:, 2].fillna("Sport").astype(str).str.replace("Kult", "Culture", case=False).str.replace("Acad", "Academics", case=False)
         df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Rugbi", "Rugby", case=False).str.replace("Atletiek", "Athletics", case=False)
         df['group_display'] = df.iloc[:, 4].apply(format_group_final)
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
 
-# 2. Styling (Nav Bar aanpassings)
-st.markdown("""
-<style>
-    /* Maak die boonste wit spasie minder maar hou die nav bar funksioneel */
-    .block-container {padding-top: 1rem !important; padding-bottom: 0rem !important;}
-    
-    /* Button styling */
+# 2. Styling
+st.markdown("""<style>
+    .block-container {padding-top: 1rem !important;}
     div.stButton > button {
-        background-color: #800000 !important; 
-        color: white !important; 
-        border-radius: 10px; 
-        font-weight: bold; 
-        width: 100%; 
-        border:none;
-        transition: 0.3s;
+        background-color: #800000 !important; color: white !important; 
+        border-radius: 10px; font-weight: bold; width: 100%; border:none; transition: 0.2s;
     }
-    div.stButton > button:active {
-        transform: scale(0.98);
-        background-color: #008080 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+    div.stButton > button:active {transform: scale(0.95);}
+</style>""", unsafe_allow_html=True)
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
 
-# 3. Filters met visuele feedback
-with st.container():
-    st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    search_q = st.text_input("🔍 Search Events:", placeholder="Search...").lower().strip()
-    
-    if st.button("🔄 REFRESH DATA"):
-        with st.spinner('Updating events...'):
-            st.cache_data.clear()
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# 4. Data laai en vertoon
+# 3. Laai data vir filters
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
+# 4. Filter Afdeling
+with st.container():
+    st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
+    
+    search_q = st.text_input("🔍 Search Events:", placeholder="Search anything...").lower().strip()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
+    with col2:
+        act_opts = sorted(df_raw['activity_display'].dropna().unique().tolist()) if not df_raw.empty else []
+        act_f = st.multiselect("Activities:", act_opts)
+    
+    if st.button("🔄 REFRESH DATA"):
+        with st.spinner('Updating...'):
+            st.cache_data.clear()
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# 5. Vertoon
 if not df_raw.empty:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
         df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
         df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True])
 
+    if cat_f != "All":
+        df = df[df['category_display'].str.contains(cat_f, case=False, na=False)]
+    if act_f:
+        df = df[df['activity_display'].isin(act_f)]
     if search_q:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
@@ -117,11 +118,13 @@ if not df_raw.empty:
         display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         venue = str(r.iloc[6]).upper()
         
-        badge, note = "", ""
-        if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and str(r.iloc[10]).strip() != "":
-            info_text = str(r.iloc[10])
-            if "$" in info_text: badge = "<div class='badge-style'>RECENT UPDATE</div>"
-            if "https://" not in info_text: note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
+        badge = ""
+        if len(r) > 10 and "$" in str(r.iloc[10]):
+            badge = "<div class='badge-style'>RECENT UPDATE</div>"
+            
+        note = ""
+        if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "https://" not in str(r.iloc[10]):
+            note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>"
 
         btns = ""
         for i in [7, 8, 10]:
