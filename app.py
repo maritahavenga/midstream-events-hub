@@ -37,15 +37,17 @@ def clean_text(text, is_group=False, is_category=False):
         return t.capitalize()
 
     if is_group:
-        # Spesifieke vervangings vir die "G" en "B" sonder om spanne te breek
-        # Ons soek vir 'n spasie gevolg deur G of B aan die einde of middel
+        # 1. Verander 'onder', 'under', 'o/' na 'U'
+        t = re.sub(r'\b(onder|under|o/|o)\s?(\d+)', r'U\2', t, flags=re.IGNORECASE)
+        # 2. Vertaal dogters/seuns/G/B en dwing 'n spasie af na die U-nommer
+        t = t.replace("dogters", "Girls").replace("seuns", "Boys").replace("dogter", "Girls").replace("seun", "Boys")
         t = re.sub(r'\b[Gg]\b', 'Girls', t)
         t = re.sub(r'\b[Bb]\b', 'Boys', t)
-        t = t.replace("dogters", "Girls").replace("seuns", "Boys")
-        t = t.replace("dogter", "Girls").replace("seun", "Boys")
+        # 3. Dwing spasie tussen U12 en Girls af as dit vasgeplak is
+        t = re.sub(r'(U\d+)([Gg]irls|[Bb]oys)', r'\1 \2', t)
         return t
 
-    # Aktiwiteit vertaling (hou "NBPH Trials" ens. as dit daar staan)
+    # Aktiwiteit vertaling
     t = t.replace("Hokkie", "Hockey").replace("hokkie", "Hockey")
     t = t.replace("Rugbi", "Rugby").replace("rugbi", "Rugby")
     t = t.replace("Atletiek", "Athletics").replace("atletiek", "Athletics")
