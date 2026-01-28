@@ -8,11 +8,12 @@ import io
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Instellings & Data Bron
+# 1. Instellings & Nuwe Data Bron
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# VERVANG HIERDIE URL MET JOU NUWE PUBLISHED CSV LINK
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQifU4qPRCQVNckxHBtA75jfhVR-tqFXUIMEi5z1pdnE-YUgAQvUfaEEDBcwr3VfeSZCBPmePk067rn/pub?gid=0&single=true&output=csv"
 
 def fix_drive_link(url):
     if "drive.google.com" in str(url) and "id=" in str(url):
@@ -41,11 +42,12 @@ def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
-        if df.empty or len(df.columns) < 4: return pd.DataFrame()
+        if df.empty or len(df.columns) < 5: return pd.DataFrame()
         
-        df.iloc[:, 0] = df.iloc[:, 0].apply(lambda x: clean_text(x, is_category=True))
-        df.iloc[:, 1] = df.iloc[:, 1].apply(lambda x: clean_text(x))
-        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_group=True))
+        # Skuif indekse aan omdat Email nou bygekom het
+        df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True)) # Category
+        df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x)) # Activity
+        df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True)) # Age
         
         def parse_dt(x):
             s = str(x).strip()
@@ -53,16 +55,16 @@ def load_data():
             if '202' not in s: s = f"{s} {datetime.now().year}"
             return pd.to_datetime(s, dayfirst=True, errors='coerce')
         
-        df['dt_fixed'] = df.iloc[:, 3].apply(parse_dt)
+        df['dt_fixed'] = df.iloc[:, 5].apply(parse_dt) # Date is nou kolom F (5)
         return df
-    except:
+    except Exception as e:
         return pd.DataFrame()
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
-# 2. Visuele Styl (CSS)
+# 2. Visuele Styl
 st.markdown("<style>[data-testid='stHeader'] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; border: none; width: 100%; font-weight: bold; height: 3em;}</style>", unsafe_allow_html=True)
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Event Hub</div>", unsafe_allow_html=True)
@@ -75,7 +77,7 @@ with st.container():
     with col1:
         cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
     with col2:
-        act_opts = sorted(df_raw.iloc[:, 1].dropna().unique().tolist()) if not df_raw.empty else []
+        act_opts = sorted(df_raw.iloc[:, 3].dropna().unique().tolist()) if not df_raw.empty else []
         act_f = st.multiselect("Activities:", act_opts)
     if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
@@ -84,16 +86,16 @@ with st.container():
 
 # 4. Vertoon Logika
 if df_raw.empty:
-    st.info("No data found. Ensure your 'Upcoming' sheet has entries.")
+    st.info("No data found. Ensure your new Google Sheet is published and contains data.")
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
         df = df.sort_values('dt_fixed', ascending=True)
 
     if cat_f != "All":
-        df = df[df.iloc[:, 0] == cat_f]
+        df = df[df.iloc[:, 2] == cat_f]
     if act_f:
-        df = df[df.iloc[:, 1].isin(act_f)]
+        df = df[df.iloc[:, 3].isin(act_f)]
     if search_q:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
@@ -103,29 +105,28 @@ else:
         h = """<style>body { background:#008080; font-family:sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; }</style>"""
         
         for _, r in df.iterrows():
-            # Kolom 1 is die aktiwiteit (Heading)
-            sport_heading = str(r.iloc[1]).strip()
-            age_label = str(r.iloc[2]).strip()
-            raw_dt = str(r.iloc[3]).strip()
-            ven_raw = str(r.iloc[4]).strip()
+            # AANPASSING VIR NUWE KOLOMME
+            sport_heading = str(r.iloc[3]).strip() # Activity
+            age_label = str(r.iloc[4]).strip()     # Age
+            raw_dt = str(r.iloc[5]).strip()        # Date
+            ven_raw = str(r.iloc[6]).strip()       # Venue
             
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             
             btns = ""
-            for i in [5, 6, 7]:
+            for i in [7, 8]: # Programme is 7 (H), Team List is 8 (I)
                 if i < len(r):
                     val = str(r.iloc[i])
                     if "https://" in val:
-                        lbl = "PROGRAMME" if i == 5 else ("TEAM LIST" if i == 6 else "DOCUMENT")
+                        lbl = "PROGRAMME" if i == 7 else "TEAM LIST"
                         btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
             
             extra = ""
-            if len(r) > 8:
-                info_val = str(r.iloc[8])
+            if len(r) > 10: # Information is nou kolom K (10)
+                info_val = str(r.iloc[10])
                 if info_val.lower() != 'nan' and info_val.strip() != "":
                     extra = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_val}</div>"
 
-            # DIE KAARTJIE: Slegs Aktiwiteit in die heading
             h += f"""
             <div class='card'>
                 <div class='card-title'>{sport_heading} {age_label}</div>
@@ -135,7 +136,6 @@ else:
                 {extra}
             </div>
             """
-        
         components.html(h, height=2500, scrolling=True)
 
 st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
