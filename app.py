@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 import io
@@ -56,18 +56,21 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
+        
+        # Skoonmaak
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
         
-        # Verbeterde datum verwerking
+        # Forceer datum omskakeling (probeer verskillende formate)
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
-today = datetime.now(SA_TIME).date()
+# Vandag se grens (met 'n klein buffer vir tydsones)
+safe_limit = (datetime.now(SA_TIME) - timedelta(days=1)).date()
 
 # 2. Styling
 st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%;}</style>""", unsafe_allow_html=True)
@@ -91,15 +94,21 @@ with st.container():
 
 # 4. Vertoon
 if df_raw.empty:
-    st.info("Waiting for data...")
+    st.info("No data received from Google Sheets. Check the 'Upcoming' tab.")
 else:
     df = df_raw.copy()
+    
+    # VEILIGE FILTERING
     if 'dt_fixed' in df.columns:
-        # VERWYDER SLEGTE DATUMS VOORDAT ONS VERGELYK
-        df = df.dropna(subset=['dt_fixed'])
-        # POOF LOGIKA
-        df = df[df['dt_fixed'].dt.date >= today]
-        df = df.sort_values('dt_fixed', ascending=True)
+        # Ons skei die goeie datums van die slegtes
+        good_dates = df[df['dt_fixed'].notnull()]
+        bad_dates = df[df['dt_fixed'].isnull()]
+        
+        # Filter goeie datums (>= gister)
+        good_dates = good_dates[good_dates['dt_fixed'].dt.date >= safe_limit]
+        
+        # Voeg hulle weer bymekaar sodat ons niks verloor nie
+        df = pd.concat([good_dates, bad_dates]).sort_values('dt_fixed', ascending=True)
 
     if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
     if act_f: df = df[df.iloc[:, 3].isin(act_f)]
@@ -107,23 +116,14 @@ else:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
-        st.write("No upcoming events found.")
+        st.write("No events found matching your filter.")
     else:
-        h = """<style>
-            body { background:#008080; font-family: sans-serif; padding:15px; } 
-            .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
-            .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } 
-            .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
-            .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } 
-            @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } 
-            .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; }
-        </style>"""
-        
+        h = """<style>body { background:#008080; font-family: sans-serif; padding:15px; } .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blink 1.5s infinite; } @keyframes blink { 0% {opacity: 1;} 50% {opacity: 0.3;} 100% {opacity: 1;} } .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; }</style>"""
         for _, r in df.iterrows():
             sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
-            display_date = r['dt_fixed'].strftime('%d %B %Y')
-            prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
+            display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             
+            prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "https" in str(r.iloc[7]) else None
             ven_display = ven_r
             if "ouditorium" in ven_r.lower(): ven_display = ven_r.lower().replace("ouditorium", "Auditorium")
             if "veld" in ven_r.lower(): ven_display = ven_r.lower().replace("veld", "Field")
@@ -144,7 +144,6 @@ else:
                 if "https://" in val:
                     lbl = "PROGRAMME" if i == 7 else ("TEAM LIST" if i == 8 else "INFORMATION")
                     btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
-            
             badge, note = "", ""
             if len(r) > 10:
                 info_text = str(r.iloc[10])
@@ -152,9 +151,7 @@ else:
                     if "$" in info_text: badge = "<div class='badge'>RECENT UPDATE</div>"
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
-
             h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>{venue_html}</div>{btns}{note}</div>"
-        
         components.html(h, height=2500, scrolling=True)
 
 st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
