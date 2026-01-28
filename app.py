@@ -38,7 +38,7 @@ def format_group_final(text):
     if age: return f"U{age}{team} {gender}".strip()
     return t
 
-@st.cache_data(ttl=2)
+@st.cache_data(ttl=1)
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
@@ -94,4 +94,35 @@ if not df_raw.empty:
     if search_q: df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     h = """<style>
-        body { background:#008080; font-family
+        body { background:#008080; font-family: sans-serif; padding:10px; } 
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
+        .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:10px; } 
+        .info-row { font-size:1rem; color:#333; margin: 8px 0; font-weight: 500; }
+        /* HIER IS DIE TEAL BOLD FIX */
+        .teal-link { color: #008080 !important; text-decoration: underline !important; font-weight: 800 !important; display: inline-block; }
+        .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
+        .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blinker 1.2s linear infinite; } 
+        @keyframes blinker { 50% { opacity: 0.2; } }
+    </style>"""
+    
+    for _, r in df.iterrows():
+        ven_raw = str(r.iloc[6]).strip().upper()
+        prog_raw_url = str(r.iloc[7]) if len(r) > 7 else ""
+        prog_url = fix_drive_link(prog_raw_url) if "http" in prog_raw_url else None
+        
+        # Kaart Logika met Teal Bold Link
+        if "SEE PROGRAMME" in ven_raw and prog_url:
+            ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
+        else:
+            search_string = f"Midstream College {ven_raw}" if "CORNWALL" not in ven_raw else ven_raw
+            maps_url = f"https://www.google.com/maps/search/?api=1&query={search_string.replace(' ', '+')}"
+            ven_html = f"📍 <a class='teal-link' href='{maps_url}' target='_blank'>{ven_raw}</a>"
+
+        formatted_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        badge = "<div class='badge-style'>UPDATE</div>" if len(r) > 10 and "$" in str(r.iloc[10]) else ""
+        note = f"<div style='font-size:0.85rem; color:#666; border-top:1px solid #eee; margin-top:10px; padding-top:8px;'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>" if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "http" not in str(r.iloc[10]) and str(r.iloc[10]).strip() != "" else ""
+
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFORMATION"]):
+            val = str(r.iloc[i]) if i < len(r) else ""
+            if "http" in val: btns += f"<a href='{fix_drive_link(val)}'
