@@ -156,4 +156,4 @@ else:
         
         components.html(h, height=2500, scrolling=True)
 
-st.markdown("<div style='background:#800000; color:
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
