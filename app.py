@@ -56,9 +56,14 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
+        
+        # Maak skoon voor ons sorteer
         df.iloc[:, 2] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
+        
+        # Skep 'n tydelike kolom vir die aktiwiteit naam om op te sorteer
+        df['activity_name'] = df.iloc[:, 3].astype(str)
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
@@ -75,7 +80,7 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 # 3. Filters
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    search_q = st.text_input("🔍 Search:", placeholder="Type here...").lower().strip()
+    search_q = st.text_input("🔍 Search Events:", placeholder="Type here...").lower().strip()
     col1, col2 = st.columns(2)
     with col1:
         cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
@@ -93,8 +98,14 @@ if df_raw.empty:
 else:
     df = df_raw.copy()
     if 'dt_fixed' in df.columns:
+        # HIER IS DIE DUBBEL-SORTEER: Datum eerste, dan Aktiwiteit
         df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
-        df = df.sort_values('dt_fixed', ascending=True, na_position='last')
+        df = df.sort_values(by=['dt_fixed', 'activity_name'], ascending=[True, True], na_position='last')
+
+    if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
+    if act_f: df = df[df.iloc[:, 3].isin(act_f)]
+    if search_q:
+        df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
     if df.empty:
         st.write("<p style='text-align:center; padding:20px;'>No upcoming events found.</p>", unsafe_allow_html=True)
@@ -104,17 +115,8 @@ else:
             .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
             .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-top:0; } 
             .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
-            
-            /* NUWE FLIKKER LOGIKA */
             @keyframes simple-blink { 0% {opacity: 1;} 50% {opacity: 0.1;} 100% {opacity: 1;} }
-            .badge-style { 
-                position:absolute; top:15px; right:15px; 
-                background:#FFD700; color:#800000; 
-                padding:4px 8px; border-radius:5px; 
-                font-weight:bold; font-size:0.65rem; 
-                animation: simple-blink 1s infinite;
-            } 
-            
+            .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: simple-blink 1s infinite; } 
             .map-link { color:#800000; text-decoration:underline; font-size:0.95rem; font-weight:600; }
             .info-row { font-size:0.95rem; color:#008080; margin: 8px 0; font-weight: 500; }
         </style>"""
@@ -148,9 +150,7 @@ else:
             if len(r) > 10:
                 info_text = str(r.iloc[10])
                 if info_text.lower() != 'nan' and info_text.strip() != "":
-                    if "$" in info_text: 
-                        # Direkte animasie op die div
-                        badge = "<div class='badge-style'>RECENT UPDATE</div>"
+                    if "$" in info_text: badge = "<div class='badge-style'>RECENT UPDATE</div>"
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
 
