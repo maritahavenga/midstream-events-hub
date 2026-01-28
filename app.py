@@ -134,4 +134,39 @@ if not df_raw.empty:
 
     h = """<style>
     @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
-    body { background:#008080; font-family:'Source Sans 3', sans-serif; margin:0; padding:1
+    body { background:#008080; font-family:'Source Sans 3', sans-serif; margin:0; padding:15px; }
+    .card { background:white; padding:25px; border-radius:22px; border-left:12px solid #800000; margin-bottom:20px; box-shadow:0 6px 15px rgba(0,0,0,0.15); }
+    .card-title { color:#800000; font-size:1.4rem; font-weight:700; margin: 5px 0; }
+    .venue { color:#008080; font-weight:600; font-size: 0.9rem; }
+    .team-box { background:#fff3f3; padding:12px; border-radius:10px; margin:10px 0; border:1px dashed #800000; color:#800000; font-size:0.85rem; }
+    .note-box { background:#f8f9fa; padding:12px; border-radius:10px; margin:10px 0; border-left:5px solid #008080; color:#333; font-size:0.85rem; }
+    .btn-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn { background:#800000; color:white !important; padding:8px 16px; border-radius:10px; font-weight:600; text-decoration:none; font-size:0.75rem; display:inline-block; }
+    </style>"""
+
+    for _, r in df.sort_values('dt_fixed').iterrows():
+        cat, sport, age, ven = str(r.iloc[0]), str(r.iloc[1]), str(r.iloc[2]), str(r.iloc[4])
+        dt_fixed = r['dt_fixed']
+        dt_s = dt_fixed.strftime('%d %B %Y') if pd.notnull(dt_fixed) else "TBA"
+        t_b, b_r, n_b = "", "", ""
+        
+        for idx, lbl in [(5, "PROGRAMME"), (6, "TEAM"), (7, "CONFIRM"), (8, "INFORMATION")]:
+            val = str(r.iloc[idx]).strip()
+            if not val or val.lower() == 'nan': continue
+            link_m = re.search(r'(https?://[^\s<>"]+)', val)
+            if link_m:
+                b_r += f"<a href='{link_m.group(0)}' target='_blank' class='btn'>{lbl}</a> "
+            else:
+                if lbl == "TEAM": t_b = f"<div class='team-box'><b>TEAMS:</b><br>{val}</div>"
+                elif lbl == "INFORMATION": n_b = f"<div class='note-box'><b>Note:</b><br>{val}</div>"
+
+        m_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(ven + ' Midstream')}"
+        h += f"""<div class="card">
+            <div style="color:#666;font-size:0.85rem">🗓️ {dt_s} | {cat}</div>
+            <div class="card-title">{sport} {age}</div>
+            <div class="venue"><a href="{m_url}" target="_blank" style="color:#008080;text-decoration:none;">📍 {ven}</a></div>
+            {t_b}<div class="btn-row">{b_r}</div>{n_b}
+        </div>"""
+    components.html(h + "</div>", height=2000, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Midstream College Primary · info@midstreamprimary.co.za</div>", unsafe_allow_html=True)
