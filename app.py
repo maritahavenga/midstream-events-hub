@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 import io
@@ -60,7 +60,8 @@ def load_data():
 
 df_raw = load_data()
 SA_TIME = pytz.timezone('Africa/Johannesburg')
-today = datetime.now(SA_TIME).date()
+# Ons stel die grens op gister sodat vandag se events 100% veilig is
+yesterday = (datetime.now(SA_TIME) - timedelta(days=1)).date()
 
 # 2. Sticky CSS
 st.markdown("""<style>[data-testid="stHeader"] {display: none;} .block-container {padding:0 !important;} [data-testid="stVerticalBlock"] > div:nth-child(3) {position: sticky; top: 0; z-index: 999; background: #008080;} div.stButton > button {background-color: #800000 !important; color: white !important; border-radius: 10px; font-weight: bold; width: 100%;}</style>""", unsafe_allow_html=True)
@@ -87,13 +88,10 @@ if df_raw.empty:
     st.info("Waiting for data...")
 else:
     df = df_raw.copy()
-    # VEILIGE DATUM FILTER
     if 'dt_fixed' in df.columns:
-        df = df[df['dt_fixed'].notnull()] # Verwyder leë datums eers
-        try:
-            df = df[df['dt_fixed'].dt.date >= today]
-        except:
-            pass 
+        # Verwyder leë datums en wys alles van gister af
+        df = df[df['dt_fixed'].notnull()]
+        df = df[df['dt_fixed'].dt.date >= yesterday]
         df = df.sort_values('dt_fixed', ascending=True)
 
     if cat_f != "All": df = df[df.iloc[:, 2] == cat_f]
@@ -109,7 +107,7 @@ else:
             sport_h, age_l, raw_dt, ven_r = str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6])
             display_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else raw_dt
             
-            # Venue Maps Logika
+            # Maps Logika
             search_ven = ven_r.lower()
             midstream_keywords = ["veld", "astro", "ouditorium", "hall", "tennis", "netbal", "bondev", "field"]
             map_query = f"Midstream+College+{ven_r.replace(' ', '+')}" if any(k in search_ven for k in midstream_keywords) and "midstream" not in search_ven else ven_r.replace(' ', '+')
