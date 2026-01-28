@@ -68,7 +68,7 @@ today = datetime.now(SA_TIME).date()
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 20px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    search_q = st.text_input("🔍 Search:", placeholder="Search anything...").lower().strip()
+    search_q = st.text_input("🔍 Search:", placeholder="Search events...").lower().strip()
     col1, col2 = st.columns(2)
     with col1:
         cat_f = st.selectbox("Category:", ["All", "Sport", "Culture", "Academics"])
@@ -95,28 +95,20 @@ if not df_raw.empty:
 
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
-        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); overflow: hidden; } 
-        .card-title { color:#800000; font-size:1.3rem; font-weight:bold; margin-bottom:12px; line-height: 1.2; } 
-        .info-row { font-size:1rem; color:#333; margin: 10px 0; font-weight: 500; display: block; clear: both; }
-        .map-link { color:#008080 !important; text-decoration:underline; font-weight:700; display: inline-block; padding: 2px 0; }
-        .btn { background:#800000 !important; color:white !important; padding:10px 14px; border-radius:8px; text-decoration:none; font-size:0.8rem; display:inline-block; margin-right:6px; margin-top:12px; font-weight:bold; } 
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
+        .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:8px; } 
+        .info-row { font-size:0.95rem; color:#333; margin: 6px 0; font-weight: 500; }
+        .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
         .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; } 
-        .note-box { font-size:0.9rem; color:#555; border-top:1px solid #eee; margin-top:15px; padding-top:10px; line-height: 1.4; }
     </style>"""
     
     for _, r in df.iterrows():
-        ven_raw = str(r.iloc[6]).strip()
-        prog_url = fix_drive_link(str(r.iloc[7])) if len(r) > 7 and "http" in str(r.iloc[7]) else None
+        venue_text = str(r.iloc[6]).strip().upper()
+        # HIER IS DIE VERANDERING: %B vir die volle maandnaam
+        formatted_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         
-        # Verbeterde Venue Link Logika
-        if "see programme" in ven_raw.lower() and prog_url:
-            ven_display = f"<a class='map-link' href='{prog_url}' target='_blank'>📍 SEE PROGRAMME</a>"
-        else:
-            m_query = f"Midstream+College+{ven_raw.replace(' ', '+')}" if "cornwall" not in ven_raw.lower() else ven_raw.replace(' ', '+')
-            ven_display = f"<a class='map-link' href='http://google.com/maps?q={m_query}' target='_blank'>📍 {ven_raw.upper()}</a>"
-
         badge = "<div class='badge-style'>UPDATE</div>" if len(r) > 10 and "$" in str(r.iloc[10]) else ""
-        note = f"<div class='note-box'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>" if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "http" not in str(r.iloc[10]) and str(r.iloc[10]).strip() != "" else ""
+        note = f"<div style='font-size:0.85rem; color:#666; border-top:1px solid #eee; margin-top:10px; padding-top:8px;'><b>Note:</b> {str(r.iloc[10]).replace('$', '')}</div>" if len(r) > 10 and str(r.iloc[10]).lower() != 'nan' and "http" not in str(r.iloc[10]) and str(r.iloc[10]).strip() != "" else ""
 
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFORMATION"]):
@@ -126,9 +118,9 @@ if not df_raw.empty:
         h += f"""<div class='card'>
                     {badge}
                     <div class='card-title'>{r['activity_display']} {r['group_display']}</div>
-                    <div class='info-row'>🗓️ {r['dt_fixed'].strftime('%d %b %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])}</div>
-                    <div class='info-row'>{ven_display}</div>
-                    <div style='display:block; clear:both;'>{btns}</div>
+                    <div class='info-row'>🗓️ {formatted_date}</div>
+                    <div class='info-row'>📍 {venue_text}</div>
+                    {btns}
                     {note}
                 </div>"""
     
