@@ -37,14 +37,16 @@ def clean_text(text, is_group=False, is_category=False):
         return t.capitalize()
 
     if is_group:
-        # 1. Verander 'onder', 'under', 'o/' na 'U'
+        # 1. Maak alles eers 'U' met 'n nommer (onder 12 -> U12)
         t = re.sub(r'\b(onder|under|o/|o)\s?(\d+)', r'U\2', t, flags=re.IGNORECASE)
-        # 2. Vertaal dogters/seuns/G/B en dwing 'n spasie af na die U-nommer
+        # 2. Dwing die spasie tussen U en die nommer af (U12 -> U 12)
+        t = re.sub(r'[Uu](\d+)', r'U \1', t)
+        # 3. Vertaal dogters/seuns/G/B
         t = t.replace("dogters", "Girls").replace("seuns", "Boys").replace("dogter", "Girls").replace("seun", "Boys")
         t = re.sub(r'\b[Gg]\b', 'Girls', t)
         t = re.sub(r'\b[Bb]\b', 'Boys', t)
-        # 3. Dwing spasie tussen U12 en Girls af as dit vasgeplak is
-        t = re.sub(r'(U\d+)([Gg]irls|[Bb]oys)', r'\1 \2', t)
+        # 4. Dwing spasie voor Girls/Boys af as dit vas is (U 12Girls -> U 12 Girls)
+        t = re.sub(r'(\d+)([Gg]irls|[Bb]oys)', r'\1 \2', t)
         return t
 
     # Aktiwiteit vertaling
@@ -60,11 +62,9 @@ def load_data():
         r = requests.get(f"{URL}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty or len(df.columns) < 6: return pd.DataFrame()
-        
         df['category_display'] = df.iloc[:, 2].apply(lambda x: clean_text(x, is_category=True))
         df['activity_display'] = df.iloc[:, 3].apply(lambda x: clean_text(x))
         df['group_display'] = df.iloc[:, 4].apply(lambda x: clean_text(x, is_group=True))
-        
         df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
         return df
     except: return pd.DataFrame()
