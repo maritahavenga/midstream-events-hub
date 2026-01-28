@@ -153,4 +153,8 @@ else:
                     if "https://" not in info_text:
                         note = f"<div style='font-size:0.85rem; margin-top:10px; color:#333; border-top:1px solid #eee; padding-top:8px;'><b>Note:</b> {info_text.replace('$', '')}</div>"
 
-            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style
+            h += f"<div class='card'>{badge}<div class='card-title'>{sport_h} {age_l}</div><div style='font-size:0.95rem; color:#008080;'>📅 {display_date}</div><div>{venue_html}</div>{btns}{note}</div>"
+        
+        components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Event Hub 2026</div>", unsafe_allow_html=True)
