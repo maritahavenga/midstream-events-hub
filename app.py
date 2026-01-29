@@ -18,34 +18,35 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
-def format_correct_title(d_val, e_val, l_val):
-    """Activity (D) + Age (E) + Team (L)"""
-    d = clean_val(d_val)
-    e = clean_val(e_val)
-    l = clean_val(l_val)
+def format_title_final(d_val, e_val, l_val):
+    """Activity (D) + Age (E) + Team (L) met spesifieke plak-logika."""
+    act = clean_val(d_val)
+    age_raw = clean_val(e_val)
+    team_raw = clean_val(l_val)
     
-    # 1. Kry die nommer uit die Age Group (E)
-    nums = re.findall(r'\d+', e)
-    
-    # 2. Hanteer Reeks logika (bv. 10-13)
-    if "-" in e and len(nums) >= 2:
+    # 1. Formateer Ouderdom (E)
+    nums = re.findall(r'\d+', age_raw)
+    if "-" in age_raw and len(nums) >= 2:
         age_part = f"U{nums[0]}-U{nums[1]}"
     elif nums:
-        age_part = nums[0] # Ons hou net die nommer vir eers (bv. 11)
+        age_part = f"U{nums[0]}"
     else:
-        age_part = e
+        age_part = age_raw
 
-    # 3. Voeg Span (L) by met die spasie-reël
-    # As L 'n enkele letter is (A, B, C), plak vas: 11A
-    # As L 'n woord is (Boys), sit spasie: 11 Boys
-    if len(l) == 1 and l.isalpha():
-        el_combined = f"{age_part}{l.upper()}"
-    elif l:
-        el_combined = f"{age_part} {l}"
+    # 2. Plak-logika vir Team (L)
+    # Ons kyk of die eerste deel van L 'n enkel letter is (A, B, C...)
+    team_parts = team_raw.split(" ", 1)
+    first_chunk = team_parts[0]
+    rest_of_team = f" {team_parts[1]}" if len(team_parts) > 1 else ""
+    
+    if len(first_chunk) == 1 and first_chunk.isalpha():
+        # PLAK VAS: U11 + A + Boys = U11A Boys
+        combined_group = f"{age_part}{first_chunk.upper()}{rest_of_team}"
     else:
-        el_combined = age_part
+        # SPASIE: U11 + Boys = U11 Boys
+        combined_group = f"{age_part} {team_raw}"
 
-    return f"{d} {el_combined}".replace("  ", " ").strip()
+    return f"{act} {combined_group}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
 def load_data(url):
@@ -94,7 +95,7 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Pas Filters toe
+    # Filters
     if st.session_state.f_act != "All Activities":
         df = df[df.iloc[:, 3] == st.session_state.f_act]
     if st.session_state.f_cat != "All Categories":
@@ -114,8 +115,8 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # D=3 (Act), E=4 (Age), L=11 (Team)
-        title_str = format_correct_title(r.iloc[3], r.iloc[4], r.iloc[11])
+        # D=3, E=4, L=11
+        title_str = format_title_final(r.iloc[3], r.iloc[4], r.iloc[11])
         
         if search_q and search_q not in title_str.lower():
             continue
