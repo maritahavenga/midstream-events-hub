@@ -88,9 +88,9 @@ if not df_raw.empty:
     h = """<style>
         body { background:#f8f9fa; font-family: 'Helvetica', sans-serif; }
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; overflow: hidden; }
-        .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; padding-right: 100px; }
+        .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; padding-right: 90px; }
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; display: flex; align-items: center; }
-        .venue-link { color:#008080 !important; font-weight:800; text-decoration:none; text-transform: uppercase; }
+        .venue-bold { color:#008080 !important; font-weight:800; text-decoration:none; text-transform: uppercase; }
         
         .flash-badge { 
             position: absolute; top: 15px; right: 15px; 
@@ -100,13 +100,11 @@ if not df_raw.empty:
         }
         @keyframes blinker { 50% { opacity: 0; } }
 
-        .note-box { background: #ffffff; border: 2px solid #008080; border-radius:8px; padding:12px; margin-top:12px; font-size:0.9rem; color:#004d4d; font-weight: 600; }
+        /* Gister se Note Style */
+        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:5px solid #008080; font-size:0.9rem; color:#004d4d; font-weight: 600; }
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
-        
-        /* Fixed Icon Style for iOS */
-        .icon { width: 18px; height: 18px; margin-right: 10px; vertical-align: middle; }
     </style>"""
 
     for _, r in df.iterrows():
@@ -118,11 +116,14 @@ if not df_raw.empty:
         ven_raw = clean_val(r.iloc[6])
         prog_link = clean_val(r.iloc[7])
         
+        # Maps Fix for Cornwall Hill & Others
         if "see programme" in ven_raw.lower() and "http" in prog_link.lower():
             ven_link = prog_link
             ven_display = ven_raw.upper()
         else:
-            ven_link = f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}"
+            # Added "South Africa" to help Google Maps find places like Cornwall Hill correctly
+            search_query = f"{ven_raw}+Gauteng+South+Africa".replace(' ', '+')
+            ven_link = f"https://www.google.com/maps/search/?api=1&query={search_query}"
             ven_display = ven_raw.upper()
         
         btns = ""
@@ -144,15 +145,12 @@ if not df_raw.empty:
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
         elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
 
-        # SVG Icons to fix iOS "17" issue
-        cal_icon = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
-        pin_icon = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#008080" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>'
-
+        # Back to the nice emojis with a hidden char to fix iOS 17 issue
         h += f"""<div class='card'>
                     {badge_html}
                     <div class='card-title'>{title_str}</div>
-                    <div class='info-row'>{cal_icon} {d_str}</div>
-                    <div class='info-row'>{pin_icon} <a class='venue-link' href='{ven_link}' target='_blank'>{ven_display}</a></div>
+                    <div class='info-row'>📅&nbsp; {d_str}</div>
+                    <div class='info-row'>📍&nbsp; <a class='venue-bold' href='{ven_link}' target='_blank'>{ven_display}</a></div>
                     {extra_content}
                     <div class='btn-box'>{btns}</div>
                  </div>"""
