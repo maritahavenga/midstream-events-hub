@@ -24,20 +24,26 @@ def format_correct_title(d_val, e_val, l_val):
     e = clean_val(e_val)
     l = clean_val(l_val)
     
-    # Formateer E (Ouderdom) met U en hanteer reekse
-    if "-" in e:
-        e_dis = re.sub(r'(\d+)', r'U\1', e)
+    # 1. Kry die nommer uit die Age Group (E)
+    nums = re.findall(r'\d+', e)
+    
+    # 2. Hanteer Reeks logika (bv. 10-13)
+    if "-" in e and len(nums) >= 2:
+        age_part = f"U{nums[0]}-U{nums[1]}"
+    elif nums:
+        age_part = nums[0] # Ons hou net die nommer vir eers (bv. 11)
     else:
-        nums = re.findall(r'\d+', e)
-        e_dis = f"U{nums[0]}" if nums else e
+        age_part = e
 
-    # Spasiëring: As L 'n enkel letter is, plak vas AAN DIE EINDE van die ouderdom
+    # 3. Voeg Span (L) by met die spasie-reël
+    # As L 'n enkele letter is (A, B, C), plak vas: 11A
+    # As L 'n woord is (Boys), sit spasie: 11 Boys
     if len(l) == 1 and l.isalpha():
-        el_combined = f"{e_dis}{l.upper()}"
+        el_combined = f"{age_part}{l.upper()}"
     elif l:
-        el_combined = f"{e_dis} {l}"
+        el_combined = f"{age_part} {l}"
     else:
-        el_combined = e_dis
+        el_combined = age_part
 
     return f"{d} {el_combined}".replace("  ", " ").strip()
 
@@ -56,7 +62,7 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 
 df_raw = load_data(EVENTS_URL)
 
-# 2. NAV PANE (Sticky Filters)
+# 2. NAV PANE (Activity & Category Filters)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
@@ -64,10 +70,10 @@ with st.container():
     if not df_raw.empty:
         with f_col1:
             act_list = ["All Activities"] + sorted(df_raw.iloc[:, 3].unique().tolist())
-            st.selectbox("Filter Activity:", act_list, key="f_act")
+            st.selectbox("Activity:", act_list, key="f_act")
         with f_col2:
-            age_list = ["All Ages"] + sorted(df_raw.iloc[:, 4].astype(str).unique().tolist())
-            st.selectbox("Filter Age Group:", age_list, key="f_age")
+            cat_list = ["All Categories"] + sorted(df_raw.iloc[:, 2].unique().tolist())
+            st.selectbox("Category:", cat_list, key="f_cat")
             
     st.text_input("🔍 Search Everything:", key="f_search", placeholder="Search keywords...")
     
@@ -88,11 +94,11 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Toepassing van Sticky Filters
+    # Pas Filters toe
     if st.session_state.f_act != "All Activities":
         df = df[df.iloc[:, 3] == st.session_state.f_act]
-    if st.session_state.f_age != "All Ages":
-        df = df[df.iloc[:, 4].astype(str) == st.session_state.f_age]
+    if st.session_state.f_cat != "All Categories":
+        df = df[df.iloc[:, 2] == st.session_state.f_cat]
     if st.session_state.f_time == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
 
