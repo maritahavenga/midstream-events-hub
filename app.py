@@ -19,11 +19,7 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text, activity_name=""):
-    """ Vertaal terme, maar los Afrikaans-vakinhoud uit """
-    # As die hoofaktiwiteit 'Afrikaans' is, moenie die inhoud vertaal nie
-    if "afrikaans" in str(activity_name).lower():
-        return text
-
+    if "afrikaans" in str(activity_name).lower(): return text
     translations = {
         "Saal": "Hall", "Ouditorium": "Auditorium", "Musiekkamer": "Music Room",
         "Swembad": "Pool", "Tennisbane": "Tennis Courts", "Netbalbane": "Netball Courts",
@@ -31,12 +27,11 @@ def translate_term(text, activity_name=""):
         "Koor": "Choir", "Astro": "Astro", "Atletiek": "Athletics", "Vierkant": "Quad",
         "Assessering": "Assessment", "Kwartaal": "Term", "Toets": "Test",
         "Mondeling": "Oral", "Toespraak": "Speech", "Hoofrekene": "Mental Maths",
-        "Tegnologie": "Technology", "Wetenskap": "Science", "Wiskunde": "Mathematics"
+        "Tegnologie": "Technology", "Wetenskap": "Science", "Wiskunde": "Mathematics",
+        "Geskiedenis": "History", "Geografie": "Geography", "Sosiale Wetenskappe": "Social Sciences"
     }
-    
     if "klaskamer" in text.lower() or "klas" in text.lower():
         text = re.sub(r'(?i)\bklaskamer\b|\bklas\b', "'s Classroom", text)
-        
     for afrikaans, english in translations.items():
         text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
     return text
@@ -46,15 +41,9 @@ def format_dle_spec(d_val, l_val, e_val):
     act = translate_term(raw_act, raw_act)
     age_raw = clean_val(l_val)
     team_raw = translate_term(clean_val(e_val), raw_act)
-    
     if age_raw:
-        if any(x in age_raw.upper() for x in ["GRADE", "GR", "U"]):
-            age_part = age_raw
-        else:
-            age_part = f"U{age_raw}"
-    else:
-        age_part = ""
-
+        age_part = age_raw if any(x in age_raw.upper() for x in ["GRADE", "GR", "U"]) else f"U{age_raw}"
+    else: age_part = ""
     return f"{act} {age_part} {team_raw}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
@@ -82,7 +71,6 @@ with st.container():
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
             clean_acts = sorted(list(set([translate_term(str(a).split()[0], str(a)) for a in raw_acts])))
             st.multiselect(act_label, ["All"] + clean_acts, default="All", key="f_act")
-    
     st.markdown("---")
     search_q = st.text_input("Search", key="f_search", placeholder="Search Grade, Subject, Sport...")
     if st.button("REFRESH HUB", use_container_width=True):
@@ -96,16 +84,30 @@ today = datetime.now(SA_TIME).date()
 if not df_raw.empty:
     df = df_raw.copy()
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
-    df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     
+    # --- NUWE SLIM LOGIKA ---
+    # Ons kyk of daar 'n 'Full Term' seleksie in Kolom M (index 12) is
+    def should_show(row):
+        is_full_term = False
+        if len(row) > 12: # Kyk of Kolom M bestaan
+            is_full_term = "full term" in str(row.iloc[12]).lower()
+        
+        if is_full_term: return True
+        if pd.isnull(row['dt_fixed']): return True
+        return row['dt_fixed'].date() >= today
+
+    df = df[df.apply(should_show, axis=1)]
+    # ------------------------
+
     if "All" not in st.session_state.f_act:
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x), str(x)) for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
-    
     search_terms = search_q.lower().split()
 
     h = """<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+        body, div, p, a { font-family: 'Inter', sans-serif !important; }
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; }
         .card-title { color:#800000; font-size:1.2rem; font-weight:800; margin-bottom:10px; }
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; }
@@ -121,38 +123,33 @@ if not df_raw.empty:
         raw_act_name = str(r.iloc[3])
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         if search_terms and not any(term in title_str.lower() for term in search_terms): continue
-
-        d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        
+        # As dit 'Full Term' is, wys ons nie 'n spesifieke datum nie, maar 'Full Term'
+        is_ft = False
+        if len(r) > 12: is_ft = "full term" in str(r.iloc[12]).lower()
+        d_str = "FULL TERM" if is_ft else (r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5]))
+        
         ven_raw = translate_term(clean_val(r.iloc[6]), raw_act_name)
         prog_link = clean_val(r.iloc[7])
-        
         on_site = ["hall", "auditorium", "pool", "tennis courts", "netball courts", "squash courts", "astro", "music room", "classroom", "quad"]
         ven_link = "http://googleusercontent.com/maps.google.com/maps?q=Midstream+College+Primary" if any(p in ven_raw.lower() for p in on_site) else f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}+South+Africa"
-        
         is_acad = (str(r.iloc[2]).strip() == "Academics")
         prog_btn_text = "View Document" if is_acad else "Programme"
         team_btn_text = "Assessment Details" if is_acad else "Team List"
-        info_label = "ASSESSMENT" if is_acad else "TEAM"
-
-        btns = ""
-        extra_content = ""
+        info_label = "INFO" if is_acad else "TEAM"
+        btns, extra_content = "", ""
         if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>{prog_btn_text}</a>"
-        
         team_info = translate_term(clean_val(r.iloc[8]), raw_act_name)
         if "http" in team_info.lower(): btns += f"<a href='{team_info}' target='_blank' class='btn'>{team_btn_text}</a>"
         elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team_info}</div>"
-            
         note_raw = clean_val(r.iloc[10])
         note_display = translate_term(note_raw.replace("$", "").strip(), raw_act_name)
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
         elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
-
         badge = "<div style='position:absolute;top:15px;right:15px;background:red;color:white;padding:5px;border-radius:5px;font-size:0.7rem;animation:blink 1s infinite;'>NEW UPDATE</div>" if "$" in note_raw else ""
-
         h += f"""<div class='card'>{badge}<div class='card-title'>{title_str}</div>
                 <div class='info-row'>📅&nbsp;&nbsp;{d_str}</div>
                 <div class='info-row'>📍&nbsp;&nbsp;<a class='venue-bold' href='{ven_link}' target='_blank'>{ven_raw.upper()}</a></div>
                 {extra_content}<div class='btn-box'>{btns}</div></div>"""
-    
     components.html(h, height=2500, scrolling=True)
 st.markdown("<div style='text-align:center;color:#999;font-size:0.8rem;'>Laerskool Midstream College Primary Digital Hub 2026</div>", unsafe_allow_html=True)
