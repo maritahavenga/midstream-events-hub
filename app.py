@@ -19,7 +19,9 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text, activity_name=""):
-    if "afrikaans" in str(activity_name).lower(): return text
+    afrikaans_variants = ["afrikaans", "eat", "eerste addisionele taal"]
+    if any(variant in str(activity_name).lower() for variant in afrikaans_variants):
+        return text
     translations = {
         "Saal": "Hall", "Ouditorium": "Auditorium", "Musiekkamer": "Music Room",
         "Swembad": "Pool", "Tennisbane": "Tennis Courts", "Netbalbane": "Netball Courts",
@@ -28,7 +30,8 @@ def translate_term(text, activity_name=""):
         "Assessering": "Assessment", "Kwartaal": "Term", "Toets": "Test",
         "Mondeling": "Oral", "Toespraak": "Speech", "Hoofrekene": "Mental Maths",
         "Tegnologie": "Technology", "Wetenskap": "Science", "Wiskunde": "Mathematics",
-        "Geskiedenis": "History", "Geografie": "Geography", "Sosiale Wetenskappe": "Social Sciences"
+        "Geskiedenis": "History", "Geografie": "Geography", "Sosiale Wetenskappe": "Social Sciences",
+        "Nuusbrief": "Newsletter"
     }
     if "klaskamer" in text.lower() or "klas" in text.lower():
         text = re.sub(r'(?i)\bklaskamer\b|\bklas\b', "'s Classroom", text)
@@ -36,14 +39,22 @@ def translate_term(text, activity_name=""):
         text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
     return text
 
-def format_dle_spec(d_val, l_val, e_val):
+def format_dle_spec(d_val, l_val, e_val, category=""):
     raw_act = clean_val(d_val)
     act = translate_term(raw_act, raw_act)
     age_raw = clean_val(l_val)
     team_raw = translate_term(clean_val(e_val), raw_act)
+    
     if age_raw:
-        age_part = age_raw if any(x in age_raw.upper() for x in ["GRADE", "GR", "U"]) else f"U{age_raw}"
-    else: age_part = ""
+        # As dit Academics is, gebruik 'Gr'. Anders gebruik 'U'.
+        if category == "Academics":
+            prefix = "Gr " if not any(x in age_raw.upper() for x in ["GRADE", "GR"]) else ""
+            age_part = f"{prefix}{age_raw}"
+        else:
+            age_part = age_raw if any(x in age_raw.upper() for x in ["GRADE", "GR", "U"]) else f"U{age_raw}"
+    else:
+        age_part = ""
+        
     return f"{act} {age_part} {team_raw}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
@@ -85,8 +96,15 @@ if not df_raw.empty:
     df = df_raw.copy()
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
-    # Wys slegs as datum vandag/toekoms is (maak nie saak wat in Kolom M staan nie, datum is koning)
-    df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
+    def should_show(row):
+        is_full_term = False
+        if len(row) > 12: 
+            is_full_term = "full term" in str(row.iloc[12]).lower()
+        if is_full_term: return True
+        if pd.isnull(row['dt_fixed']): return True
+        return row['dt_fixed'].date() >= today
+
+    df = df[df.apply(should_show, axis=1)]
 
     if "All" not in st.session_state.f_act:
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x), str(x)) for sel in st.session_state.f_act))]
@@ -109,11 +127,11 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
+        raw_cat = str(r.iloc[2]).strip()
         raw_act_name = str(r.iloc[3])
-        title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
+        title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4], raw_cat)
         if search_terms and not any(term in title_str.lower() for term in search_terms): continue
         
-        # Check Kolom M vir 'Full Term'
         is_ft = False
         if len(r) > 12: is_ft = "full term" in str(r.iloc[12]).lower()
         d_str = "FULL TERM" if is_ft else (r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5]))
@@ -122,10 +140,12 @@ if not df_raw.empty:
         prog_link = clean_val(r.iloc[7])
         on_site = ["hall", "auditorium", "pool", "tennis courts", "netball courts", "squash courts", "astro", "music room", "classroom", "quad"]
         ven_link = "http://googleusercontent.com/maps.google.com/maps?q=Midstream+College+Primary" if any(p in ven_raw.lower() for p in on_site) else f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}+South+Africa"
-        is_acad = (str(r.iloc[2]).strip() == "Academics")
-        prog_btn_text = "View Document" if is_acad else "Programme"
+        
+        is_acad = (raw_cat == "Academics")
+        prog_btn_text = "Document" if is_acad else "Programme"
         team_btn_text = "Assessment Details" if is_acad else "Team List"
         info_label = "INFO" if is_acad else "TEAM"
+        
         btns, extra_content = "", ""
         if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>{prog_btn_text}</a>"
         team_info = translate_term(clean_val(r.iloc[8]), raw_act_name)
