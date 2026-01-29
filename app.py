@@ -19,7 +19,7 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text):
-    """ Vertaal spesifieke terme na Engels vir die ouers """
+    """ Outomatiese woordeboek vir die Hub """
     translations = {
         "Saal": "Hall",
         "Ouditorium": "Auditorium",
@@ -29,7 +29,8 @@ def translate_term(text):
         "Muurbal": "Squash",
         "Veld": "Field",
         "Koor": "Choir",
-        "Astro": "Astro"
+        "Astro": "Astro",
+        "Atletiek": "Athletics"
     }
     for afrikaans, english in translations.items():
         text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
@@ -37,16 +38,26 @@ def translate_term(text):
 
 def format_dle_spec(d_val, l_val, e_val):
     act = translate_term(clean_val(d_val))
-    age_raw = clean_val(l_val)
-    team_raw = clean_val(e_val)
-    age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
+    age_raw = clean_val(l_val)   # Column L
+    team_raw = clean_val(e_val)  # Column E
+    
+    # KOMPROMIE: Sit net EEN 'U' voor die hele ouderdom-string
+    # Bv. 12-13 word U12-13, 11 word U11
+    if age_raw and not age_raw.upper().startswith('U'):
+        age_part = f"U{age_raw}"
+    else:
+        age_part = age_raw
+
+    # Team attachment logic (e.g., U13A)
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
+    
     if len(first_chunk) == 1 and first_chunk.isalpha():
         combined_le = f"{age_part}{first_chunk.upper()}{rest}"
     else:
         combined_le = f"{age_part} {team_raw}"
+
     return f"{act} {combined_le}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
@@ -71,7 +82,6 @@ with st.container():
         c1, c2 = st.columns(2)
         with c1:
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
-            # Dwing filter lys na Engels
             clean_acts = sorted(list(set([translate_term(str(a).split()[0]) for a in raw_acts])))
             st.multiselect("Activities", ["All"] + clean_acts, default="All", key="f_act")
         with c2:
@@ -98,7 +108,6 @@ if not df_raw.empty:
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     
     if "All" not in st.session_state.f_act:
-        # Filter kyk na vertaalde waarde
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x)) for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
@@ -132,10 +141,10 @@ if not df_raw.empty:
         ven_raw = translate_term(clean_val(r.iloc[6]))
         prog_link = clean_val(r.iloc[7])
         
-        # As dit 'n binnenshuise venue by die skool is, dwing die kaart na Midstream College
+        # Indoor/School venues redirect to Midstream College
         internal_venues = ["hall", "auditorium", "pool", "tennis courts", "squash courts", "astro"]
         if any(iv in ven_raw.lower() for iv in internal_venues) or "see programme" in ven_raw.lower():
-            ven_link = "https://www.google.com/maps/search/Midstream+College" if "http" not in prog_link.lower() else prog_link
+            ven_link = "https://www.google.com/maps/search/Midstream+College"
             ven_display = ven_raw.upper()
         else:
             ven_link = f"https://www.google.com/maps/search/{ven_raw.replace(' ', '+')}+South+Africa"
@@ -158,20 +167,4 @@ if not df_raw.empty:
         elif team_info: extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
-        elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
-
-        h += f"""<div class='card'>
-                    {badge_html}
-                    <div class='card-title'>{title_str}</div>
-                    <div class='info-row'>📅  {d_str}</div>
-                    <div class='info-row'>📍  <a class='venue-bold' href='{ven_link}' target='_blank'>{ven_display}</a></div>
-                    {extra_content}
-                    <div class='btn-box'>{btns}</div>
-                 </div>"""
-    
-    if card_count == 0:
-        h += "<div style='text-align:center;color:#666;padding:40px;'>No events found for this selection.</div>"
-    
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+        elif note_display: extra_content += f"<div class='note-box
