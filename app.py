@@ -1,5 +1,5 @@
 import streamlit as st
-import pd as pd
+import pandas as pd  # <--- HIERDIE IS NOU REG
 import requests
 import io
 import re
@@ -65,7 +65,7 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # --- STRENG D-L-E VOLGORDE ---
+        # --- STRENG VOLGORDE: D-L-E ---
         act = clean_val(r.iloc[3])   # Kolom D
         team = clean_val(r.iloc[11]) # Kolom L
         age_raw = clean_val(r.iloc[4]) # Kolom E
@@ -79,8 +79,7 @@ if not df_raw.empty:
         else:
             display_age = age_raw
 
-        # BOU TITEL: [Activity] [Team] [Age]
-        # Bv. Tennis A Boys U11
+        # BOU TITEL: Activity + Team + Age
         final_title = f"{act} {team} {display_age}".replace("  ", " ").strip()
         
         if search_q and search_q not in final_title.lower():
