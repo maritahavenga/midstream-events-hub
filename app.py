@@ -46,7 +46,7 @@ def format_dle_spec(d_val, l_val, e_val, category=""):
     
     cat_clean = str(category).strip().lower()
     if age_raw:
-        if cat_clean == "academics":
+        if "academic" in cat_clean:
             prefix = "Gr " if not any(x in age_raw.upper() for x in ["GRADE", "GR"]) else ""
             age_part = f"{prefix}{age_raw}"
         else:
@@ -73,15 +73,13 @@ df_raw = load_data(EVENTS_URL)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
     if not df_raw.empty:
-        # DRIE KOLOMME VIR FILTERS
         c1, c2, c3 = st.columns(3)
         with c1:
             sel_cat = st.multiselect("Category", ["All", "Sport", "Culture", "Academics"], default="All", key="f_cat")
         
-        # Dinamiese etikette
         is_only_acad = "Academics" in sel_cat and len(sel_cat) == 1
         act_label = "Subjects" if is_only_acad else "Activities"
-        age_label = "Grade" if is_only_acad else ("Age Group" if ("Sport" in sel_cat or "Culture" in sel_cat) else "Grade / Age")
+        age_label = "Grade" if is_only_acad else "Age / Grade"
 
         with c2:
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
@@ -89,12 +87,11 @@ with st.container():
             st.multiselect(act_label, ["All"] + clean_acts, default="All", key="f_act")
         
         with c3:
-            # Hier is die nuwe ouderdom/graad filter
             raw_ages = sorted(list(set([clean_val(a) for a in df_raw.iloc[:, 11] if a])))
             st.multiselect(age_label, ["All"] + raw_ages, default="All", key="f_age")
 
     st.markdown("---")
-    search_q = st.text_input("Search", key="f_search", placeholder="Search Subject, Sport or Grade...")
+    search_q = st.text_input("Search", key="f_search", placeholder="Search Grade, Subject, Sport...")
     if st.button("REFRESH HUB", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -114,13 +111,16 @@ if not df_raw.empty:
 
     df = df[df.apply(should_show, axis=1)]
 
-    # Filter logika
+    # --- VERBETERDE FILTER LOGIKA ---
     if "All" not in st.session_state.f_cat:
-        df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
+        # Hierdie kyk nou of die woord 'Academic' ENIGSINS in die kolom voorkom
+        df = df[df.iloc[:, 2].apply(lambda x: any(c.lower() in str(x).lower() for c in st.session_state.f_cat))]
+    
     if "All" not in st.session_state.f_act:
-        df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x), str(x)) for sel in st.session_state.f_act))]
+        df = df[df.iloc[:, 3].apply(lambda x: any(sel.lower() in translate_term(str(x), str(x)).lower() for sel in st.session_state.f_act))]
+    
     if "All" not in st.session_state.f_age:
-        df = df[df.iloc[:, 11].astype(str).isin(st.session_state.f_age)]
+        df = df[df.iloc[:, 11].astype(str).apply(lambda x: any(a in clean_val(x) for a in st.session_state.f_age))]
         
     search_terms = search_q.lower().split()
 
@@ -135,7 +135,6 @@ if not df_raw.empty:
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
-        @keyframes blink { 50% { opacity: 0; } }
     </style>"""
 
     for _, r in df.iterrows():
@@ -151,7 +150,7 @@ if not df_raw.empty:
         ven_raw = translate_term(clean_val(r.iloc[6]), raw_act_name)
         prog_link = clean_val(r.iloc[7])
         
-        is_acad = (this_cat.lower() == "academics")
+        is_acad = "academic" in this_cat.lower()
         prog_btn_text = "Document" if is_acad else "Programme"
         team_btn_text = "Assessment Details" if is_acad else "Team List"
         info_label = "INFO" if is_acad else "TEAM"
@@ -160,7 +159,4 @@ if not df_raw.empty:
         if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>{prog_btn_text}</a>"
         team_info = translate_term(clean_val(r.iloc[8]), raw_act_name)
         if "http" in team_info.lower(): btns += f"<a href='{team_info}' target='_blank' class='btn'>{team_btn_text}</a>"
-        elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team_info}</div>"
-        
-        note_raw = clean_val(r.iloc[10])
-        note_display = translate_term(note_raw.replace("$", "").strip(), raw_act_name)
+        elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team
