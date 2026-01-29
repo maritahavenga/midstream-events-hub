@@ -102,4 +102,6 @@ if not df_raw.empty:
 
         h += f"<div class='card'>{badge}<div class='card-title'>{r['final_title']}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
     
-    components.html(h, height=2500, scrolling
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
