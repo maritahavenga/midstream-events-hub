@@ -80,4 +80,33 @@ if not df_raw.empty:
         # As kolom L met 'n enkele letter begin, plak dit vas.
         parts = team_raw.split(" ", 1)
         first_part = parts[0]
-        rest = f" {parts
+        rest = f" {parts[1]}" if len(parts) > 1 else ""
+        
+        if len(first_part) == 1 and first_part.isalpha():
+            final_group = f"{age_display}{first_part}{rest}"
+        else:
+            final_group = f"{age_display} {team_raw}"
+
+        # Finale Titel: Activity + (Age+Team)
+        final_title = f"{act} {final_group}".replace("  ", " ").strip()
+        
+        if search_q and search_q not in final_title.lower():
+            continue
+
+        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
+        ven_raw = clean_val(r.iloc[6]).upper()
+        ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        
+        badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
+        
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower():
+                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
+
+        h += f"<div class='card'>{badge}<div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
