@@ -19,24 +19,26 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def format_dle_spec(d_val, l_val, e_val):
-    """STRENG D-L-E: Activity (D) + Age (L) + Team (E)"""
+    """
+    STRENG DLE VOLGORDE:
+    D = Activity
+    L = Age Group (moet U kry)
+    E = Team (plak vas as dit enkelletter is)
+    """
     act = clean_val(d_val)
-    age_raw = clean_val(l_val)   # Kolom L is nou Age
-    team_raw = clean_val(e_val)  # Kolom E is nou Team
+    age_raw = clean_val(l_val)   # Kolom L is Age
+    team_raw = clean_val(e_val)  # Kolom E is Team
     
-    if not age_raw: return f"{act} {team_raw}".strip()
-
-    # 1. Age (L) Logika: Voeg U by en hanteer reekse
-    nums = re.findall(r'\d+', age_raw)
-    if "-" in age_raw and len(nums) >= 2:
-        age_part = f"U{nums[0]}-U{nums[1]}"
-    elif nums:
-        age_part = f"U{nums[0]}"
+    # 1. Age (L) Logika: Plaas 'U' voor enige getal
+    # Hanteer reekse (10-13 -> U10-U13) en enkel getalle (13 -> U13)
+    if "-" in age_raw:
+        age_part = re.sub(r'(\d+)', r'U\1', age_raw)
     else:
-        age_part = age_raw
+        nums = re.findall(r'\d+', age_raw)
+        age_part = f"U{nums[0]}" if nums else age_raw
 
     # 2. Team (E) Plak-logika:
-    # As Team (E) begin met 'n enkel letter (A, B...), plak vas aan Age (L)
+    # As Team (E) begin met 'n enkel letter (A, B, C...), plak vas aan Age (L)
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest_of_team = f" {team_parts[1]}" if len(team_parts) > 1 else ""
@@ -75,7 +77,6 @@ with st.container():
             act_list = ["All Activities"] + sorted(df_raw.iloc[:, 3].unique().tolist())
             st.selectbox("Filter Activity:", act_list, key="f_act")
         with f_col2:
-            # Category filter (Kolom C)
             cat_list = ["All Categories"] + sorted(df_raw.iloc[:, 2].unique().tolist())
             st.selectbox("Filter Category:", cat_list, key="f_cat")
             
@@ -98,7 +99,7 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Pas Filters toe
+    # Filters
     if st.session_state.f_act != "All Activities":
         df = df[df.iloc[:, 3] == st.session_state.f_act]
     if st.session_state.f_cat != "All Categories":
@@ -118,7 +119,7 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # D=3 (Act), L=11 (Age), E=4 (Team)
+        # D=3, L=11, E=4
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         
         if search_q and search_q not in title_str.lower():
