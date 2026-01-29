@@ -19,27 +19,26 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def format_dle_spec(d_val, l_val, e_val):
-    """STRENG DLE: Activity + Age (met U) + Team"""
+    """
+    STRENG DLE VOLGORDE:
+    D = Activity (Hou volledige naam vir die kaartjie)
+    L = Age Group (Sit U voor elke getal)
+    E = Team (Plak vas as enkelletter)
+    """
     act = clean_val(d_val)
-    # Maak Athletics skoon as dit ekstra teks het
-    if "athletics" in act.lower(): act = "Athletics"
-    
     age_raw = clean_val(l_val)   # Kolom L
     team_raw = clean_val(e_val)  # Kolom E
     
-    # Age (L) Logika: Altyd 'U' voor getalle
-    if "-" in age_raw:
-        age_part = re.sub(r'(\d+)', r'U\1', age_raw)
-    else:
-        nums = re.findall(r'\d+', age_raw)
-        age_part = f"U{nums[0]}" if nums else age_raw
+    # 1. Age (L) Logika: Plaas 'U' voor ELKE getal (10-13 -> U10-U13)
+    age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
 
-    # Team (E) Plak-logika: Enkel letter plak vas
+    # 2. Team (E) Plak-logika:
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
     
     if len(first_chunk) == 1 and first_chunk.isalpha():
+        # Plak vas: U13 + A + Girls = U13A Girls
         combined_le = f"{age_part}{first_chunk.upper()}{rest}"
     else:
         combined_le = f"{age_part} {team_raw}"
@@ -65,18 +64,19 @@ df_raw = load_data(EVENTS_URL)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
-    # Filters
     if not df_raw.empty:
         c1, c2 = st.columns(2)
         with c1:
-            acts = ["All"] + sorted(df_raw.iloc[:, 3].unique().tolist())
-            st.multiselect("Select Activities:", acts, default="All", key="f_act")
+            # Skoon lys vir filter: "Athletics Eldo" word net "Athletics"
+            raw_acts = df_raw.iloc[:, 3].unique().tolist()
+            clean_acts = sorted(list(set([a.split()[0] if "Athletics" in a else a for a in raw_acts])))
+            st.multiselect("Activities:", ["All"] + clean_acts, default="All", key="f_act")
         with c2:
+            # Wys alle kategorieë (Sport, Culture, Academics)
             cats = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
-            st.multiselect("Select Categories (Sport/Culture/Acad):", cats, default="All", key="f_cat")
+            st.multiselect("Category:", cats, default="All", key="f_cat")
             
-    # Multi-Search: Tik bv. "Tennis Swem"
-    search_q = st.text_input("🔍 Multi-Search (e.g. Tennis Swem):", key="f_search").lower().strip()
+    search_q = st.text_input("🔍 Multi-Search (e.g. Swem Tennis):", key="f_search", placeholder="Search...").lower().strip()
     
     b1, b2 = st.columns(2)
     with b1:
@@ -95,13 +95,16 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Filter Logika
+    # Pas Filters toe
     if "All" not in st.session_state.f_act:
-        df = df[df.iloc[:, 3].isin(st.session_state.f_act)]
+        # Filter kyk of die gekose skoon naam in die volledige naam is
+        df = df[df.iloc[:, 3].apply(lambda x: any(sel in x for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
     if st.session_state.f_time == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
+
+    search_terms = search_q.split()
 
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
@@ -112,13 +115,9 @@ if not df_raw.empty:
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
     </style>"""
 
-    # Multi-search terme
-    search_terms = search_q.split() if search_q else []
-
     for _, r in df.iterrows():
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         
-        # Kyk of ENIGE van die soekterme in die titel is
         if search_terms and not any(term in title_str.lower() for term in search_terms):
             continue
 
