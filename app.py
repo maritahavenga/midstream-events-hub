@@ -18,13 +18,15 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
-def format_title_final(d_val, e_val, l_val):
-    """Activity (D) + Age (E) + Team (L) met spesifieke plak-logika."""
+def format_dle_spec(d_val, l_val, e_val):
+    """STRENG D-L-E: Activity (D) + Age (L) + Team (E)"""
     act = clean_val(d_val)
-    age_raw = clean_val(e_val)
-    team_raw = clean_val(l_val)
+    age_raw = clean_val(l_val)   # Kolom L is nou Age
+    team_raw = clean_val(e_val)  # Kolom E is nou Team
     
-    # 1. Formateer Ouderdom (E)
+    if not age_raw: return f"{act} {team_raw}".strip()
+
+    # 1. Age (L) Logika: Voeg U by en hanteer reekse
     nums = re.findall(r'\d+', age_raw)
     if "-" in age_raw and len(nums) >= 2:
         age_part = f"U{nums[0]}-U{nums[1]}"
@@ -33,20 +35,20 @@ def format_title_final(d_val, e_val, l_val):
     else:
         age_part = age_raw
 
-    # 2. Plak-logika vir Team (L)
-    # Ons kyk of die eerste deel van L 'n enkel letter is (A, B, C...)
+    # 2. Team (E) Plak-logika:
+    # As Team (E) begin met 'n enkel letter (A, B...), plak vas aan Age (L)
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest_of_team = f" {team_parts[1]}" if len(team_parts) > 1 else ""
     
     if len(first_chunk) == 1 and first_chunk.isalpha():
-        # PLAK VAS: U11 + A + Boys = U11A Boys
-        combined_group = f"{age_part}{first_chunk.upper()}{rest_of_team}"
+        # Bv. U13 + A + Girls = U13A Girls
+        combined_le = f"{age_part}{first_chunk.upper()}{rest_of_team}"
     else:
-        # SPASIE: U11 + Boys = U11 Boys
-        combined_group = f"{age_part} {team_raw}"
+        # Bv. U13 + Boys = U13 Boys
+        combined_le = f"{age_part} {team_raw}"
 
-    return f"{act} {combined_group}".replace("  ", " ").strip()
+    return f"{act} {combined_le}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
 def load_data(url):
@@ -63,7 +65,7 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 
 df_raw = load_data(EVENTS_URL)
 
-# 2. NAV PANE (Activity & Category Filters)
+# 2. NAV PANE
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
@@ -71,12 +73,13 @@ with st.container():
     if not df_raw.empty:
         with f_col1:
             act_list = ["All Activities"] + sorted(df_raw.iloc[:, 3].unique().tolist())
-            st.selectbox("Activity:", act_list, key="f_act")
+            st.selectbox("Filter Activity:", act_list, key="f_act")
         with f_col2:
+            # Category filter (Kolom C)
             cat_list = ["All Categories"] + sorted(df_raw.iloc[:, 2].unique().tolist())
-            st.selectbox("Category:", cat_list, key="f_cat")
+            st.selectbox("Filter Category:", cat_list, key="f_cat")
             
-    st.text_input("🔍 Search Everything:", key="f_search", placeholder="Search keywords...")
+    st.text_input("🔍 Search Everything:", key="f_search", placeholder="Search activity, age or team...")
     
     b_col1, b_col2 = st.columns(2)
     with b_col1:
@@ -95,7 +98,7 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Filters
+    # Pas Filters toe
     if st.session_state.f_act != "All Activities":
         df = df[df.iloc[:, 3] == st.session_state.f_act]
     if st.session_state.f_cat != "All Categories":
@@ -115,8 +118,8 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # D=3, E=4, L=11
-        title_str = format_title_final(r.iloc[3], r.iloc[4], r.iloc[11])
+        # D=3 (Act), L=11 (Age), E=4 (Team)
+        title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         
         if search_q and search_q not in title_str.lower():
             continue
