@@ -86,4 +86,51 @@ if not df_raw.empty:
     df = df_raw.copy()
     # Maak aktiwiteit name skoon
     df['activity_display'] = df.iloc[:, 3].fillna("").astype(str)
-    df['activity_display'] = df['activity_display'].str.replace("Hokkie", "Hockey", case
+    df['activity_display'] = df['activity_display'].str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Rugbi", "Rugby", case=False).str.replace("Atletiek", "Athletics", case=False)
+    
+    # Pas skoonmaak-logika toe op groepe
+    df['group_display'] = df.iloc[:, 4].apply(format_group_final)
+    df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
+    
+    df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
+    if view_opt == "Next 7 Days":
+        df = df[df['dt_fixed'].dt.date <= (today + timedelta(days=7))]
+    df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True])
+
+    if search_q:
+        df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
+
+    h = """<style>
+        body { background:#008080; font-family: sans-serif; padding:10px; } 
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
+        .card-title { color:#800000; font-size:1.2rem; font-weight:bold; margin-bottom:10px; } 
+        .info-row { font-size:1rem; color:#333; margin: 8px 0; font-weight: 500; }
+        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:bold; display: inline-block; }
+        .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
+        .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.6rem; animation: blinker 1.2s linear infinite; } 
+        @keyframes blinker { 50% { opacity: 0.2; } }
+    </style>"""
+    
+    for _, r in df.iterrows():
+        ven_raw = str(r.iloc[6]).strip().upper()
+        prog_url = fix_drive_link(str(r.iloc[7]))
+        
+        if ven_raw in ["", "TBC"]: ven_html = "📍 VENUE TBC"
+        elif "SEE PROGRAMME" in ven_raw and prog_url:
+            ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
+        else:
+            m_q = f"Midstream+College+{ven_raw.replace(' ', '+')}" if "CORNWALL" not in ven_raw else ven_raw.replace(' ', '+')
+            ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={m_q}' target='_blank'>{ven_raw}</a>"
+
+        f_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        badge = "<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower(): btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
+
+        h += f"<div class='card'>{badge}<div class='card-title'>{r['activity_display']} {r['group_display']}</div><div class='info-row'>🗓️ {f_date}</div><div class='info-row'>{ven_html}</div><div style='display:block;'>{btns}</div></div>"
+    
+    components.html(h, height=2000, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
