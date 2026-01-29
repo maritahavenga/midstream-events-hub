@@ -8,7 +8,7 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Konfigurasie
+# 1. Configuration
 st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
@@ -19,19 +19,15 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def format_dle_spec(d_val, l_val, e_val):
-    """
-    D = Activity
-    L = Age Group (U-prefix)
-    E = Team (Attached if single letter)
-    """
+    """ D=Activity, L=Age (U), E=Team (Attached) """
     act = clean_val(d_val)
-    age_raw = clean_val(l_val)   # Kolom L (Index 11)
-    team_raw = clean_val(e_val)  # Kolom E (Index 4)
+    age_raw = clean_val(l_val)   # Column L (Index 11)
+    team_raw = clean_val(e_val)  # Column E (Index 4)
     
-    # U-logika: 10-13 -> U10-U13
+    # U-prefix logic for numbers and ranges
     age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
 
-    # Plak-logika: U13 + A = U13A
+    # Team attachment logic (e.g., U13A)
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
@@ -52,16 +48,15 @@ def load_data(url):
     except:
         return pd.DataFrame()
 
-# Branding
+# Header
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.5rem; font-weight:800; border-radius:12px 12px 0 0;'>LMCP Digital Hub</div>", unsafe_allow_html=True)
+st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.5rem; font-weight:800; border-radius:12px;'>LMCP Digital Hub</div>", unsafe_allow_html=True)
 
 df_raw = load_data(EVENTS_URL)
 
-# 2. NAV PANE
+# 2. Navigation Pane
 with st.container():
-    st.markdown("<div style='background:white; padding:20px; border-radius:0 0 12px 12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
-    
+    st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin: 15px 0;'>", unsafe_allow_html=True)
     if not df_raw.empty:
         c1, c2 = st.columns(2)
         with c1:
@@ -73,11 +68,11 @@ with st.container():
             st.multiselect("Category", cats, default="All", key="f_cat")
             
     st.markdown("---")
-    search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age (e.g. Tennis U13)...")
+    search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age Group...")
     
     b1, b2 = st.columns([2,1])
     with b1:
-        st.radio("View Range", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
+        st.radio("View", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
     with b2:
         if st.button("REFRESH HUB", use_container_width=True):
             st.cache_data.clear()
@@ -96,40 +91,38 @@ if not df_raw.empty:
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in str(x) for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
-    if st.session_state.f_time == "Next 7 Days":
-        df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
-
+    
     search_terms = search_q.lower().split()
 
     h = """<style>
         body { background:#f8f9fa; font-family: 'Helvetica', sans-serif; }
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; }
-        .info-row { font-size:1rem; color:#444; margin: 10px 0; }
+        .info-row { font-size:1rem; color:#444; margin: 8px 0; }
         .teal-link { color:#008080 !important; font-weight:700; text-decoration:underline; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
-        .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.8rem; font-weight:700; text-transform:uppercase; }
+        .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.8rem; font-weight:700; text-transform:uppercase; display:inline-block; border:none; cursor:pointer; }
     </style>"""
 
     for _, r in df.iterrows():
-        # DLE: Col 3, Col 11, Col 4
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
-        
         if search_terms and not any(term in title_str.lower() for term in search_terms):
             continue
 
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         ven_raw = clean_val(r.iloc[6]).upper()
-        ven_html = f"<a class='teal-link' href='http://maps.google.com/?q={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        ven_html = f"<a class='teal-link' href='http://google.com/maps?q={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
         
-        # Verbeterde knoppie-logika (Program: Col 7, Teams: Col 8, Info: Col 10)
+        # LINK LOGIC: Program (H/7), Teams (I/8), Info (K/10)
         btns = ""
-        link_map = {"PROGRAMME": r.iloc[7], "TEAM LIST": r.iloc[8], "INFO": r.iloc[10]}
+        link_map = {"PROGRAMME": r.iloc[7], "TEAMS": r.iloc[8], "INFORMATION": r.iloc[10]}
         
         for lbl, val in link_map.items():
-            link = str(val).strip()
-            if "http" in link.lower():
-                btns += f"<a href='{link}' target='_blank' class='btn'>{lbl}</a>"
+            content = str(val).strip()
+            if content and content.lower() not in ["nan", "n/a", ""]:
+                # As dit 'n skakel is, maak oop. As dit net teks is, wys as knoppie (of jy kan dit as popup hanteer)
+                link_url = content if "http" in content.lower() else "#"
+                btns += f"<a href='{link_url}' target='_blank' class='btn'>{lbl}</a>"
 
         h += f"""<div class='card'>
                     <div class='card-title'>{title_str}</div>
