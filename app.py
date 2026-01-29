@@ -167,4 +167,21 @@ if not df_raw.empty:
         elif team_info: extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
-        elif note_display: extra_content += f"<div class='note-box
+        elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
+
+        # Safe spaces to prevent iOS hijack
+        h += f"""<div class='card'>
+                    {badge_html}
+                    <div class='card-title'>{title_str}</div>
+                    <div class='info-row'>📅&nbsp;&nbsp;{d_str}</div>
+                    <div class='info-row'>📍&nbsp;&nbsp;<a class='venue-bold' href='{ven_link}' target='_blank'>{ven_display}</a></div>
+                    {extra_content}
+                    <div class='btn-box'>{btns}</div>
+                 </div>"""
+    
+    if card_count == 0:
+        h += "<div style='text-align:center;color:#666;padding:40px;'>No events found for this selection.</div>"
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
