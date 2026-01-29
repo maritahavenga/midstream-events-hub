@@ -122,4 +122,18 @@ if not df_raw.empty:
         btns = ""
         if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{'Document' if is_acad else 'Programme'}</a>"
         if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
-        elif clean_val(r.iloc[8]): btns += f"<div class='team-frame'>INFO: {r.iloc
+        elif clean_val(r.iloc[8]): btns += f"<div class='team-frame'>INFO: {r.iloc[8]}</div>"
+        
+        note = clean_val(r.iloc[10]).replace("$", "")
+        note_html = f"<div class='note-box'>NOTE: {note}</div>" if note else ""
+        
+        h += f"""<div class='card'>
+            <div class='card-title'>{full_title}</div>
+            <div class='info-row'>📅 {d_str} | 📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_raw).upper()}</span></div>
+            {note_html}
+            <div class='btn-box'>{btns}</div>
+        </div>"""
+
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
