@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Configuration
-st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
+st.set_page_config(page_title="Laerskool Midstream College Primary Digital Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
 EVENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
@@ -41,9 +41,9 @@ def load_data(url):
     except:
         return pd.DataFrame()
 
-# Header
+# Header - Altyd voluit geskryf
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
-st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.5rem; font-weight:800; border-radius:12px 12px 0 0;'>LMCP Digital Hub</div>", unsafe_allow_html=True)
+st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.3rem; font-weight:800; border-radius:12px 12px 0 0;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
 df_raw = load_data(EVENTS_URL)
 
@@ -103,17 +103,24 @@ if not df_raw.empty:
             continue
 
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-        ven_raw = clean_val(r.iloc[6]).upper()
-        ven_html = f"<a class='teal-link' href='http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        
+        # Venue Logika
+        ven_raw = clean_val(r.iloc[6])
+        ven_display = ven_raw.upper()
+        ven_link = f"https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}"
+        ven_html = f"<a class='teal-link' href='{ven_link}' target='_blank'>{ven_display}</a>"
         
         btns = ""
         extra_content = ""
         
         # Programme (Col 7)
         prog = clean_val(r.iloc[7])
-        if "http" in prog.lower(): btns += f"<a href='{prog}' target='_blank' class='btn'>Programme</a>"
+        # As venue "See Programme" sê, dwing die Programme knoppie
+        if "see programme" in ven_raw.lower() or "http" in prog.lower():
+            link = prog if "http" in prog.lower() else "#"
+            btns += f"<a href='{link}' target='_blank' class='btn'>Programme</a>"
         
-        # Teams (Col 8) - NUWE DOTTED FRAME
+        # Teams (Col 8)
         team_info = clean_val(r.iloc[8])
         if "http" in team_info.lower(): 
             btns += f"<a href='{team_info}' target='_blank' class='btn'>Team List</a>"
@@ -137,4 +144,4 @@ if not df_raw.empty:
     
     components.html(h, height=2500, scrolling=True)
 
-st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
