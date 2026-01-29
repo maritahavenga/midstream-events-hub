@@ -19,36 +19,42 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text):
-    """ Outomatiese woordeboek vir die Hub """
+    """ Vertaal skoolterme en hanteer Engelse besitvorm (apostrophe s) """
     translations = {
         "Saal": "Hall",
         "Ouditorium": "Auditorium",
+        "Musiekkamer": "Music Room",
         "Swembad": "Pool",
         "Tennisbane": "Tennis Courts",
+        "Netbalbane": "Netball Courts",
         "Muurbalbane": "Squash Courts",
         "Muurbal": "Squash",
         "Veld": "Field",
         "Koor": "Choir",
         "Astro": "Astro",
-        "Atletiek": "Athletics"
+        "Atletiek": "Athletics",
+        "Vierkant": "Quad"
     }
+    
+    # Hanteer "Klaskamer" na "'s Classroom" vir onderwysers
+    if "klaskamer" in text.lower() or "klas" in text.lower():
+        text = re.sub(r'(?i)\bklaskamer\b|\bklas\b', "'s Classroom", text)
+    
     for afrikaans, english in translations.items():
         text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
+        
     return text
 
 def format_dle_spec(d_val, l_val, e_val):
     act = translate_term(clean_val(d_val))
-    age_raw = clean_val(l_val)   # Column L
-    team_raw = clean_val(e_val)  # Column E
+    age_raw = clean_val(l_val)
+    team_raw = clean_val(e_val)
     
-    # KOMPROMIE: Sit net EEN 'U' voor die hele ouderdom-string
-    # Bv. 12-13 word U12-13, 11 word U11
     if age_raw and not age_raw.upper().startswith('U'):
         age_part = f"U{age_raw}"
     else:
         age_part = age_raw
 
-    # Team attachment logic (e.g., U13A)
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
@@ -64,18 +70,19 @@ def format_dle_spec(d_val, l_val, e_val):
 def load_data(url):
     try:
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
-        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
+        # Hanteer spesiale karakters soos ë
+        content = r.content.decode('utf-8')
+        df = pd.read_csv(io.StringIO(content))
         return df.fillna("")
     except:
         return pd.DataFrame()
 
-# Header
+# Branding
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.3rem; font-weight:800; border-radius:12px 12px 0 0;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
 df_raw = load_data(EVENTS_URL)
 
-# 2. Navigation Pane
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 12px 12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
     if not df_raw.empty:
@@ -136,18 +143,15 @@ if not df_raw.empty:
 
         card_count += 1
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-        
-        # Venue Translation & Map Logic
         ven_raw = translate_term(clean_val(r.iloc[6]))
         prog_link = clean_val(r.iloc[7])
         
-        # Indoor/School venues redirect to Midstream College
-        internal_venues = ["hall", "auditorium", "pool", "tennis courts", "squash courts", "astro"]
-        if any(iv in ven_raw.lower() for iv in internal_venues) or "see programme" in ven_raw.lower():
-            ven_link = "https://www.google.com/maps/search/Midstream+College"
+        on_site = ["hall", "auditorium", "pool", "tennis courts", "netball courts", "squash courts", "astro", "music room", "classroom", "quad"]
+        if any(place in ven_raw.lower() for place in on_site) or "see programme" in ven_raw.lower():
+            ven_link = "http://googleusercontent.com/maps.google.com/maps?q=Midstream+College+Primary"
             ven_display = ven_raw.upper()
         else:
-            ven_link = f"https://www.google.com/maps/search/{ven_raw.replace(' ', '+')}+South+Africa"
+            ven_link = f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}+Gauteng+South+Africa"
             ven_display = ven_raw.upper()
         
         btns = ""
@@ -169,7 +173,6 @@ if not df_raw.empty:
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
         elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
 
-        # Safe spaces to prevent iOS hijack
         h += f"""<div class='card'>
                     {badge_html}
                     <div class='card-title'>{title_str}</div>
