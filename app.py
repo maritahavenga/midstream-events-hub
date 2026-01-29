@@ -159,4 +159,20 @@ if not df_raw.empty:
         if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>{prog_btn_text}</a>"
         team_info = translate_term(clean_val(r.iloc[8]), raw_act_name)
         if "http" in team_info.lower(): btns += f"<a href='{team_info}' target='_blank' class='btn'>{team_btn_text}</a>"
-        elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team
+        elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team_info}</div>"
+        
+        note_raw = clean_val(r.iloc[10])
+        note_display = translate_term(note_raw.replace("$", "").strip(), raw_act_name)
+        if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
+        elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
+        
+        badge = "<div style='position:absolute;top:15px;right:15px;background:red;color:white;padding:5px;border-radius:5px;font-size:0.7rem;animation:blink 1s infinite;'>NEW UPDATE</div>" if "$" in note_raw else ""
+        
+        ven_link = "http://googleusercontent.com/maps.google.com/maps?q=Midstream+College+Primary" if any(p in ven_raw.lower() for p in ["hall", "pool", "astro", "quad", "classroom"]) else f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}"
+        
+        h += f"""<div class='card'>{badge}<div class='card-title'>{title_str}</div>
+                <div class='info-row'>📅&nbsp;&nbsp;{d_str}</div>
+                <div class='info-row'>📍&nbsp;&nbsp;<a class='venue-bold' href='{ven_link}' target='_blank'>{ven_raw.upper()}</a></div>
+                {extra_content}<div class='btn-box'>{btns}</div></div>"""
+    components.html(h, height=2500, scrolling=True)
+st.markdown("<div style='text-align:center;color:#999;font-size:0.8rem;'>Laerskool Midstream College Primary Digital Hub 2026</div>", unsafe_allow_html=True)
