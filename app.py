@@ -85,15 +85,8 @@ if not df_raw.empty:
     df = df_raw.copy()
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
-    def should_show(row):
-        is_full_term = False
-        if len(row) > 12: 
-            is_full_term = "full term" in str(row.iloc[12]).lower()
-        if is_full_term: return True
-        if pd.isnull(row['dt_fixed']): return True
-        return row['dt_fixed'].date() >= today
-
-    df = df[df.apply(should_show, axis=1)]
+    # Wys slegs as datum vandag/toekoms is (maak nie saak wat in Kolom M staan nie, datum is koning)
+    df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
 
     if "All" not in st.session_state.f_act:
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x), str(x)) for sel in st.session_state.f_act))]
@@ -120,6 +113,7 @@ if not df_raw.empty:
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         if search_terms and not any(term in title_str.lower() for term in search_terms): continue
         
+        # Check Kolom M vir 'Full Term'
         is_ft = False
         if len(r) > 12: is_ft = "full term" in str(r.iloc[12]).lower()
         d_str = "FULL TERM" if is_ft else (r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5]))
