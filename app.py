@@ -25,16 +25,22 @@ def fix_drive_link(url):
     return u
 
 def format_group_final(age_val, team_val):
-    """Sjurgiese skoonmaak vir Tennis U13B Boys styl."""
-    # Smelt alles saam in een string om te begin soek
-    combined = f"{str(age_val)} {str(team_val)}".upper()
+    """Fokus net op die eerste nommer om U11-U0 foute te vermy."""
+    age_str = str(age_val).upper()
+    team_str = str(team_val).upper()
+    combined = f"{age_str} {team_str}"
     
-    # 1. Kry die nommers (ouderdom)
-    nums = re.findall(r'\d+', combined)
+    # 1. Kry slegs die EERSTE nommer vir die ouderdom
+    nums = re.findall(r'\d+', age_str)
     if not nums: return combined.strip()
-    age_part = f"U{nums[0]}-U{nums[1]}" if len(nums) >= 2 else f"U{nums[0]}"
     
-    # 2. Kry die Span (A, B of C) - soek spesifiek vir losstaande letters
+    # Check vir werklike reekse (net as die gebruiker 'n '-' getik het)
+    if "-" in age_str and len(nums) >= 2:
+        age_part = f"U{nums[0]}-U{nums[1]}"
+    else:
+        age_part = f"U{nums[0]}"
+    
+    # 2. Kry die Span (A, B of C)
     team = ""
     for letter in ["A", "B", "C"]:
         if re.search(rf"\b{letter}\b", combined):
@@ -43,11 +49,9 @@ def format_group_final(age_val, team_val):
             
     # 3. Kry die Geslag
     gender = ""
-    if any(x in combined for x in ["GIRL", "DOGTER", " G", " G "]): gender = "Girls"
-    elif any(x in combined for x in ["BOY", "SEUN", " B", " B "]): gender = "Boys"
+    if any(x in combined for x in ["GIRL", "DOGTER", "GIRLS"]): gender = "Girls"
+    elif any(x in combined for x in ["BOY", "SEUN", "BOYS"]): gender = "Boys"
     
-    # As die 'B' as span gebruik word EN as geslag (Boys), maak seker ons wys dit reg
-    # Spesiale reël: As dit 'B Boys' is, moet dit U13B Boys wees
     return f"{age_part}{team} {gender}".strip()
 
 @st.cache_data(ttl=2)
@@ -57,7 +61,7 @@ def load_data(url):
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
         df = df.replace(['N/A', 'n/a', 'NA', 'na', 'nan'], '', regex=True)
-        # Streng ID: Datum + Aktiwiteit + Ouderdom + Span + Venue
+        # Unieke ID insluitend Span (11) en Venue (6)
         df['unique_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 3].astype(str) + df.iloc[:, 4].astype(str) + df.iloc[:, 11].astype(str) + df.iloc[:, 6].astype(str)
         df = df.drop_duplicates(subset=['unique_id'], keep='last')
         return df
@@ -84,7 +88,7 @@ if not df_raw.empty:
     df = df_raw.copy()
     df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False).str.replace("Rugbi", "Rugby", case=False)
     
-    # Gebruik Kolom E (4) en Kolom L (11)
+    # Kolom E (4) en Kolom L (11)
     df['group_display'] = df.apply(lambda r: format_group_final(r.iloc[4], r.iloc[11]), axis=1)
     
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
