@@ -20,27 +20,28 @@ def clean_val(val):
 
 def format_dle_spec(d_val, l_val, e_val):
     """
-    STRENG DLE VOLGORDE:
-    D = Activity (Hou volledige naam vir die kaartjie)
-    L = Age Group (Sit U voor elke getal)
-    E = Team (Plak vas as enkelletter)
+    D = Activity
+    L = Age Group (Kry die U-behandeling)
+    E = Team
     """
     act = clean_val(d_val)
     age_raw = clean_val(l_val)   # Kolom L
     team_raw = clean_val(e_val)  # Kolom E
     
-    # 1. Age (L) Logika: Plaas 'U' voor ELKE getal (10-13 -> U10-U13)
-    age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
+    # 1. Age (L) Logika: Soek alle getalle en sit 'U' voor elkeen
+    # Dit verander "10-13" na "U10-U13" en "11" na "U11"
+    age_part = re.sub(r'(\d+)', r'U\1', age_raw)
 
-    # 2. Team (E) Plak-logika:
+    # 2. Team (E) Plak-logika
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
     rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
     
     if len(first_chunk) == 1 and first_chunk.isalpha():
-        # Plak vas: U13 + A + Girls = U13A Girls
+        # Bv. U11 + A + Girls = U11A Girls
         combined_le = f"{age_part}{first_chunk.upper()}{rest}"
     else:
+        # Bv. U11 + Boys = U11 Boys
         combined_le = f"{age_part} {team_raw}"
 
     return f"{act} {combined_le}".replace("  ", " ").strip()
@@ -67,12 +68,10 @@ with st.container():
     if not df_raw.empty:
         c1, c2 = st.columns(2)
         with c1:
-            # Skoon lys vir filter: "Athletics Eldo" word net "Athletics"
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
             clean_acts = sorted(list(set([a.split()[0] if "Athletics" in a else a for a in raw_acts])))
             st.multiselect("Activities:", ["All"] + clean_acts, default="All", key="f_act")
         with c2:
-            # Wys alle kategorieë (Sport, Culture, Academics)
             cats = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
             st.multiselect("Category:", cats, default="All", key="f_cat")
             
@@ -97,7 +96,6 @@ if not df_raw.empty:
     
     # Pas Filters toe
     if "All" not in st.session_state.f_act:
-        # Filter kyk of die gekose skoon naam in die volledige naam is
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in x for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
