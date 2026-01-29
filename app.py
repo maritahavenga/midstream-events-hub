@@ -8,7 +8,6 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Configuration
 st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
@@ -30,97 +29,99 @@ def translate_term(text, activity_name=""):
         "Assessering": "Assessment", "Kwartaal": "Term", "Toets": "Test",
         "Mondeling": "Oral", "Toespraak": "Speech", "Hoofrekene": "Mental Maths",
         "Tegnologie": "Technology", "Wetenskap": "Science", "Wiskunde": "Mathematics",
-        "Geskiedenis": "History", "Geografie": "Geography", "Sosiale Wetenskappe": "Social Sciences",
-        "Nuusbrief": "Newsletter"
+        "Geskiedenis": "History", "Geografie": "Geography", "Sosiale Wetenskappe": "Social Sciences"
     }
-    if "klaskamer" in text.lower() or "klas" in text.lower():
-        text = re.sub(r'(?i)\bklaskamer\b|\bklas\b', "'s Classroom", text)
     for afrikaans, english in translations.items():
         text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
     return text
-
-def format_dle_spec(d_val, l_val, e_val, category=""):
-    raw_act = clean_val(d_val)
-    act = translate_term(raw_act, raw_act)
-    age_raw = clean_val(l_val)
-    team_raw = translate_term(clean_val(e_val), raw_act)
-    cat_clean = str(category).strip().lower()
-    if age_raw:
-        if "academic" in cat_clean:
-            prefix = "Gr " if not any(x in age_raw.upper() for x in ["GRADE", "GR"]) else ""
-            age_part = f"{prefix}{age_raw}"
-        else:
-            prefix = "U" if not any(x in age_raw.upper() for x in ["GRADE", "GR", "U"]) else ""
-            age_part = f"{prefix}{age_raw}"
-    else: age_part = ""
-    return f"{act} {age_part} {team_raw}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
 def load_data(url):
     try:
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
+        # Strip spasies van kolomname af om foute te voorkom
+        df.columns = [c.strip() for c in df.columns]
         return df.fillna("")
     except: return pd.DataFrame()
 
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 df_raw = load_data(EVENTS_URL)
 
+# Kolom Name vir verwysing
+CAT_COL = "Category"
+ACT_COL = "Activity / Subject name"
+DATE_COL = "Date / Due Date"
+AGE_COL = "Age Group (9,10) / Grade (1,2,3)"
+DUR_COL = "Display Duration"
+TEAM_COL = "Team / Assessment"
+VENUE_COL = "Venue"
+PROG_COL = "Programme / Document Link"
+INFO_COL = "Team List / Information"
+NOTE_COL = "Note"
+
 if not df_raw.empty:
+    # 1. Filters Area
     with st.container():
         st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
-        with c1:
-            sel_cat = st.multiselect("Category", ["All", "Sport", "Culture", "Academics"], default="All", key="f_cat")
         
-        is_only_acad = "Academics" in sel_cat and len(sel_cat) == 1
+        with c1:
+            cats = ["All"] + sorted([str(x) for x in df_raw[CAT_COL].unique() if x])
+            sel_cat = st.multiselect("Category", cats, default="All", key="f_cat")
+        
+        is_only_acad = any("Academic" in str(c) for c in sel_cat)
         act_label = "Subjects" if is_only_acad else "Activities"
         age_label = "Grade" if is_only_acad else "Age / Grade"
 
         with c2:
-            raw_acts = df_raw.iloc[:, 3].unique().tolist()
-            clean_acts = sorted(list(set([translate_term(str(a).split()[0], str(a)) for a in raw_acts if a])))
-            st.multiselect(act_label, ["All"] + clean_acts, default="All", key="f_act")
+            raw_acts = sorted([str(x) for x in df_raw[ACT_COL].unique() if x])
+            st.multiselect(act_label, ["All"] + raw_acts, default="All", key="f_act")
         
         with c3:
-            # VEILIGHEID: Kyk of Kolom 11 bestaan (Age/Grade)
-            if df_raw.shape[1] > 11:
-                raw_ages = sorted(list(set([clean_val(a) for a in df_raw.iloc[:, 11] if a])))
-                st.multiselect(age_label, ["All"] + raw_ages, default="All", key="f_age")
-            else:
-                st.multiselect(age_label, ["All"], default="All", key="f_age")
+            raw_ages = sorted([str(x) for x in df_raw[AGE_COL].unique() if x])
+            st.multiselect(age_label, ["All"] + raw_ages, default="All", key="f_age")
 
-        st.markdown("---")
         search_q = st.text_input("Search", key="f_search", placeholder="Search Grade, Subject, Sport...")
         if st.button("REFRESH HUB", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
+    # 2. Data Processing
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
-
     df = df_raw.copy()
-    df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
-    def should_show(row):
-        # Kyk of Kolom M (Display Duration) bestaan
-        if len(row) > 12 and "full term" in str(row.iloc[12]).lower(): return True
-        if pd.isnull(row['dt_fixed']): return True
-        return row['dt_fixed'].date() >= today
-
-    df = df[df.apply(should_show, axis=1)]
-
-    # Filters met fout-beskerming
-    if "All" not in st.session_state.f_cat:
-        df = df[df.iloc[:, 2].apply(lambda x: any(c.lower() in str(x).lower() for c in st.session_state.f_cat))]
-    if "All" not in st.session_state.f_act:
-        df = df[df.iloc[:, 3].apply(lambda x: any(sel.lower() in translate_term(str(x), str(x)).lower() for sel in st.session_state.f_act))]
-    if "All" not in st.session_state.f_age and df_raw.shape[1] > 11:
-        df = df[df.iloc[:, 11].astype(str).apply(lambda x: any(a in clean_val(x) for a in st.session_state.f_age))]
+    # Datum skoonmaak
+    df['dt_fixed'] = pd.to_datetime(df[DATE_COL], dayfirst=True, errors='coerce')
+    
+    def filter_logic(row):
+        # Wys as dit vandag/toekoms is OF as Duration 'Full Term' is
+        show_by_date = pd.isnull(row['dt_fixed']) or row['dt_fixed'].date() >= today
+        show_by_dur = False
+        if DUR_COL in row:
+            show_by_dur = "full term" in str(row[DUR_COL]).lower()
         
-    search_terms = search_q.lower().split()
+        if not (show_by_date or show_by_dur): return False
+        
+        # Kategorie Filter
+        if "All" not in st.session_state.f_cat:
+            if not any(str(c).lower() in str(row[CAT_COL]).lower() for c in st.session_state.f_cat): return False
+            
+        # Aktiwiteit Filter
+        if "All" not in st.session_state.f_act:
+            if not any(str(a).lower() in str(row[ACT_COL]).lower() for a in st.session_state.f_act): return False
+            
+        # Ouderdom Filter
+        if "All" not in st.session_state.f_age:
+            if str(row[AGE_COL]) not in st.session_state.f_age: return False
+            
+        return True
 
+    df = df[df.apply(filter_logic, axis=1)]
+
+    # 3. Display
     h = """<style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
         body, div, p, a { font-family: 'Inter', sans-serif !important; }
@@ -135,41 +136,43 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        this_cat = str(r.iloc[2]).strip()
-        raw_act_name = str(r.iloc[3])
-        # Kyk of Kolom 11 bestaan vir format_dle_spec
-        age_val = r.iloc[11] if len(r) > 11 else ""
-        title_str = format_dle_spec(r.iloc[3], age_val, r.iloc[4], this_cat)
+        # Bepaal Kategorie-tipe
+        is_acad = "academic" in str(r[CAT_COL]).lower()
         
-        if search_terms and not any(term in title_str.lower() for term in search_terms): continue
+        # Formateer Titel
+        act_name = translate_term(str(r[ACT_COL]), str(r[ACT_COL]))
+        age_val = str(r[AGE_COL])
+        prefix = "Gr " if is_acad else "U"
+        age_str = f"{prefix}{age_val}" if age_val else ""
+        team_str = translate_term(str(r[TEAM_COL]), str(r[ACT_COL]))
+        title_str = f"{act_name} {age_str} {team_str}".strip()
         
-        is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
-        d_str = "FULL TERM" if is_ft else (r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5]))
+        if st.session_state.f_search and st.session_state.f_search.lower() not in title_str.lower(): continue
         
-        ven_raw = translate_term(clean_val(r.iloc[6]), raw_act_name)
-        prog_link = clean_val(r.iloc[7])
-        is_acad = "academic" in this_cat.lower()
-        prog_btn_text = "Document" if is_acad else "Programme"
-        team_btn_text = "Assessment Details" if is_acad else "Team List"
-        info_label = "INFO" if is_acad else "TEAM"
+        is_ft = DUR_COL in r and "full term" in str(r[DUR_COL]).lower()
+        d_str = "FULL TERM" if is_ft else (r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r[DATE_COL]))
         
-        btns, extra_content = "", ""
-        if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>{prog_btn_text}</a>"
-        team_info = translate_term(clean_val(r.iloc[8]), raw_act_name)
-        if "http" in team_info.lower(): btns += f"<a href='{team_info}' target='_blank' class='btn'>{team_btn_text}</a>"
-        elif team_info: extra_content += f"<div class='team-frame'>{info_label}: {team_info}</div>"
+        # Buttons & Content
+        prog_btn = "Document" if is_acad else "Programme"
+        info_lbl = "INFO" if is_acad else "TEAM"
+        btns, extra = "", ""
         
-        note_raw = clean_val(r.iloc[10])
-        note_display = translate_term(note_raw.replace("$", "").strip(), raw_act_name)
-        if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
-        elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
-        badge = "<div style='position:absolute;top:15px;right:15px;background:red;color:white;padding:5px;border-radius:5px;font-size:0.7rem;animation:blink 1s infinite;'>NEW UPDATE</div>" if "$" in note_raw else ""
+        if "http" in str(r[PROG_COL]).lower(): btns += f"<a href='{r[PROG_COL]}' target='_blank' class='btn'>{prog_btn}</a>"
+        if "http" in str(r[INFO_COL]).lower(): btns += f"<a href='{r[INFO_COL]}' target='_blank' class='btn'>Assessment Details</a>"
+        elif clean_val(r[INFO_COL]): extra += f"<div class='team-frame'>{info_lbl}: {r[INFO_COL]}</div>"
         
-        ven_link = "http://googleusercontent.com/maps.google.com/maps?q=Midstream+College+Primary" if any(p in ven_raw.lower() for p in ["hall", "pool", "astro", "quad", "classroom"]) else f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}"
+        note_text = clean_val(r[NOTE_COL]).replace("$", "")
+        if "http" in note_text.lower(): btns += f"<a href='{note_text}' target='_blank' class='btn'>Info</a>"
+        elif note_text: extra += f"<div class='note-box'>NOTE: {note_text}</div>"
+        
+        badge = "<div style='position:absolute;top:15px;right:15px;background:red;color:white;padding:5px;border-radius:5px;font-size:0.7rem;animation:blink 1s infinite;'>NEW UPDATE</div>" if "$" in str(r[NOTE_COL]) else ""
+        ven_raw = translate_term(str(r[VENUE_COL]), str(r[ACT_COL]))
         
         h += f"""<div class='card'>{badge}<div class='card-title'>{title_str}</div>
                 <div class='info-row'>📅&nbsp;&nbsp;{d_str}</div>
-                <div class='info-row'>📍&nbsp;&nbsp;<a class='venue-bold' href='{ven_link}' target='_blank'>{ven_raw.upper()}</a></div>
-                {extra_content}<div class='btn-box'>{btns}</div></div>"""
+                <div class='info-row'>📍&nbsp;&nbsp;<span class='venue-bold'>{ven_raw.upper()}</span></div>
+                {extra}<div class='btn-box'>{btns}</div></div>"""
+                
     components.html(h, height=2500, scrolling=True)
-st.markdown("<div style='text-align:center;color:#999;font-size:0.8rem;'>Laerskool Midstream College Primary Digital Hub 2026</div>", unsafe_allow_html=True)
+
+st.markdown("<div style='text-align:center;color:#999;font-size:0.8rem;'>Laerskool Midstream College Primary Digital Hub 202
