@@ -35,7 +35,7 @@ st.markdown("<div style='background:#008080; color:white; text-align:center; pad
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    search_q = st.text_input("🔍 Search Events:", placeholder="Search activity, team or age...").lower().strip()
+    search_q = st.text_input("🔍 Search Events:", placeholder="Search...").lower().strip()
     if st.button("🔄 REFRESH HUB"):
         st.cache_data.clear()
         st.rerun()
@@ -62,33 +62,22 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # DATA: D=Activity(3), E=Age(4), L=Team(11)
-        act = clean_val(r.iloc[3])
-        age_raw = clean_val(r.iloc[4])
-        team_raw = clean_val(r.iloc[11])
+        # STRENG D-L-E VOLGORDE
+        d_act = clean_val(r.iloc[3])   # Activity
+        l_team = clean_val(r.iloc[11]) # Team
+        e_age_raw = clean_val(r.iloc[4]) # Age Group
         
-        # 1. Bou Ouderdom (bv. U13)
-        nums = [n for n in re.findall(r'\d+', age_raw) if len(n) < 4]
-        if "-" in age_raw and len(nums) >= 2:
-            age_display = f"U{nums[0]} - U{nums[1]}"
+        # Voeg 'U' by die ouderdom
+        nums = re.findall(r'\d+', e_age_raw)
+        if "-" in e_age_raw and len(nums) >= 2:
+            e_display = f"U{nums[0]} - U{nums[1]}"
         elif nums:
-            age_display = f"U{nums[0]}"
+            e_display = f"U{nums[0]}"
         else:
-            age_display = age_raw
+            e_display = e_age_raw
 
-        # 2. Voeg Span-letter direk agter Ouderdom (bv. U13A)
-        # As kolom L met 'n enkele letter begin, plak dit vas.
-        parts = team_raw.split(" ", 1)
-        first_part = parts[0]
-        rest = f" {parts[1]}" if len(parts) > 1 else ""
-        
-        if len(first_part) == 1 and first_part.isalpha():
-            final_group = f"{age_display}{first_part}{rest}"
-        else:
-            final_group = f"{age_display} {team_raw}"
-
-        # Finale Titel: Activity + (Age+Team)
-        final_title = f"{act} {final_group}".replace("  ", " ").strip()
+        # Finale titel: Activity + Team + Age
+        final_title = f"{d_act} {l_team} {e_display}".replace("  ", " ").strip()
         
         if search_q and search_q not in final_title.lower():
             continue
