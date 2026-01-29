@@ -18,6 +18,30 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
+def format_age_group(val):
+    """Pas U-logika en reeks-logika toe op Kolom E."""
+    s = clean_val(val)
+    if not s: return ""
+    
+    # Reeks logika: vervang getalle met U+getal as daar 'n '-' is
+    if "-" in s:
+        return re.sub(r'(\d+)', r'U\1', s)
+    
+    # Enkel getal logika
+    nums = re.findall(r'\d+', s)
+    if nums:
+        age_part = f"U{nums[0]}"
+        remainder = s.replace(nums[0], "").strip()
+        
+        # Spasiëring reël: Enkel letter (A-H) plak vas, woorde kry spasie
+        if len(remainder) == 1 and remainder.isalpha():
+            return f"{age_part}{remainder.upper()}"
+        elif remainder:
+            return f"{age_part} {remainder}"
+        else:
+            return age_part
+    return s
+
 @st.cache_data(ttl=1)
 def load_data(url):
     try:
@@ -31,25 +55,43 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# 2. NAV PANE
+df_raw = load_data(EVENTS_URL)
+
+# 2. NAV PANE (ALTYD SIGBAAR MET FILTERS)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    with col2:
+        if not df_raw.empty:
+            activities = ["All"] + sorted(df_raw.iloc[:, 3].unique().tolist())
+            act_filter = st.selectbox("Filter by Activity:", activities)
+        else:
+            act_filter = "All"
+            
     search_q = st.text_input("🔍 Search Events:", placeholder="Search...").lower().strip()
+    
     if st.button("🔄 REFRESH HUB"):
         st.cache_data.clear()
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-df_raw = load_data(EVENTS_URL)
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
 if not df_raw.empty:
     df = df_raw.copy()
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
-    df = df[df['dt_fixed'].dt.date >= today]
     
+    # Filters
+    df = df[df['dt_fixed'].dt.date >= today]
+    if view_opt == "Next 7 Days":
+        df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
+    if act_filter != "All":
+        df = df[df.iloc[:, 3] == act_filter]
+
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow: 0 4px 8px rgba(0,0,0,0.1); } 
@@ -62,40 +104,4 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # STRENG D-L-E VOLGORDE
-        d_act = clean_val(r.iloc[3])   # Activity
-        l_team = clean_val(r.iloc[11]) # Team
-        e_age_raw = clean_val(r.iloc[4]) # Age Group
-        
-        # Voeg 'U' by die ouderdom
-        nums = re.findall(r'\d+', e_age_raw)
-        if "-" in e_age_raw and len(nums) >= 2:
-            e_display = f"U{nums[0]} - U{nums[1]}"
-        elif nums:
-            e_display = f"U{nums[0]}"
-        else:
-            e_display = e_age_raw
-
-        # Finale titel: Activity + Team + Age
-        final_title = f"{d_act} {l_team} {e_display}".replace("  ", " ").strip()
-        
-        if search_q and search_q not in final_title.lower():
-            continue
-
-        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
-        ven_raw = clean_val(r.iloc[6]).upper()
-        ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
-        
-        badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
-        
-        btns = ""
-        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
-            val = str(r.iloc[i]).strip()
-            if "http" in val.lower():
-                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
-
-        h += f"<div class='card'>{badge}<div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
-    
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+        # --- STRE
