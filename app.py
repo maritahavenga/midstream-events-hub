@@ -19,7 +19,6 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def format_dle_spec(d_val, l_val, e_val):
-    """ D=Activity, L=Age (U), E=Team (Attached) """
     act = clean_val(d_val)
     age_raw = clean_val(l_val)
     team_raw = clean_val(e_val)
@@ -42,7 +41,7 @@ def load_data(url):
     except:
         return pd.DataFrame()
 
-# Header - Altyd Voluit
+# Header
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.3rem; font-weight:800; border-radius:12px 12px 0 0;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
@@ -51,17 +50,22 @@ df_raw = load_data(EVENTS_URL)
 # 2. Navigation Pane
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 12px 12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
+    
     if not df_raw.empty:
         c1, c2 = st.columns(2)
         with c1:
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
             clean_acts = sorted(list(set([str(a).split()[0] if "Athletics" in str(a) else str(a) for a in raw_acts])))
+            # Altyd default na "All"
             st.multiselect("Activities", ["All"] + clean_acts, default="All", key="f_act")
         with c2:
-            cats = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
-            st.multiselect("Category", cats, default="All", key="f_cat")
+            # Vaste kategorieë ongeag data
+            fixed_cats = ["Sport", "Culture", "Academics"]
+            st.multiselect("Category", ["All"] + fixed_cats, default="All", key="f_cat")
+    
     st.markdown("---")
     search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age Group...")
+    
     b1, b2 = st.columns([2,1])
     with b1:
         st.radio("View", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
@@ -79,10 +83,13 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     
+    # Apply Filters
     if "All" not in st.session_state.f_act:
         df = df[df.iloc[:, 3].apply(lambda x: any(sel in str(x) for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
+    if st.session_state.f_time == "Next 7 Days":
+        df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
     
     search_terms = search_q.lower().split()
 
@@ -92,37 +99,32 @@ if not df_raw.empty:
         .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; padding-right: 90px; }
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; display: flex; align-items: center; }
         .venue-bold { color:#008080 !important; font-weight:800; text-decoration:none; text-transform: uppercase; }
-        
-        .flash-badge { 
-            position: absolute; top: 15px; right: 15px; 
-            background: #ff0000; color: white; padding: 5px 10px; 
-            border-radius: 5px; font-size: 0.7rem; font-weight: 900; 
-            animation: blinker 1s linear infinite; text-transform: uppercase;
-        }
+        .flash-badge { position: absolute; top: 15px; right: 15px; background: #ff0000; color: white; padding: 5px 10px; border-radius: 5px; font-size: 0.7rem; font-weight: 900; animation: blinker 1s linear infinite; text-transform: uppercase; }
         @keyframes blinker { 50% { opacity: 0; } }
-
         .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:5px solid #008080; font-size:0.9rem; color:#004d4d; font-weight: 600; }
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
+        .no-events { text-align: center; color: #666; padding: 40px; font-style: italic; }
     </style>"""
 
+    card_count = 0
     for _, r in df.iterrows():
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         if search_terms and not any(term in title_str.lower() for term in search_terms):
             continue
 
+        card_count += 1
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         ven_raw = clean_val(r.iloc[6])
         prog_link = clean_val(r.iloc[7])
         
-        # Maps Fix with Cornwall Hill context
         if "see programme" in ven_raw.lower() and "http" in prog_link.lower():
             ven_link = prog_link
             ven_display = ven_raw.upper()
         else:
-            search_query = f"{ven_raw}+South+Africa".replace(' ', '+')
-            ven_link = f"https://www.google.com/maps/search/?api=1&query={search_query}"
+            # Enhanced search for Cornwall Hill etc.
+            ven_link = f"https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}+South+Africa"
             ven_display = ven_raw.upper()
         
         btns = ""
@@ -144,15 +146,17 @@ if not df_raw.empty:
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
         elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
 
-        # Using non-breaking space after emoji to prevent iOS "17" icon hijack
         h += f"""<div class='card'>
                     {badge_html}
                     <div class='card-title'>{title_str}</div>
-                    <div class='info-row'>📅&nbsp;&nbsp;{d_str}</div>
-                    <div class='info-row'>📍&nbsp;&nbsp;<a class='venue-bold' href='{ven_link}' target='_blank'>{ven_display}</a></div>
+                    <div class='info-row'>📅  {d_str}</div>
+                    <div class='info-row'>📍  <a class='venue-bold' href='{ven_link}' target='_blank'>{ven_display}</a></div>
                     {extra_content}
                     <div class='btn-box'>{btns}</div>
                  </div>"""
+    
+    if card_count == 0:
+        h += "<div class='no-events'>No events found for this selection at the moment.</div>"
     
     components.html(h, height=2500, scrolling=True)
 
