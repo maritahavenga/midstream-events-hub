@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import re
-from datetime import datetime, timedelta
-import pytz
 import requests
 import io
+from datetime import datetime
+import pytz
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
@@ -14,18 +13,8 @@ st_autorefresh(interval=120000, key="datarefresh")
 
 EVENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-def fix_drive_link(url):
-    u = str(url).strip()
-    if u.lower() in ["n/a", "na", "nan", "", "none"]: return ""
-    if "drive.google.com" in u:
-        if "id=" in u: f_id = u.split("id=")[-1].split("&")[0]
-        elif "/d/" in u: f_id = u.split("/d/")[1].split("/")[0]
-        else: return u
-        return f"https://drive.google.com/file/d/{f_id}/view?usp=sharing"
-    return u
-
-def clean_label(val):
-    """Maak skoon van .0 en NAN foute."""
+def clean_val(val):
+    """Verwyder .0 en ander Excel-geraas."""
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() == "n/a" else v
 
@@ -49,33 +38,14 @@ today = datetime.now(SA_TIME).date()
 if not df_raw.empty:
     df = df_raw.copy()
     
-    # 1. ACTIVITY (Kolom D / Index 3)
-    df['act'] = df.iloc[:, 3].apply(clean_label)
+    # TREK DATA STRENG VOLGENS KOLOMME
+    # Kolom D (3) = Activity
+    # Kolom E (4) = Age Group
+    # Kolom L (11) = Team
     
-    # 2. AGE GROUP (Kolom E / Index 4)
-    # Ons voeg net die 'U' by as dit 'n nommer is
-    def fix_age(x):
-        val = clean_label(x)
-        if val.isdigit(): return f"U{val}"
-        if "-" in val: return val # Hou reekse soos 10-13 soos hulle is
-        return val
-    df['age'] = df.iloc[:, 4].apply(fix_age)
-    
-    # 3. TEAM (Kolom L / Index 11)
-    df['team'] = df.iloc[:, 11].apply(clean_label)
-    
-    # BOU DIE TITEL: Activity + Age Group + Team
-    df['final_title'] = df['act'] + " " + df['age'] + df['team']
-    
-    # Datum verwerking
-    df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
-    df = df[df['dt_fixed'].dt.date >= today]
-    df = df.sort_values(by=['dt_fixed', 'act'])
-
-    # CSS
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
-        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; } 
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
         .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:10px; } 
         .info-row { font-size:0.95rem; color:#333; margin: 8px 0; font-weight: 500; }
         .teal-link { color:#008080 !important; text-decoration:underline; font-weight:800; }
@@ -83,10 +53,25 @@ if not df_raw.empty:
         .badge { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blinker 1.2s linear infinite; } 
         @keyframes blinker { 50% { opacity: 0.3; } }
     </style>"""
-    
+
+    # Verwerk datums vir sortering
+    df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
+    df = df[df['dt_fixed'].dt.date >= today]
+    df = df.sort_values(by=['dt_fixed', df.columns[3]])
+
     for _, r in df.iterrows():
+        # Bou die titel: [Activity] [Age] [Team]
+        act = clean_val(r.iloc[3])
+        age = clean_val(r.iloc[4])
+        team = clean_val(r.iloc[11])
+        
+        # Voeg slegs 'U' by as die Age 'n skoon nommer is
+        display_age = f"U{age}" if age.isdigit() else age
+        
+        final_title = f"{act} {display_age} {team}".replace("  ", " ").strip()
+        
         f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
-        ven_raw = clean_label(r.iloc[6]).upper()
+        ven_raw = clean_val(r.iloc[6]).upper()
         
         # Venue Skakel
         m_q = f"Midstream+College+{ven_raw.replace(' ', '+')}"
@@ -94,13 +79,14 @@ if not df_raw.empty:
 
         badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
         
-        # Knoppies
+        # Knoppies (7=Prog, 8=Team, 10=Info)
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
-            url = fix_drive_link(r.iloc[i])
-            if url: btns += f"<a href='{url}' target='_blank' class='btn'>{lbl}</a> "
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower():
+                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
 
-        h += f"<div class='card'>{badge}<div class='card-title'>{r['final_title']}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
+        h += f"<div class='card'>{badge}<div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
     
     components.html(h, height=2500, scrolling=True)
 
