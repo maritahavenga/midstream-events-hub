@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd  # <--- HIERDIE IS NOU REG
+import pandas as pd
 import requests
 import io
 import re
@@ -50,9 +50,6 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    if view_opt == "Next 7 Days":
-        df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
-
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow: 0 4px 8px rgba(0,0,0,0.1); } 
@@ -65,40 +62,22 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # --- STRENG VOLGORDE: D-L-E ---
-        act = clean_val(r.iloc[3])   # Kolom D
-        team = clean_val(r.iloc[11]) # Kolom L
-        age_raw = clean_val(r.iloc[4]) # Kolom E
+        # DATA: D=Activity(3), E=Age(4), L=Team(11)
+        act = clean_val(r.iloc[3])
+        age_raw = clean_val(r.iloc[4])
+        team_raw = clean_val(r.iloc[11])
         
-        # Ouderdom Logika
+        # 1. Bou Ouderdom (bv. U13)
         nums = [n for n in re.findall(r'\d+', age_raw) if len(n) < 4]
         if "-" in age_raw and len(nums) >= 2:
-            display_age = f"U{nums[0]} - U{nums[1]}"
+            age_display = f"U{nums[0]} - U{nums[1]}"
         elif nums:
-            display_age = f"U{nums[0]}"
+            age_display = f"U{nums[0]}"
         else:
-            display_age = age_raw
+            age_display = age_raw
 
-        # BOU TITEL: Activity + Team + Age
-        final_title = f"{act} {team} {display_age}".replace("  ", " ").strip()
-        
-        if search_q and search_q not in final_title.lower():
-            continue
-
-        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
-        ven_raw = clean_val(r.iloc[6]).upper()
-        ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
-        
-        badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
-        
-        btns = ""
-        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
-            val = str(r.iloc[i]).strip()
-            if "http" in val.lower():
-                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
-
-        h += f"<div class='card'>{badge}<div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
-    
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+        # 2. Voeg Span-letter direk agter Ouderdom (bv. U13A)
+        # As kolom L met 'n enkele letter begin, plak dit vas.
+        parts = team_raw.split(" ", 1)
+        first_part = parts[0]
+        rest = f" {parts
