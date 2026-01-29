@@ -18,27 +18,28 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
-def format_age_logic(age_val, team_val):
-    """Implementeer die U11A vs U11 Boys spasiëring en reeks-logika."""
-    e_raw = clean_val(age_val)
-    l_raw = clean_val(team_val)
+def format_correct_title(d_val, e_val, l_val):
+    """Activity (D) + Age (E) + Team (L)"""
+    d = clean_val(d_val)
+    e = clean_val(e_val)
+    l = clean_val(l_val)
     
-    if not e_raw: return l_raw
-    
-    # Reeks-logika: 10-13 -> U10-U13
-    if "-" in e_raw:
-        age_display = re.sub(r'(\d+)', r'U\1', e_raw)
+    # Formateer E (Ouderdom) met U en hanteer reekse
+    if "-" in e:
+        e_dis = re.sub(r'(\d+)', r'U\1', e)
     else:
-        nums = re.findall(r'\d+', e_raw)
-        age_display = f"U{nums[0]}" if nums else e_raw
+        nums = re.findall(r'\d+', e)
+        e_dis = f"U{nums[0]}" if nums else e
 
-    # Spasiëring: As L 'n enkel letter is, plak vas. Anders spasie.
-    if len(l_raw) == 1 and l_raw.isalpha():
-        return f"{age_display}{l_raw.upper()}"
-    elif l_raw:
-        return f"{age_display} {l_raw}"
+    # Spasiëring: As L 'n enkel letter is, plak vas AAN DIE EINDE van die ouderdom
+    if len(l) == 1 and l.isalpha():
+        el_combined = f"{e_dis}{l.upper()}"
+    elif l:
+        el_combined = f"{e_dis} {l}"
     else:
-        return age_display
+        el_combined = e_dis
+
+    return f"{d} {el_combined}".replace("  ", " ").strip()
 
 @st.cache_data(ttl=1)
 def load_data(url):
@@ -59,24 +60,21 @@ df_raw = load_data(EVENTS_URL)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
+    f_col1, f_col2 = st.columns(2)
     if not df_raw.empty:
-        with col1:
-            act_list = ["All"] + sorted(df_raw.iloc[:, 3].unique().tolist())
-            sel_act = st.selectbox("Activity:", act_list, key="f_act")
-        with col2:
-            cat_list = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
-            sel_cat = st.selectbox("Category:", cat_list, key="f_cat")
-        with col3:
-            ven_list = ["All"] + sorted(df_raw.iloc[:, 6].unique().tolist())
-            sel_ven = st.selectbox("Venue:", ven_list, key="f_ven")
+        with f_col1:
+            act_list = ["All Activities"] + sorted(df_raw.iloc[:, 3].unique().tolist())
+            st.selectbox("Filter Activity:", act_list, key="f_act")
+        with f_col2:
+            age_list = ["All Ages"] + sorted(df_raw.iloc[:, 4].astype(str).unique().tolist())
+            st.selectbox("Filter Age Group:", age_list, key="f_age")
             
-    search_q = st.text_input("🔍 Search text:", key="f_search").lower().strip()
+    st.text_input("🔍 Search Everything:", key="f_search", placeholder="Search keywords...")
     
-    c_btn1, c_btn2 = st.columns(2)
-    with c_btn1:
-        view_opt = st.radio("Timeframe:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
-    with c_btn2:
+    b_col1, b_col2 = st.columns(2)
+    with b_col1:
+        st.radio("Timeline:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
+    with b_col2:
         if st.button("🔄 REFRESH HUB"):
             st.cache_data.clear()
             st.rerun()
@@ -90,15 +88,15 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Pas Filters toe
-    if st.session_state.f_act != "All":
+    # Toepassing van Sticky Filters
+    if st.session_state.f_act != "All Activities":
         df = df[df.iloc[:, 3] == st.session_state.f_act]
-    if st.session_state.f_cat != "All":
-        df = df[df.iloc[:, 2] == st.session_state.f_cat]
-    if st.session_state.f_ven != "All":
-        df = df[df.iloc[:, 6] == st.session_state.f_ven]
-    if view_opt == "Next 7 Days":
+    if st.session_state.f_age != "All Ages":
+        df = df[df.iloc[:, 4].astype(str) == st.session_state.f_age]
+    if st.session_state.f_time == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
+
+    search_q = st.session_state.f_search.lower().strip()
 
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
@@ -110,17 +108,13 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # --- STRENG D-L-E VOLGORDE ---
-        d_act = clean_val(r.iloc[3])
-        # Format L en E saam volgens die spesiale spasiëring reël
-        le_combined = format_age_logic(r.iloc[4], r.iloc[11])
+        # D=3 (Act), E=4 (Age), L=11 (Team)
+        title_str = format_correct_title(r.iloc[3], r.iloc[4], r.iloc[11])
         
-        final_title = f"{d_act} {le_combined}".strip()
-        
-        if search_q and search_q not in final_title.lower():
+        if search_q and search_q not in title_str.lower():
             continue
 
-        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
+        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}" if pd.notnull(r['dt_fixed']) else f"🗓️ {r.iloc[5]}"
         ven_raw = clean_val(r.iloc[6]).upper()
         ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
         
@@ -130,7 +124,7 @@ if not df_raw.empty:
             if "http" in val.lower():
                 btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
 
-        h += f"<div class='card'><div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
+        h += f"<div class='card'><div class='card-title'>{title_str}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
     
     components.html(h, height=2500, scrolling=True)
 
