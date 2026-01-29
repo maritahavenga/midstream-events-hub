@@ -19,35 +19,29 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def format_dle_spec(d_val, l_val, e_val):
-    """
-    STRENG DLE VOLGORDE:
-    D = Activity
-    L = Age Group (moet U kry)
-    E = Team (plak vas as dit enkelletter is)
-    """
+    """STRENG DLE: Activity + Age (met U) + Team"""
     act = clean_val(d_val)
-    age_raw = clean_val(l_val)   # Kolom L is Age
-    team_raw = clean_val(e_val)  # Kolom E is Team
+    # Maak Athletics skoon as dit ekstra teks het
+    if "athletics" in act.lower(): act = "Athletics"
     
-    # 1. Age (L) Logika: Plaas 'U' voor enige getal
-    # Hanteer reekse (10-13 -> U10-U13) en enkel getalle (13 -> U13)
+    age_raw = clean_val(l_val)   # Kolom L
+    team_raw = clean_val(e_val)  # Kolom E
+    
+    # Age (L) Logika: Altyd 'U' voor getalle
     if "-" in age_raw:
         age_part = re.sub(r'(\d+)', r'U\1', age_raw)
     else:
         nums = re.findall(r'\d+', age_raw)
         age_part = f"U{nums[0]}" if nums else age_raw
 
-    # 2. Team (E) Plak-logika:
-    # As Team (E) begin met 'n enkel letter (A, B, C...), plak vas aan Age (L)
+    # Team (E) Plak-logika: Enkel letter plak vas
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
-    rest_of_team = f" {team_parts[1]}" if len(team_parts) > 1 else ""
+    rest = f" {team_parts[1]}" if len(team_parts) > 1 else ""
     
     if len(first_chunk) == 1 and first_chunk.isalpha():
-        # Bv. U13 + A + Girls = U13A Girls
-        combined_le = f"{age_part}{first_chunk.upper()}{rest_of_team}"
+        combined_le = f"{age_part}{first_chunk.upper()}{rest}"
     else:
-        # Bv. U13 + Boys = U13 Boys
         combined_le = f"{age_part} {team_raw}"
 
     return f"{act} {combined_le}".replace("  ", " ").strip()
@@ -71,21 +65,23 @@ df_raw = load_data(EVENTS_URL)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     
-    f_col1, f_col2 = st.columns(2)
+    # Filters
     if not df_raw.empty:
-        with f_col1:
-            act_list = ["All Activities"] + sorted(df_raw.iloc[:, 3].unique().tolist())
-            st.selectbox("Filter Activity:", act_list, key="f_act")
-        with f_col2:
-            cat_list = ["All Categories"] + sorted(df_raw.iloc[:, 2].unique().tolist())
-            st.selectbox("Filter Category:", cat_list, key="f_cat")
+        c1, c2 = st.columns(2)
+        with c1:
+            acts = ["All"] + sorted(df_raw.iloc[:, 3].unique().tolist())
+            st.multiselect("Select Activities:", acts, default="All", key="f_act")
+        with c2:
+            cats = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
+            st.multiselect("Select Categories (Sport/Culture/Acad):", cats, default="All", key="f_cat")
             
-    st.text_input("🔍 Search Everything:", key="f_search", placeholder="Search activity, age or team...")
+    # Multi-Search: Tik bv. "Tennis Swem"
+    search_q = st.text_input("🔍 Multi-Search (e.g. Tennis Swem):", key="f_search").lower().strip()
     
-    b_col1, b_col2 = st.columns(2)
-    with b_col1:
+    b1, b2 = st.columns(2)
+    with b1:
         st.radio("Timeline:", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
-    with b_col2:
+    with b2:
         if st.button("🔄 REFRESH HUB"):
             st.cache_data.clear()
             st.rerun()
@@ -99,30 +95,31 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
-    # Filters
-    if st.session_state.f_act != "All Activities":
-        df = df[df.iloc[:, 3] == st.session_state.f_act]
-    if st.session_state.f_cat != "All Categories":
-        df = df[df.iloc[:, 2] == st.session_state.f_cat]
+    # Filter Logika
+    if "All" not in st.session_state.f_act:
+        df = df[df.iloc[:, 3].isin(st.session_state.f_act)]
+    if "All" not in st.session_state.f_cat:
+        df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
     if st.session_state.f_time == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
 
-    search_q = st.session_state.f_search.lower().strip()
-
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
-        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow: 0 4px 8px rgba(0,0,0,0.1); } 
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); } 
         .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:10px; } 
         .info-row { font-size:0.95rem; color:#333; margin: 8px 0; font-weight: 500; }
-        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:800; display: inline-block; }
+        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:800; }
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
     </style>"""
 
+    # Multi-search terme
+    search_terms = search_q.split() if search_q else []
+
     for _, r in df.iterrows():
-        # D=3, L=11, E=4
         title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
         
-        if search_q and search_q not in title_str.lower():
+        # Kyk of ENIGE van die soekterme in die titel is
+        if search_terms and not any(term in title_str.lower() for term in search_terms):
             continue
 
         f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}" if pd.notnull(r['dt_fixed']) else f"🗓️ {r.iloc[5]}"
