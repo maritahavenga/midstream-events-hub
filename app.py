@@ -142,4 +142,21 @@ if not df_raw.empty:
         elif team_info: extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
         if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
-        elif note_display: extra_content += f"<div class='note-
+        elif note_display: extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
+
+        # SVG Icons to fix iOS "17" issue
+        cal_icon = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
+        pin_icon = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#008080" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>'
+
+        h += f"""<div class='card'>
+                    {badge_html}
+                    <div class='card-title'>{title_str}</div>
+                    <div class='info-row'>{cal_icon} {d_str}</div>
+                    <div class='info-row'>{pin_icon} <a class='venue-link' href='{ven_link}' target='_blank'>{ven_display}</a></div>
+                    {extra_content}
+                    <div class='btn-box'>{btns}</div>
+                 </div>"""
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
