@@ -43,17 +43,9 @@ def load_data(url):
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
-        
-        # Skoonmaak van data
         df = df.replace(['N/A', 'n/a', 'NA', 'na', 'nan'], '', regex=True)
-        
-        # --- SLIM DUPLIKAAT FILTER ---
-        # Ons skep 'n tydelike kolom wat net die Datum en die Ouderdom bevat
-        # Dit vang regstellings op selfs al verskil die spelling van die aktiwiteit of venue
+        # Filter duplikate op Datum + Groep (Sien slegs die heel laaste regstelling)
         df['temp_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 4].astype(str)
-        
-        # Verwyder duplikate gebaseer op daardie tydelike ID
-        # "keep='last'" beteken die nuutste regstelling onderaan die sheet wen altyd
         df = df.drop_duplicates(subset=['temp_id'], keep='last')
         return df
     except: return pd.DataFrame()
@@ -62,7 +54,7 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# Data laai
+# Filters
 df_raw = load_data(EVENTS_URL)
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
@@ -78,19 +70,13 @@ with st.container():
 
 if not df_raw.empty:
     df = df_raw.copy()
-    df['activity_display'] = df.iloc[:, 3].fillna("").astype(str)
-    # Standaardiseer name vir sorteer en soek
-    df['activity_display'] = df['activity_display'].str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False)
-    
+    df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False)
     df['group_display'] = df.iloc[:, 4].apply(format_group_final)
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
-    # Filter vir vandag en vorentoe
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     if view_opt == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + timedelta(days=7))]
-    
-    # Sorteer
     df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True])
 
     if search_q:
@@ -99,11 +85,11 @@ if not df_raw.empty:
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
-        .card-title { color:#800000; font-size:1.2rem; font-weight:bold; margin-bottom:10px; } 
+        .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:10px; } 
         .info-row { font-size:1rem; color:#333; margin: 8px 0; font-weight: 500; }
-        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:bold; display: inline-block; }
+        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:800; display: inline-block; }
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
-        .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.6rem; animation: blinker 1.2s linear infinite; } 
+        .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blinker 1.2s linear infinite; } 
         @keyframes blinker { 50% { opacity: 0.2; } }
     </style>"""
     
@@ -120,7 +106,6 @@ if not df_raw.empty:
 
         f_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         badge = "<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
-        
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
             val = str(r.iloc[i]).strip()
