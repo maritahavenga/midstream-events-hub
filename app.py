@@ -103,4 +103,33 @@ if not df_raw.empty:
         .card-title { color: #800000; font-size: 1.4rem; font-weight: 800; margin-bottom: 15px; letter-spacing: -0.5px; }
         .info-row { font-size: 1.05rem; color: #444; margin: 12px 0; display: flex; align-items: center; }
         .info-icon { margin-right: 12px; font-size: 1.2rem; }
-        .teal-link { color: #008080 !important; font-weight: 7
+        .teal-link { color: #008080 !important; font-weight: 700; text-decoration: none; border-bottom: 2px solid #008080; }
+        .btn-container { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
+        .btn { background: #800000 !important; color: white !important; padding: 12px 20px; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; box-shadow: 0 4px 6px rgba(128,0,0,0.2); }
+    </style>"""
+
+    for _, r in df.iterrows():
+        title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
+        if search_terms and not any(term in title_str.lower() for term in search_terms):
+            continue
+
+        d_str = r['dt_fixed'].strftime('%A, %d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        ven_raw = clean_val(r.iloc[6]).upper()
+        ven_html = f"<a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower():
+                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a>"
+
+        h += f"""<div class='card'>
+                    <div class='card-title'>{title_str}</div>
+                    <div class='info-row'><span class='info-icon'>📅</span> {d_str}</div>
+                    <div class='info-row'><span class='info-icon'>📍</span> {ven_html}</div>
+                    <div class='btn-container'>{btns}</div>
+                 </div>"""
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='text-align:center; padding:20px; color:#666; font-size:0.8rem; font-weight:500;'>Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
