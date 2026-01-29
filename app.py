@@ -104,4 +104,30 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # --- STRE
+        # --- STRENG D-L-E VOLGORDE ---
+        d_act = clean_val(r.iloc[3])   # Activity
+        l_team = clean_val(r.iloc[11]) # Team
+        e_age = format_age_group(r.iloc[4]) # Age Group met U-logika
+        
+        final_title = f"{d_act} {l_team} {e_age}".replace("  ", " ").strip()
+        
+        if search_q and search_q not in final_title.lower():
+            continue
+
+        f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
+        ven_raw = clean_val(r.iloc[6]).upper()
+        ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        
+        badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
+        
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower():
+                btns += f"<a href='{val}' target='_blank' class='btn'>{lbl}</a> "
+
+        h += f"<div class='card'>{badge}<div class='card-title'>{final_title}</div><div class='info-row'>{f_date}</div><div class='info-row'>{ven_html}</div><div>{btns}</div></div>"
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
