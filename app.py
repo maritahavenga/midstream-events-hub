@@ -159,4 +159,4 @@ if not df_raw.empty:
     
     components.html(h, height=2500, scrolling=True)
 
-st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.
+st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
