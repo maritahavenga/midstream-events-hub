@@ -18,8 +18,25 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
+def translate_term(text):
+    """ Vertaal spesifieke terme na Engels vir die ouers """
+    translations = {
+        "Saal": "Hall",
+        "Ouditorium": "Auditorium",
+        "Swembad": "Pool",
+        "Tennisbane": "Tennis Courts",
+        "Muurbalbane": "Squash Courts",
+        "Muurbal": "Squash",
+        "Veld": "Field",
+        "Koor": "Choir",
+        "Astro": "Astro"
+    }
+    for afrikaans, english in translations.items():
+        text = re.sub(rf'\b{afrikaans}\b', english, text, flags=re.IGNORECASE)
+    return text
+
 def format_dle_spec(d_val, l_val, e_val):
-    act = clean_val(d_val)
+    act = translate_term(clean_val(d_val))
     age_raw = clean_val(l_val)
     team_raw = clean_val(e_val)
     age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
@@ -50,22 +67,19 @@ df_raw = load_data(EVENTS_URL)
 # 2. Navigation Pane
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 12px 12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
-    
     if not df_raw.empty:
         c1, c2 = st.columns(2)
         with c1:
             raw_acts = df_raw.iloc[:, 3].unique().tolist()
-            clean_acts = sorted(list(set([str(a).split()[0] if "Athletics" in str(a) else str(a) for a in raw_acts])))
-            # Altyd default na "All"
+            # Dwing filter lys na Engels
+            clean_acts = sorted(list(set([translate_term(str(a).split()[0]) for a in raw_acts])))
             st.multiselect("Activities", ["All"] + clean_acts, default="All", key="f_act")
         with c2:
-            # Vaste kategorieë ongeag data
             fixed_cats = ["Sport", "Culture", "Academics"]
             st.multiselect("Category", ["All"] + fixed_cats, default="All", key="f_cat")
     
     st.markdown("---")
     search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age Group...")
-    
     b1, b2 = st.columns([2,1])
     with b1:
         st.radio("View", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
@@ -83,13 +97,11 @@ if not df_raw.empty:
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     
-    # Apply Filters
     if "All" not in st.session_state.f_act:
-        df = df[df.iloc[:, 3].apply(lambda x: any(sel in str(x) for sel in st.session_state.f_act))]
+        # Filter kyk na vertaalde waarde
+        df = df[df.iloc[:, 3].apply(lambda x: any(sel in translate_term(str(x)) for sel in st.session_state.f_act))]
     if "All" not in st.session_state.f_cat:
         df = df[df.iloc[:, 2].isin(st.session_state.f_cat)]
-    if st.session_state.f_time == "Next 7 Days":
-        df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
     
     search_terms = search_q.lower().split()
 
@@ -105,7 +117,6 @@ if not df_raw.empty:
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
-        .no-events { text-align: center; color: #666; padding: 40px; font-style: italic; }
     </style>"""
 
     card_count = 0
@@ -116,15 +127,18 @@ if not df_raw.empty:
 
         card_count += 1
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-        ven_raw = clean_val(r.iloc[6])
+        
+        # Venue Translation & Map Logic
+        ven_raw = translate_term(clean_val(r.iloc[6]))
         prog_link = clean_val(r.iloc[7])
         
-        if "see programme" in ven_raw.lower() and "http" in prog_link.lower():
-            ven_link = prog_link
+        # As dit 'n binnenshuise venue by die skool is, dwing die kaart na Midstream College
+        internal_venues = ["hall", "auditorium", "pool", "tennis courts", "squash courts", "astro"]
+        if any(iv in ven_raw.lower() for iv in internal_venues) or "see programme" in ven_raw.lower():
+            ven_link = "https://www.google.com/maps/search/Midstream+College" if "http" not in prog_link.lower() else prog_link
             ven_display = ven_raw.upper()
         else:
-            # Enhanced search for Cornwall Hill etc.
-            ven_link = f"https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}+South+Africa"
+            ven_link = f"https://www.google.com/maps/search/{ven_raw.replace(' ', '+')}+South+Africa"
             ven_display = ven_raw.upper()
         
         btns = ""
@@ -156,7 +170,7 @@ if not df_raw.empty:
                  </div>"""
     
     if card_count == 0:
-        h += "<div class='no-events'>No events found for this selection at the moment.</div>"
+        h += "<div style='text-align:center;color:#666;padding:40px;'>No events found for this selection.</div>"
     
     components.html(h, height=2500, scrolling=True)
 
