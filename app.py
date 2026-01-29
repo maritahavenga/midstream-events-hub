@@ -7,7 +7,7 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Basiese Konfigurasie
+# 1. Konfigurasie
 st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
@@ -17,7 +17,7 @@ def clean_val(val):
     v = str(val).replace(".0", "").replace("nan", "").replace("NAN", "").strip()
     return "" if v.lower() in ["n/a", "none", ""] else v
 
-@st.cache_data(ttl=1) # Dwing hom om vinniger te verfris
+@st.cache_data(ttl=1)
 def load_data(url):
     try:
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
@@ -30,11 +30,11 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# 2. NAV PANE (Filters) - Ons sit dit BUITE die data-check sodat dit altyd wys
+# 2. NAV PANE (ALTYD SIGBAAR)
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    search_q = st.text_input("🔍 Search Events:", placeholder="Search...").lower().strip()
+    search_q = st.text_input("🔍 Search Events:", placeholder="Search activity, team or age...").lower().strip()
     if st.button("🔄 REFRESH HUB"):
         st.cache_data.clear()
         st.rerun()
@@ -46,15 +46,12 @@ today = datetime.now(SA_TIME).date()
 
 if not df_raw.empty:
     df = df_raw.copy()
-    
-    # Verwerk datum veilig
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[df['dt_fixed'].dt.date >= today]
     
     if view_opt == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + pd.Timedelta(days=7))]
 
-    # CSS vir Kaartjies
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; } 
@@ -67,27 +64,27 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # STRENG VOLGORDE: Activity(3) Age(4) Team(11)
+        # VOLGORDE: Activity (D=3) + Team (L=11) + Age (E=4)
         act = clean_val(r.iloc[3])
-        age = clean_val(r.iloc[4])
         team = clean_val(r.iloc[11])
+        age = clean_val(r.iloc[4])
         
-        # Voeg slegs 'U' by as dit 'n nommer is
+        # Voeg 'U' slegs by as die age 'n nommer is
         display_age = f"U{age}" if age.isdigit() else age
-        final_title = f"{act} {display_age} {team}".replace("  ", " ").strip()
         
-        # Soek-filter
+        # Die finale samestelling: Activity + Team + Age
+        final_title = f"{act} {team} {display_age}".replace("  ", " ").strip()
+        
         if search_q and search_q not in final_title.lower():
             continue
 
         f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}"
         ven_raw = clean_val(r.iloc[6]).upper()
-        ven_html = f"📍 <a class='teal-link' href='http://google.com/maps?q=Midstream+College+{ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
         
         badge = "<div class='badge'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
         
         btns = ""
-        # 7=Prog, 8=Team, 10=Info
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
             val = str(r.iloc[i]).strip()
             if "http" in val.lower():
