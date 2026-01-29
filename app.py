@@ -25,31 +25,16 @@ def fix_drive_link(url):
     return u
 
 def format_group_final(text):
-    """Skoonmaak van ouderdomme en groepe sonder duplisering."""
     if not text or str(text).lower() in ["nan", "n/a", "na", ""]: return ""
     t = str(text).strip().upper()
-    
-    # 1. Identifiseer geslag
-    gender = ""
-    if any(x in t for x in ["G", "DOGTER", "GIRL"]): gender = "Girls"
-    elif any(x in t for x in ["B", "SEUN", "BOY"]): gender = "Boys"
-    
-    # 2. Identifiseer span (A, B of C)
+    gender = "Girls" if any(x in t for x in ["G", "DOGTER", "GIRL"]) else ("Boys" if any(x in t for x in ["B", "SEUN", "BOY"]) else "")
     team = ""
-    if re.search(r'\bA\b', t) or "A" in t: team = "A"
-    elif re.search(r'\bB\b', t) or "B" in t: team = "B"
-    elif re.search(r'\bC\b', t) or "C" in t: team = "C"
-
-    # 3. Trek net die nommers uit vir die ouderdom (vangs reekse ook)
+    if re.search(r'\bA\b', t): team = "A"
+    elif re.search(r'\bB\b', t): team = "B"
+    elif re.search(r'\bC\b', t): team = "C"
     nums = re.findall(r'\d+', t)
-    if not nums: return t # As daar geen nommers is nie, wys net die teks
-    
-    age_part = ""
-    if len(nums) >= 2:
-        age_part = f"U{nums[0]}-U{nums[1]}"
-    else:
-        age_part = f"U{nums[0]}"
-        
+    if not nums: return t
+    age_part = f"U{nums[0]}-U{nums[1]}" if len(nums) >= 2 else f"U{nums[0]}"
     return f"{age_part}{team} {gender}".strip()
 
 @st.cache_data(ttl=2)
@@ -58,9 +43,18 @@ def load_data(url):
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
+        
+        # Skoonmaak van data
         df = df.replace(['N/A', 'n/a', 'NA', 'na', 'nan'], '', regex=True)
-        # Verwyder duplikate op Aktiwiteit, Groep en Datum
-        df = df.drop_duplicates(subset=[df.columns[3], df.columns[4], df.columns[5]], keep='last')
+        
+        # --- SLIM DUPLIKAAT FILTER ---
+        # Ons skep 'n tydelike kolom wat net die Datum en die Ouderdom bevat
+        # Dit vang regstellings op selfs al verskil die spelling van die aktiwiteit of venue
+        df['temp_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 4].astype(str)
+        
+        # Verwyder duplikate gebaseer op daardie tydelike ID
+        # "keep='last'" beteken die nuutste regstelling onderaan die sheet wen altyd
+        df = df.drop_duplicates(subset=['temp_id'], keep='last')
         return df
     except: return pd.DataFrame()
 
@@ -68,15 +62,15 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# Filters
+# Data laai
 df_raw = load_data(EVENTS_URL)
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
 
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    view_opt = st.radio("Show:", ["All Upcoming", "Next 7 Days"], horizontal=True)
-    search_q = st.text_input("🔍 Search Events:", placeholder="Search...").lower().strip()
+    view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
+    search_q = st.text_input("🔍 Search Events:", placeholder="Search anything...").lower().strip()
     if st.button("🔄 REFRESH HUB"):
         st.cache_data.clear()
         st.rerun()
@@ -84,17 +78,19 @@ with st.container():
 
 if not df_raw.empty:
     df = df_raw.copy()
-    # Maak aktiwiteit name skoon
     df['activity_display'] = df.iloc[:, 3].fillna("").astype(str)
-    df['activity_display'] = df['activity_display'].str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Rugbi", "Rugby", case=False).str.replace("Atletiek", "Athletics", case=False)
+    # Standaardiseer name vir sorteer en soek
+    df['activity_display'] = df['activity_display'].str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False)
     
-    # Pas skoonmaak-logika toe op groepe
     df['group_display'] = df.iloc[:, 4].apply(format_group_final)
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
+    # Filter vir vandag en vorentoe
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     if view_opt == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + timedelta(days=7))]
+    
+    # Sorteer
     df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True])
 
     if search_q:
@@ -115,7 +111,7 @@ if not df_raw.empty:
         ven_raw = str(r.iloc[6]).strip().upper()
         prog_url = fix_drive_link(str(r.iloc[7]))
         
-        if ven_raw in ["", "TBC"]: ven_html = "📍 VENUE TBC"
+        if ven_raw in ["", "TBC", "N/A"]: ven_html = "📍 VENUE TBC"
         elif "SEE PROGRAMME" in ven_raw and prog_url:
             ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
         else:
@@ -124,6 +120,7 @@ if not df_raw.empty:
 
         f_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
         badge = "<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
+        
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
             val = str(r.iloc[i]).strip()
