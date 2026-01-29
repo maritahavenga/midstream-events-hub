@@ -99,4 +99,25 @@ if not df_raw.empty:
     </style>"""
     
     for _, r in df.iterrows():
-        ven_raw = str(r.iloc[6]).strip().
+        ven_raw = str(r.iloc[6]).strip().upper()
+        prog_url = fix_drive_link(str(r.iloc[7]))
+        
+        if ven_raw in ["", "TBC", "N/A"]: ven_html = "📍 VENUE TBC"
+        elif "SEE PROGRAMME" in ven_raw and prog_url:
+            ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
+        else:
+            m_q = f"Midstream+College+{ven_raw.replace(' ', '+')}" if "CORNWALL" not in ven_raw else ven_raw.replace(' ', '+')
+            ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={m_q}' target='_blank'>{ven_raw}</a>"
+
+        f_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        badge = "<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
+        btns = ""
+        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
+            val = str(r.iloc[i]).strip()
+            if "http" in val.lower(): btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
+
+        h += f"<div class='card'>{badge}<div class='card-title'>{r['activity_display']} {r['group_display']}</div><div class='info-row'>🗓️ {f_date}</div><div class='info-row'>{ven_html}</div><div style='display:block;'>{btns}</div></div>"
+    
+    components.html(h, height=2000, scrolling=True)
+
+st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
