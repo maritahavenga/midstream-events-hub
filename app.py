@@ -28,13 +28,17 @@ def format_group_final(text):
     if not text or str(text).lower() in ["nan", "n/a", "na", ""]: return ""
     t = str(text).strip().upper()
     gender = "Girls" if any(x in t for x in ["G", "DOGTER", "GIRL"]) else ("Boys" if any(x in t for x in ["B", "SEUN", "BOY"]) else "")
+    
+    # Span-identifikasie (soek spesifiek vir A, B of C as losstaande letters)
     team = ""
     if re.search(r'\bA\b', t): team = "A"
     elif re.search(r'\bB\b', t): team = "B"
     elif re.search(r'\bC\b', t): team = "C"
+    
     nums = re.findall(r'\d+', t)
     if not nums: return t
     age_part = f"U{nums[0]}-U{nums[1]}" if len(nums) >= 2 else f"U{nums[0]}"
+    
     return f"{age_part}{team} {gender}".strip()
 
 @st.cache_data(ttl=2)
@@ -44,9 +48,11 @@ def load_data(url):
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
         df = df.replace(['N/A', 'n/a', 'NA', 'na', 'nan'], '', regex=True)
-        # Filter duplikate op Datum + Groep (Sien slegs die heel laaste regstelling)
-        df['temp_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 4].astype(str)
-        df = df.drop_duplicates(subset=['temp_id'], keep='last')
+        
+        # --- VERBETERDE SLIM FILTER ---
+        # Ons kombineer Datum (5), Aktiwiteit (3) en Groep (4) om te keer dat A en B mekaar uitgooi.
+        df['unique_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 3].astype(str) + df.iloc[:, 4].astype(str)
+        df = df.drop_duplicates(subset=['unique_id'], keep='last')
         return df
     except: return pd.DataFrame()
 
@@ -54,7 +60,6 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# Filters
 df_raw = load_data(EVENTS_URL)
 SA_TIME = pytz.timezone('Africa/Johannesburg')
 today = datetime.now(SA_TIME).date()
@@ -70,7 +75,7 @@ with st.container():
 
 if not df_raw.empty:
     df = df_raw.copy()
-    df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False)
+    df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False).str.replace("Rugbi", "Rugby", case=False)
     df['group_display'] = df.iloc[:, 4].apply(format_group_final)
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     
@@ -94,25 +99,4 @@ if not df_raw.empty:
     </style>"""
     
     for _, r in df.iterrows():
-        ven_raw = str(r.iloc[6]).strip().upper()
-        prog_url = fix_drive_link(str(r.iloc[7]))
-        
-        if ven_raw in ["", "TBC", "N/A"]: ven_html = "📍 VENUE TBC"
-        elif "SEE PROGRAMME" in ven_raw and prog_url:
-            ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
-        else:
-            m_q = f"Midstream+College+{ven_raw.replace(' ', '+')}" if "CORNWALL" not in ven_raw else ven_raw.replace(' ', '+')
-            ven_html = f"📍 <a class='teal-link' href='https://www.google.com/maps/search/?api=1&query={m_q}' target='_blank'>{ven_raw}</a>"
-
-        f_date = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-        badge = "<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
-        btns = ""
-        for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
-            val = str(r.iloc[i]).strip()
-            if "http" in val.lower(): btns += f"<a href='{fix_drive_link(val)}' target='_blank' class='btn'>{lbl}</a> "
-
-        h += f"<div class='card'>{badge}<div class='card-title'>{r['activity_display']} {r['group_display']}</div><div class='info-row'>🗓️ {f_date}</div><div class='info-row'>{ven_html}</div><div style='display:block;'>{btns}</div></div>"
-    
-    components.html(h, height=2000, scrolling=True)
-
-st.markdown("<div style='background:#800000; color:white; text-align:center; padding:15px; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+        ven_raw = str(r.iloc[6]).strip().
