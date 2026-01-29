@@ -30,7 +30,7 @@ def load_data(url):
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background:#008080; color:white; text-align:center; padding:15px; font-size:1.4rem; font-weight:700; border-bottom: 5px solid #800000;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
-# 2. NAV PANE (ALTYD SIGBAAR)
+# 2. NAV PANE
 with st.container():
     st.markdown("<div style='background:white; padding:20px; border-radius:0 0 15px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
     view_opt = st.radio("Show Events:", ["All Upcoming", "Next 7 Days"], horizontal=True)
@@ -64,16 +64,28 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
-        # VOLGORDE: Activity (D=3) + Team (L=11) + Age (E=4)
+        # DATA: D=Activity, E=Age, L=Team
         act = clean_val(r.iloc[3])
-        team = clean_val(r.iloc[11])
         age = clean_val(r.iloc[4])
+        team = clean_val(r.iloc[11])
         
-        # Voeg 'U' slegs by as die age 'n nommer is
-        display_age = f"U{age}" if age.isdigit() else age
+        # LOGIKA VIR SKOON TITEL: Tennis U11A Boys
+        # Ons sit die 'U' by die Age, en plak die eerste letter van Team (A/B) direk daaraan vas.
+        # Dan die res van die span-beskrywing.
         
-        # Die finale samestelling: Activity + Team + Age
-        final_title = f"{act} {team} {display_age}".replace("  ", " ").strip()
+        u_age = f"U{age}" if age.isdigit() else age
+        
+        # As Team begin met 'A' of 'B', plak dit aan die ouderdom
+        if team.upper().startswith(('A', 'B', 'C')):
+            # Skei die letter van die res (bv. 'A' en ' Boys')
+            parts = team.split(" ", 1)
+            letter = parts[0]
+            suffix = f" {parts[1]}" if len(parts) > 1 else ""
+            final_title = f"{act} {u_age}{letter}{suffix}"
+        else:
+            final_title = f"{act} {u_age} {team}"
+
+        final_title = final_title.replace("  ", " ").strip()
         
         if search_q and search_q not in final_title.lower():
             continue
