@@ -60,7 +60,7 @@ with st.container():
             cats = ["All"] + sorted(df_raw.iloc[:, 2].unique().tolist())
             st.multiselect("Category", cats, default="All", key="f_cat")
     st.markdown("---")
-    search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age Group (e.g. Tennis U13)...")
+    search_q = st.text_input("Search", key="f_search", placeholder="Search Activity or Age Group...")
     b1, b2 = st.columns([2,1])
     with b1:
         st.radio("View", ["All Upcoming", "Next 7 Days"], horizontal=True, key="f_time")
@@ -92,7 +92,7 @@ if not df_raw.empty:
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; display: flex; align-items: center; }
         .teal-link { color:#008080 !important; font-weight:700; text-decoration:underline; }
         .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:4px solid #008080; font-size:0.9rem; color:#004d4d; }
-        .team-text { color:#555; font-weight:600; font-style: italic; margin-top:5px; display:block; }
+        .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
     </style>"""
@@ -106,7 +106,6 @@ if not df_raw.empty:
         ven_raw = clean_val(r.iloc[6]).upper()
         ven_html = f"<a class='teal-link' href='http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
         
-        # Data logic for Buttons vs Text
         btns = ""
         extra_content = ""
         
@@ -114,12 +113,12 @@ if not df_raw.empty:
         prog = clean_val(r.iloc[7])
         if "http" in prog.lower(): btns += f"<a href='{prog}' target='_blank' class='btn'>Programme</a>"
         
-        # Teams (Col 8)
+        # Teams (Col 8) - NUWE DOTTED FRAME
         team_info = clean_val(r.iloc[8])
         if "http" in team_info.lower(): 
             btns += f"<a href='{team_info}' target='_blank' class='btn'>Team List</a>"
         elif team_info:
-            extra_content += f"<span class='team-text'>🏃 {team_info}</span>"
+            extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
         # Information/Notes (Col 10)
         note = clean_val(r.iloc[10])
