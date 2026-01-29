@@ -90,9 +90,8 @@ if not df_raw.empty:
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: relative; overflow: hidden; }
         .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; padding-right: 100px; }
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; display: flex; align-items: center; }
-        .teal-link { color:#008080 !important; font-weight:700; text-decoration:underline; }
+        .venue-link { color:#008080 !important; font-weight:800; text-decoration:none; text-transform: uppercase; }
         
-        /* Flash Badge Style */
         .flash-badge { 
             position: absolute; top: 15px; right: 15px; 
             background: #ff0000; color: white; padding: 5px 10px; 
@@ -101,10 +100,13 @@ if not df_raw.empty:
         }
         @keyframes blinker { 50% { opacity: 0; } }
 
-        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:4px solid #008080; font-size:0.9rem; color:#004d4d; font-weight: 500; }
+        .note-box { background: #ffffff; border: 2px solid #008080; border-radius:8px; padding:12px; margin-top:12px; font-size:0.9rem; color:#004d4d; font-weight: 600; }
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
+        
+        /* Fixed Icon Style for iOS */
+        .icon { width: 18px; height: 18px; margin-right: 10px; vertical-align: middle; }
     </style>"""
 
     for _, r in df.iterrows():
@@ -116,19 +118,17 @@ if not df_raw.empty:
         ven_raw = clean_val(r.iloc[6])
         prog_link = clean_val(r.iloc[7])
         
-        # Venue Trick
         if "see programme" in ven_raw.lower() and "http" in prog_link.lower():
             ven_link = prog_link
-            ven_display = f"📍 {ven_raw.upper()} (CLICK FOR LINK)"
+            ven_display = ven_raw.upper()
         else:
             ven_link = f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}"
-            ven_display = f"📍 {ven_raw.upper()}"
+            ven_display = ven_raw.upper()
         
         btns = ""
         extra_content = ""
         badge_html = ""
         
-        # Kolom K: Information & Badge Logic
         note_raw = clean_val(r.iloc[10])
         if "$" in note_raw:
             badge_html = "<div class='flash-badge'>NEW UPDATE</div>"
@@ -136,27 +136,10 @@ if not df_raw.empty:
         else:
             note_display = note_raw
 
-        # Buttons logic
         if "http" in prog_link.lower(): btns += f"<a href='{prog_link}' target='_blank' class='btn'>Programme</a>"
-        
         team_info = clean_val(r.iloc[8])
         if "http" in team_info.lower(): btns += f"<a href='{team_info}' target='_blank' class='btn'>Team List</a>"
         elif team_info: extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
-        if "http" in note_display.lower():
-            btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
-        elif note_display:
-            extra_content += f"<div class='note-box'>NOTE: {note_display}</div>"
-
-        h += f"""<div class='card'>
-                    {badge_html}
-                    <div class='card-title'>{title_str}</div>
-                    <div class='info-row'>📅 &nbsp; {d_str}</div>
-                    <div class='info-row'><a class='teal-link' href='{ven_link}' target='_blank'>{ven_display}</a></div>
-                    {extra_content}
-                    <div class='btn-box'>{btns}</div>
-                 </div>"""
-    
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Laerskool Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
+        if "http" in note_display.lower(): btns += f"<a href='{note_display}' target='_blank' class='btn'>Information</a>"
+        elif note_display: extra_content += f"<div class='note-
