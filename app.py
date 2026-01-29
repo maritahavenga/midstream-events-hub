@@ -12,7 +12,6 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
 st_autorefresh(interval=120000, key="datarefresh")
 
-# Jou bestaande skakel (Maak seker hy is ge-publiseer as CSV)
 EVENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def fix_drive_link(url):
@@ -26,29 +25,30 @@ def fix_drive_link(url):
     return u
 
 def format_group_final(age_val, team_val):
-    """Smelt Kolom E (Age) en Kolom L (Team) saam vir 'n perfekte etiket."""
-    age_t = str(age_val).strip().upper() if pd.notnull(age_val) else ""
-    team_t = str(team_val).strip().upper() if pd.notnull(team_val) else ""
+    """Sjurgiese skoonmaak vir Tennis U13B Boys styl."""
+    # Smelt alles saam in een string om te begin soek
+    combined = f"{str(age_val)} {str(team_val)}".upper()
     
-    if age_t in ["N/A", "NA", ""]: return ""
-    
-    # Maak seker die span-teks is skoon (ignoreer N/A)
-    if team_t in ["N/A", "NA", "NAN", "NONE"]: team_t = ""
-    
-    # Identifiseer geslag uit die ouderdom-teks (vir veiligheid)
-    gender = "Girls" if any(x in age_t for x in ["G", "DOGTER", "GIRL"]) else ("Boys" if any(x in age_t for x in ["B", "SEUN", "BOY"]) else "")
-    
-    # Kry nommers (bv. 10 of 10-13)
-    nums = re.findall(r'\d+', age_t)
-    if not nums: return f"{age_t} {team_t} {gender}".strip()
-    
+    # 1. Kry die nommers (ouderdom)
+    nums = re.findall(r'\d+', combined)
+    if not nums: return combined.strip()
     age_part = f"U{nums[0]}-U{nums[1]}" if len(nums) >= 2 else f"U{nums[0]}"
     
-    # As die span reeds in die ouderdom kolom was, moenie dit dupliseer nie
-    if team_t and team_t in age_t:
-        return f"{age_part} {gender}".strip()
-        
-    return f"{age_part}{team_t} {gender}".strip()
+    # 2. Kry die Span (A, B of C) - soek spesifiek vir losstaande letters
+    team = ""
+    for letter in ["A", "B", "C"]:
+        if re.search(rf"\b{letter}\b", combined):
+            team = letter
+            break
+            
+    # 3. Kry die Geslag
+    gender = ""
+    if any(x in combined for x in ["GIRL", "DOGTER", " G", " G "]): gender = "Girls"
+    elif any(x in combined for x in ["BOY", "SEUN", " B", " B "]): gender = "Boys"
+    
+    # As die 'B' as span gebruik word EN as geslag (Boys), maak seker ons wys dit reg
+    # Spesiale reël: As dit 'B Boys' is, moet dit U13B Boys wees
+    return f"{age_part}{team} {gender}".strip()
 
 @st.cache_data(ttl=2)
 def load_data(url):
@@ -56,13 +56,9 @@ def load_data(url):
         r = requests.get(f"{url}&cb={datetime.now().timestamp()}", timeout=10)
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8')))
         if df.empty: return pd.DataFrame()
-        
-        # Maak N/A skoon in die hele sheet
         df = df.replace(['N/A', 'n/a', 'NA', 'na', 'nan'], '', regex=True)
-        
-        # STRENG FILTER: Datum (5) + Aktiwiteit (3) + Groep (4) + Venue (6) + Span (11)
-        # Dit vang Eldoraigne-duplikate maar hou verskillende spanne
-        df['unique_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 3].astype(str) + df.iloc[:, 4].astype(str) + df.iloc[:, 6].astype(str) + df.iloc[:, 11].astype(str)
+        # Streng ID: Datum + Aktiwiteit + Ouderdom + Span + Venue
+        df['unique_id'] = df.iloc[:, 5].astype(str) + df.iloc[:, 3].astype(str) + df.iloc[:, 4].astype(str) + df.iloc[:, 11].astype(str) + df.iloc[:, 6].astype(str)
         df = df.drop_duplicates(subset=['unique_id'], keep='last')
         return df
     except: return pd.DataFrame()
@@ -86,30 +82,26 @@ with st.container():
 
 if not df_raw.empty:
     df = df_raw.copy()
-    
-    # Aktiwiteit Name
     df['activity_display'] = df.iloc[:, 3].fillna("").astype(str).str.replace("Hokkie", "Hockey", case=False).str.replace("Netbal", "Netball", case=False).str.replace("Atletiek", "Athletics", case=False).str.replace("Rugbi", "Rugby", case=False)
     
-    # GROEP LOGIKA: Gebruik Kolom E (index 4) en die nuwe Kolom L (index 11)
+    # Gebruik Kolom E (4) en Kolom L (11)
     df['group_display'] = df.apply(lambda r: format_group_final(r.iloc[4], r.iloc[11]), axis=1)
     
     df['dt_fixed'] = pd.to_datetime(df.iloc[:, 5], dayfirst=True, errors='coerce')
     df = df[(df['dt_fixed'].dt.date >= today) | (df['dt_fixed'].isnull())]
     if view_opt == "Next 7 Days":
         df = df[df['dt_fixed'].dt.date <= (today + timedelta(days=7))]
-    
     df = df.sort_values(by=['dt_fixed', 'activity_display'], ascending=[True, True])
 
     if search_q:
         df = df[df.apply(lambda r: search_q in " ".join(str(v) for v in r.values).lower(), axis=1)]
 
-    # CSS vir Look & Feel
     h = """<style>
         body { background:#008080; font-family: sans-serif; padding:10px; } 
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:15px; position:relative; box-shadow:0 4px 8px rgba(0,0,0,0.1); } 
         .card-title { color:#800000; font-size:1.25rem; font-weight:bold; margin-bottom:10px; } 
         .info-row { font-size:0.95rem; color:#333; margin: 8px 0; font-weight: 500; }
-        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:700; display: inline-block; }
+        .teal-link { color:#008080 !important; text-decoration:underline; font-weight:800; display: inline-block; }
         .btn { background:#800000 !important; color:white !important; padding:8px 12px; border-radius:8px; text-decoration:none; font-size:0.75rem; display:inline-block; margin-right:5px; margin-top:10px; font-weight:bold; } 
         .badge-style { position:absolute; top:15px; right:15px; background:#FFD700; color:#800000; padding:4px 8px; border-radius:5px; font-weight:bold; font-size:0.65rem; animation: blinker 1.2s linear infinite; } 
         @keyframes blinker { 50% { opacity: 0.3; } }
@@ -118,7 +110,6 @@ if not df_raw.empty:
     for _, r in df.iterrows():
         ven_raw = str(r.iloc[6]).strip().upper()
         prog_url = fix_drive_link(str(r.iloc[7]))
-        
         if ven_raw in ["", "TBC", "N/A"]: ven_html = "📍 VENUE TBC"
         elif "SEE PROGRAMME" in ven_raw and prog_url:
             ven_html = f"📍 <a class='teal-link' href='{prog_url}' target='_blank'>SEE PROGRAMME</a>"
@@ -128,7 +119,6 @@ if not df_raw.empty:
 
         f_date = f"🗓️ {r['dt_fixed'].strftime('%d %B %Y')}" if pd.notnull(r['dt_fixed']) else f"🗓️ {str(r.iloc[5])}"
         badge = f"<div class='badge-style'>UPDATE</div>" if "$" in str(r.iloc[10]) else ""
-        
         btns = ""
         for i, lbl in zip([7, 8, 10], ["PROGRAMME", "TEAM LIST", "INFO"]):
             val = str(r.iloc[i]).strip()
