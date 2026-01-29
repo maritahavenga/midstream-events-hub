@@ -20,8 +20,8 @@ def clean_val(val):
 
 def format_dle_spec(d_val, l_val, e_val):
     act = clean_val(d_val)
-    age_raw = clean_val(l_val)   # Column L
-    team_raw = clean_val(e_val)  # Column E
+    age_raw = clean_val(l_val)
+    team_raw = clean_val(e_val)
     age_part = re.sub(r'(\d+)', r'U\1', age_raw) if age_raw else ""
     team_parts = team_raw.split(" ", 1)
     first_chunk = team_parts[0]
@@ -41,7 +41,7 @@ def load_data(url):
     except:
         return pd.DataFrame()
 
-# Header - Altyd voluit geskryf
+# Header
 st.image("https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg", use_container_width=True)
 st.markdown("<div style='background: linear-gradient(90deg, #008080, #006666); color:white; text-align:center; padding:15px; font-size:1.3rem; font-weight:800; border-radius:12px 12px 0 0;'>Laerskool Midstream College Primary Digital Hub</div>", unsafe_allow_html=True)
 
@@ -91,7 +91,7 @@ if not df_raw.empty:
         .card-title { color:#800000; font-size:1.3rem; font-weight:800; margin-bottom:10px; }
         .info-row { font-size:0.95rem; color:#444; margin: 8px 0; display: flex; align-items: center; }
         .teal-link { color:#008080 !important; font-weight:700; text-decoration:underline; }
-        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:4px solid #008080; font-size:0.9rem; color:#004d4d; }
+        .note-banner { background:#fff9c4; border: 1px dashed #fbc02d; color:#827717; padding:12px; border-radius:8px; font-size:0.9rem; margin-top:12px; font-weight:600; display: flex; align-items: center; gap: 8px; }
         .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000 !important; color:white !important; padding:10px 15px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
@@ -103,22 +103,25 @@ if not df_raw.empty:
             continue
 
         d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
-        
-        # Venue Logika
         ven_raw = clean_val(r.iloc[6])
-        ven_display = ven_raw.upper()
-        ven_link = f"https://www.google.com/maps/search/?api=1&query={ven_raw.replace(' ', '+')}"
+        prog_link = clean_val(r.iloc[7])
+        
+        # Venue Trick: If "See Programme", use programme link for the venue click
+        if "see programme" in ven_raw.lower() and "http" in prog_link.lower():
+            ven_link = prog_link
+            ven_display = f"📍 {ven_raw.upper()} (CLICK FOR LINK)"
+        else:
+            ven_link = f"http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}"
+            ven_display = f"📍 {ven_raw.upper()}"
+        
         ven_html = f"<a class='teal-link' href='{ven_link}' target='_blank'>{ven_display}</a>"
         
         btns = ""
         extra_content = ""
         
-        # Programme (Col 7)
-        prog = clean_val(r.iloc[7])
-        # As venue "See Programme" sê, dwing die Programme knoppie
-        if "see programme" in ven_raw.lower() or "http" in prog.lower():
-            link = prog if "http" in prog.lower() else "#"
-            btns += f"<a href='{link}' target='_blank' class='btn'>Programme</a>"
+        # Programme Button
+        if "http" in prog_link.lower():
+            btns += f"<a href='{prog_link}' target='_blank' class='btn'>Programme</a>"
         
         # Teams (Col 8)
         team_info = clean_val(r.iloc[8])
@@ -127,17 +130,18 @@ if not df_raw.empty:
         elif team_info:
             extra_content += f"<div class='team-frame'>TEAM: {team_info}</div>"
             
-        # Information/Notes (Col 10)
+        # Information/Notes Banner (Col 10)
         note = clean_val(r.iloc[10])
         if "http" in note.lower():
             btns += f"<a href='{note}' target='_blank' class='btn'>Information</a>"
         elif note:
-            extra_content += f"<div class='note-box'><strong>Note:</strong> {note}</div>"
+            # The requested "Information Banner"
+            extra_content += f"<div class='note-banner'><span>$</span> {note}</div>"
 
         h += f"""<div class='card'>
                     <div class='card-title'>{title_str}</div>
-                    <div class='info-row'>📅 &nbsp; {d_str}</div>
-                    <div class='info-row'>📍 &nbsp; {ven_html}</div>
+                    <div class='info-row'>🗓️ &nbsp; {d_str}</div>
+                    <div class='info-row'>{ven_html}</div>
                     {extra_content}
                     <div class='btn-box'>{btns}</div>
                  </div>"""
