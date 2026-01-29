@@ -98,3 +98,44 @@ if not df_raw.empty:
     </style>"""
 
     for _, r in df.iterrows():
+        title_str = format_dle_spec(r.iloc[3], r.iloc[11], r.iloc[4])
+        if search_terms and not any(term in title_str.lower() for term in search_terms):
+            continue
+
+        d_str = r['dt_fixed'].strftime('%d %B %Y') if pd.notnull(r['dt_fixed']) else str(r.iloc[5])
+        ven_raw = clean_val(r.iloc[6]).upper()
+        ven_html = f"<a class='teal-link' href='http://googleusercontent.com/maps.google.com/maps?q={ven_raw.replace(' ', '+')}' target='_blank'>{ven_raw}</a>"
+        
+        # Data logic for Buttons vs Text
+        btns = ""
+        extra_content = ""
+        
+        # Programme (Col 7)
+        prog = clean_val(r.iloc[7])
+        if "http" in prog.lower(): btns += f"<a href='{prog}' target='_blank' class='btn'>Programme</a>"
+        
+        # Teams (Col 8)
+        team_info = clean_val(r.iloc[8])
+        if "http" in team_info.lower(): 
+            btns += f"<a href='{team_info}' target='_blank' class='btn'>Team List</a>"
+        elif team_info:
+            extra_content += f"<span class='team-text'>🏃 {team_info}</span>"
+            
+        # Information/Notes (Col 10)
+        note = clean_val(r.iloc[10])
+        if "http" in note.lower():
+            btns += f"<a href='{note}' target='_blank' class='btn'>Information</a>"
+        elif note:
+            extra_content += f"<div class='note-box'><strong>Note:</strong> {note}</div>"
+
+        h += f"""<div class='card'>
+                    <div class='card-title'>{title_str}</div>
+                    <div class='info-row'>📅 &nbsp; {d_str}</div>
+                    <div class='info-row'>📍 &nbsp; {ven_html}</div>
+                    {extra_content}
+                    <div class='btn-box'>{btns}</div>
+                 </div>"""
+    
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<div style='text-align:center; padding:20px; color:#999; font-size:0.8rem;'>Midstream College Primary · Digital Hub 2026</div>", unsafe_allow_html=True)
