@@ -23,13 +23,12 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
     t = str(t).replace("-", " ").replace("/", " ")
-    # G hoofletter fix vir Gala
     t = t.replace("gala", "Gala").replace("swimming", "Swimming")
     m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
     for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
@@ -82,7 +81,7 @@ if not df.empty:
     .card{background:white!important;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
     .title{color:#800000!important;font-weight:bold;font-size:1.15rem;margin-bottom:8px;}
     .btn{background:#800000;color:white!important;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:0.85rem;margin:8px 8px 8px 0;display:inline-block;font-weight:500;}
-    .nt-box{background:#f0f7f7!important;padding:12px;margin-top:12px;border-radius:8px;font-size:0.95rem;border-left:5px solid #008080;color:#333;}
+    .nt-box{background:#f0f7f7!important;padding:12px;margin-top:12px;border-radius:8px;font-size:0.95rem;border-left:5px solid #008080;color:#333;line-height:1.4;}
     </style>"""
     
     for i in res:
@@ -90,12 +89,11 @@ if not df.empty:
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
         
-        # --- KRITIESE OUDERDOM LOGIKA ---
-        is_sp_card = "sport" in cv or any(x in act.lower() for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"])
-        is_ac_card = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde"])
+        # --- DINAMIESE OUDERDOM LOGIKA ---
+        is_sp = "sport" in cv or any(x in act.lower() for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"])
+        is_ac = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde"])
         
-        # Prioriteit: As dit sport is, altyd U. As dit akademies is, altyd Gr.
-        prefix = "U" if is_sp_card else ("Gr " if is_ac_card else "")
+        prefix = "U" if is_sp else ("Gr " if is_ac else "")
         age_lbl = (prefix + age) if age else ""
         
         ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
@@ -110,8 +108,7 @@ if not df.empty:
         n_txt = f"<b>Note:</b><br>{i_r}" if i_r and "http" not in i_r.lower() else ""
         content = f"<div class='nt-box'>{t_txt}{n_txt}</div>" if t_txt or n_txt else ""
         
-        # MAPS FIX
-        map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream"
+        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
         vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{content}<div style='margin-top:10px;'>{btns}</div></div>"
