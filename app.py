@@ -1,4 +1,6 @@
-import streamlit as st, pandas as pd, requests, io, re, pytz
+import streamlit as st
+import pandas as pd
+import requests, io, re, pytz
 from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
@@ -20,23 +22,18 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig-2SEV
 
 # --- HELPERS ---
 def cl(v):
-    return str(v).replace(".0", "").replace("nan", "").strip()
+    return str(v).replace(".0","").replace("nan","").strip()
 
-def tr(t, a):
+def tr(t,a):
     t = str(t).replace("-", " ").replace("/", " ")
-    d = {
-        "Saal": "Hall",
-        "Veld": "Field",
-        "Atletiek": "Athletics",
-        "Wiskunde": "Math"
-    }
-    for k, v in d.items():
+    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
+    for k,v in d.items():
         t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
     return t
 
 def c_a(n):
     n = str(n).lower()
-    for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"]:
+    for x in ["hockey","rugby","netball","swimming","athletics","tennis"]:
         if x in n:
             return x.capitalize()
     if "eerste" in n:
@@ -71,16 +68,10 @@ if not df.empty:
     with c1:
         sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2:
-        sa = st.multiselect(
-            "Activity",
-            sorted({c_a(x) for x in df.iloc[:, 3]})
-        )
+        sa = st.multiselect("Activity", sorted({c_a(x) for x in df.iloc[:,3]}))
     with c3:
-        sg = st.multiselect(
-            "Age Group",
-            ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7",
-             "U7","U8","U9","U10","U11","U12","U13"]
-        )
+        sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7",
+                                          "U7","U8","U9","U10","U11","U12","U13"])
 
     sq = st.text_input("Search events")
 
@@ -96,7 +87,7 @@ if not df.empty:
 
         dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
         if pd.isnull(dt):
-            dt = datetime(2099, 1, 1)
+            dt = datetime(2099,1,1)
         elif dt.date() < now:
             continue
 
@@ -107,19 +98,15 @@ if not df.empty:
             continue
 
         if sg and age:
-            if not any(v.replace("Gr ", "").replace("U", "") in age for v in sg):
+            if not any(v.replace("Gr ","").replace("U","") in age for v in sg):
                 continue
 
-        res.append({
-            "r": r,
-            "dt": dt,
-            "ds": rd
-        })
+        res.append({"r":r,"dt":dt,"ds":rd})
 
-    res.sort(key=lambda x: x["dt"])
+    res.sort(key=lambda x:x["dt"])
 
 # ⛔ STOP HIER – PLAK DEEL 2 DIREK HIERONDER
-  html = """
+ html = """
     <style>
     .card{
         background:white;
