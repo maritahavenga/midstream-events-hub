@@ -17,13 +17,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# JOU SPESIFIEKE SKAKEL
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig-2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0","").replace("nan","").strip()
 
 def tr(t,a):
     t = str(t).replace("-", " ").replace("/", " ")
-    # Swimming Gala Fix
     t = t.replace("swimming", "Swimming").replace("gala", "Gala")
     d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
     for k,v in d.items(): t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
@@ -40,8 +40,8 @@ def c_a(n):
 @st.cache_data(ttl=1)
 def ld():
     try:
-        r = requests.get(U, timeout=10)
-        # Gebruik r.content vir beter karakter-hantering
+        # Ons voeg 'n tydstempel by die skakel om Google te dwing om nuwe data te gee
+        r = requests.get(f"{U}&cache_bust={datetime.now().timestamp()}", timeout=10)
         return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
     except: return pd.DataFrame()
 
@@ -53,19 +53,25 @@ if not df.empty:
     with c2: sa = st.multiselect("Activity", sorted({c_a(x) for x in df.iloc[:,3]}))
     with c3: sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
     sq = st.text_input("Search events", placeholder="Type to search...")
+    if st.button("🔄 Force Refresh Data"): 
+        st.cache_data.clear()
+        st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # Vandag se datum (30 Jan 2026)
     now = datetime.now(pytz.timezone("Africa/Johannesburg")).date()
     res = []
 
     for _, r in df.iterrows():
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
+        
+        # DATE PARSING (DD/MM/YYYY)
         dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
         
-        # Wys vandag en toekoms
+        # WYS ALLES VAN VANDAG AF VORENTOE (insluitend vandag)
         if pd.notnull(dt) and dt.date() < now: continue
         
-        # Verbeterde filters (check vir 'contains' in plaas van 'exact')
+        # FILTERS
         if sc and not any(x.lower() in cat for x in sc): continue
         if sa and not any(x.lower() in act.lower() for x in sa): continue
         if sg and age:
@@ -79,42 +85,41 @@ if not df.empty:
     .card{background:white;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
     .title{color:#800000;font-weight:bold;font-size:1.15rem;margin-bottom:6px;}
     .venue{color:#008080;font-weight:bold;margin-top:8px;}
-    .btn-row{margin-top:15px;}
     .btn{background:#800000;color:white!important;padding:8px 15px;border-radius:6px;text-decoration:none;font-size:0.8rem;margin-right:10px;display:inline-block;}
     </style>"""
 
-    for i in res:
-        r = i["r"]
-        act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
-        cat_raw = str(r.iloc[2]).lower()
-        
-        # --- PRESIESE U / GR LOGIKA ---
-        is_sp = "sport" in cat_raw or any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
-        is_ac = "academic" in cat_raw or any(x in act.lower() for x in ["afrikaans","wiskunde","math","atp"])
-        
-        prefix = "U" if is_sp else ("Gr " if is_ac else "")
-        age_lbl = f"{prefix}{age}" if age else ""
+    if not res:
+        st.info("No upcoming events found. Note: Events before today are automatically hidden.")
+    else:
+        for i in res:
+            r = i["r"]
+            act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
+            cat_raw = str(r.iloc[2]).lower()
+            
+            # --- U / GR LOGIKA ---
+            is_sp = "sport" in cat_raw or any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
+            is_ac = "academic" in cat_raw or any(x in act.lower() for x in ["afrikaans","wiskunde","math","atp"])
+            prefix = "U" if is_sp else ("Gr " if is_ac else "")
+            age_lbl = f"{prefix}{age}" if age else ""
 
-        title = f"{c_a(act)} {age_lbl} {tr(r.iloc[4], act)}"
-        if sq and sq.lower() not in title.lower(): continue
+            title = f"{c_a(act)} {age_lbl} {tr(r.iloc[4], act)}"
+            if sq and sq.lower() not in title.lower(): continue
 
-        # Knoppies Logika
-        b_html = ""
-        if "http" in cl(r.iloc[7]): b_html += f"<a class='btn' href='{cl(r.iloc[7])}'>Documents</a>"
-        if "http" in cl(r.iloc[8]): b_html += f"<a class='btn' href='{cl(r.iloc[8])}'>Team List</a>"
-        if "http" in cl(r.iloc[10]): b_html += f"<a class='btn' href='{cl(r.iloc[10])}'>Info</a>"
+            b_html = ""
+            if "http" in cl(r.iloc[7]): b_html += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>Documents</a>"
+            if "http" in cl(r.iloc[8]): b_html += f"<a class='btn' href='{cl(r.iloc[8])}' target='_blank'>Team List</a>"
+            if "http" in cl(r.iloc[10]): b_html += f"<a class='btn' href='{cl(r.iloc[10])}' target='_blank'>Info</a>"
 
-        map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream" if ven else "#"
+            map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream" if ven else "#"
 
-        html += f"""
-        <div class='card'>
-            <div class='title'>{title}</div>
-            <div style='color:#555;'>📅 {tr(i['ds'], act)}</div>
-            {f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven,act).upper()}</a></div>" if ven else ""}
-            <div class='btn-row'>{b_html}</div>
-        </div>
-        """
-
-    v1.html(html, height=3000, scrolling=True)
+            html += f"""
+            <div class='card'>
+                <div class='title'>{title}</div>
+                <div style='color:#555;'>📅 {tr(i['ds'], act)}</div>
+                {f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven,act).upper()}</a></div>" if ven else ""}
+                <div style='margin-top:15px;'>{b_html}</div>
+            </div>
+            """
+        v1.html(html, height=3000, scrolling=True)
 
 st.markdown("<center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
