@@ -20,16 +20,12 @@ def clean_val(val):
 
 def translate_term(text, activity_name=""):
     act_str = str(activity_name).strip()
-    
-    # Forceer formele Afrikaanse name
     if re.search(r'(?i)\bEAT\b', act_str):
         text = text.replace(activity_name, "Afrikaans Eerste Addisionele Taal")
     elif re.search(r'(?i)\bHT\b', act_str):
         text = text.replace(activity_name, "Afrikaans Hooftaal")
-        
     if any(k in act_str.lower() for k in ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]):
         return text
-
     translations = {
         "Saal": "Hall", "Ouditorium": "Auditorium", "Musiekkamer": "Music Room",
         "Swembad": "Pool", "Tennisbane": "Tennis Courts", "Netbalbane": "Netball Courts",
@@ -74,10 +70,22 @@ if not df_raw.empty:
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
     
-    mapping = {"Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"], "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"], "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"], "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"], "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"], "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"], "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]}
-    expanded_sel_age = set(sel_age)
+    # Verbeterde Mapping vir alle rigtings
+    smart_map = {
+        "Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"],
+        "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"],
+        "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"],
+        "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"],
+        "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"],
+        "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"],
+        "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]
+    }
+    
+    expanded_sel_age = set()
     for s in sel_age:
-        if s in mapping: expanded_sel_age.update(mapping[s])
+        expanded_sel_age.add(s)
+        if s in smart_map:
+            expanded_sel_age.update(smart_map[s])
 
     df_filtered = []
     for _, r in df_raw.iterrows():
@@ -88,10 +96,17 @@ if not df_raw.empty:
         if pd.notnull(dt_val) and dt_val.date() < today: continue
         if sel_cat and not any(s.lower() in str(r.iloc[2]).lower() or (s=="Academics" and "academic" in str(r.iloc[2]).lower()) for s in sel_cat): continue
         if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
-        if expanded_sel_age and clean_val(r.iloc[11]) not in expanded_sel_age: continue
+        
+        # Smart Age Filter - kyk na die rou waarde in die spreadsheet
+        if expanded_sel_age:
+            row_age_val = clean_val(r.iloc[11])
+            # Check of die waarde (bv '4' of 'U10') in ons uitgebreide lys is
+            if row_age_val not in expanded_sel_age:
+                # Kyk ook of 'Gr ' + waarde dalk in die lys is
+                if f"Gr {row_age_val}" not in expanded_sel_age:
+                    continue
         
         is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
-        
         g_raw = clean_val(r.iloc[11])
         match = re.search(r'\d+', g_raw)
         g_num = int(match.group()) if match else 99
@@ -102,7 +117,6 @@ if not df_raw.empty:
             'subject': str(r.iloc[3]).lower(), 'grade_val': g_num, 'is_ft': is_ft
         })
 
-    # SORTERING: Full Term -> Datum -> Subject -> Numeriese Graad
     df_filtered.sort(key=lambda x: (not x['is_ft'], x['date'], x['subject'], x['grade_val']))
 
     h = """<style>
@@ -121,8 +135,6 @@ if not df_raw.empty:
         r = item['data']
         act_name = str(r.iloc[3])
         is_acad_related = "academic" in str(r.iloc[2]).lower() or "afrikaans" in act_name.lower()
-        
-        # LOGIKA VIR SWIMMING / ATHLETICS
         is_whole_school = any(ws in act_name.lower() for ws in ["swimming", "athletics"])
         row_age = clean_val(r.iloc[11])
         
@@ -139,25 +151,3 @@ if not df_raw.empty:
         if search_q and search_q.lower() not in full_title.lower(): continue
         
         d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if item['date'] != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
-        
-        btns = ""
-        prog_btn_name = "Document" if is_acad_related else "Programme"
-        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{prog_btn_name}</a>"
-        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
-        
-        note_raw = clean_val(r.iloc[10]).replace("$", "")
-        if "http" in note_raw.lower():
-            btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
-            note_html = ""
-        else:
-            note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
-        
-        h += f"""<div class='card'>
-            <div class='card-title'>{full_title}</div>
-            <div class='info-row'>📅 {d_str}</div>
-            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_name).upper()}</span></div>
-            {note_html}<div class='btn-box'>{btns}</div>
-        </div>"""
-
-    components.html(h, height=2500, scrolling=True)
-st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
