@@ -44,18 +44,25 @@ if not df.empty:
    elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
    else:clo.add(o)
   sa=st.multiselect("Activity",sorted(list(clo)))
+ 
  with c3:
+  # STICKY LOGIKA: Bepaal opsies gebaseer op kategorie, maar hou keuse stabiel
   ao=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-  do=[o for o in ao if "U" in o] if sc==["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
-  sg=st.multiselect("Age Group",options=do,key="age_f")
+  if sc==["Sport"]:do=[o for o in ao if "U" in o]
+  elif sc and "Sport" not in str(sc):do=[o for o in ao if "Gr" in o]
+  else:do=ao
+  sg=st.multiselect("Age Group",options=do,key="sticky_age")
+
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
+
  ty=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
  tn=set()
  for s in sg:
   ns=re.findall(r'\d+',s)
   if ns:
    v=int(ns[0]);tn.update([v, v+6 if v<=7 else v-6])
+
  res=[]
  for _,r in df.iterrows():
   n,cat,av=str(r.iloc[3]),str(r.iloc[2]).lower(),cl(r.iloc[11])
@@ -69,6 +76,7 @@ if not df.empty:
   rd=cl(r.iloc[5]);dt=pd.to_datetime(rd,dayfirst=True,errors='coerce');ft="full term" in str(r.iloc[12]).lower()
   if not ft and pd.notnull(dt) and dt.date()<ty:continue
   res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
+
  res.sort(key=lambda x:(not x['ft'],x['dt'],x['n']))
  h="<style>.card{background:white;padding:12px;border-radius:10px;border-left:8px solid #800000;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);font-family:sans-serif;}.title{color:#800000;font-size:1rem;font-weight:bold;}.btn{background:#800000;color:white!important;padding:5px 8px;border-radius:5px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}.nt{background:#f0f7f7;padding:6px;margin-top:5px;border-radius:5px;font-size:0.7rem;}</style>"
  for i in res:
