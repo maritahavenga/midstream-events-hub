@@ -132,4 +132,34 @@ if not df_raw.empty:
     for item in df_filtered:
         r = item['data']
         is_acad = "academic" in str(r.iloc[2]).lower()
-        row_age = clean_val(r.iloc
+        row_age = clean_val(r.iloc[11])
+        prefix = "Gr " if is_acad else "U"
+        age_display = f"{prefix}{row_age}" if row_age else ""
+        
+        full_title = f"{translate_term(str(r.iloc[3]), str(r.iloc[3]))} {age_display} {translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))}"
+        
+        if search_q and search_q.lower() not in full_title.lower(): continue
+
+        d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if item['date'] != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
+        
+        btns = ""
+        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{'Document' if is_acad else 'Programme'}</a>"
+        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
+        
+        note_raw = clean_val(r.iloc[10]).replace("$", "")
+        if "http" in note_raw.lower():
+            btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
+            note_html = ""
+        else:
+            note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
+        
+        h += f"""<div class='card'>
+            <div class='card-title'>{full_title.strip()}</div>
+            <div class='info-row'>📅 {d_str}</div>
+            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</span></div>
+            {note_html}<div class='btn-box'>{btns}</div>
+        </div>"""
+
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
