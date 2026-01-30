@@ -6,12 +6,12 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# --- BANNER MET JOU LOGO EN KORREKTE NAAM ---
+# --- BANNER MET LOGO EN VOLLE SKOOLNAAM ---
 st.markdown("""
     <div style='background-color: #008080; padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 25px; border-bottom: 8px solid #800000;'>
-        <img src='https://raw.githubusercontent.com/GoogleCloudPlatform/starthinker/master/starthinker/ui/static/img/google_cloud_logo.png' style='display:none;'> 
-        <h1 style='color: white; font-family: sans-serif; margin: 0; font-size: 1.6rem;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
-        <p style='color: #eee; font-family: sans-serif; font-size: 1.3rem; margin: 5px 0 0 0;'>Digital Hub</p>
+        <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='160' style='margin-bottom:10px;'>
+        <h1 style='color: white; font-family: sans-serif; margin: 0; font-size: 1.5rem;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
+        <p style='color: #eee; font-family: sans-serif; font-size: 1.2rem; margin: 5px 0 0 0;'>Digital Hub</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -20,7 +20,6 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEV
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
-    # Skoon datums sonder strepies
     t = t.replace("-", " ").replace("/", " ")
     m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
     for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
@@ -105,8 +104,7 @@ if not df.empty:
         ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
         if sq and sq.lower() not in ts.lower(): continue
         
-        # Google Maps Skakel vir navigasie
-        map_url = f"https://www.google.com/maps/dir/?api=1&destination={ven.replace(' ','+')}+Midstream"
+        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
         vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{content}<div style='margin-top:10px;'>{btns}</div></div>"
