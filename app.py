@@ -70,38 +70,42 @@ if not df_raw.empty:
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
     
-    # Trek slegs die syfers uit die seleksie vir vergelyking
+    # Syfer-gebaseerde target numbers vir slim-koppeling
     target_numbers = set()
     for s in sel_age:
         nums = re.findall(r'\d+', s)
         if nums:
             n = int(nums[0])
             target_numbers.add(n)
-            # Koppel U10 (10) aan Gr 4 (4)
-            if n >= 7: target_numbers.add(n - 6) # U10 -> 4
-            if n <= 7: target_numbers.add(n + 6) # 4 -> U10
+            if n >= 7: target_numbers.add(n - 6) # U10 (10) -> 4
+            if n <= 7: target_numbers.add(n + 6) # 4 -> U10 (10)
 
     df_filtered = []
     for _, r in df_raw.iterrows():
+        act_name = str(r.iloc[3])
         dt_val = pd.to_datetime(str(r.iloc[5]), errors='coerce')
         if pd.isnull(dt_val): dt_val = pd.to_datetime(str(r.iloc[5]), dayfirst=True, errors='coerce')
         
         if pd.notnull(dt_val) and dt_val.date() < today: continue
         if sel_cat and not any(s.lower() in str(r.iloc[2]).lower() or (s=="Academics" and "academic" in str(r.iloc[2]).lower()) for s in sel_cat): continue
-        if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
+        if sel_act and act_name.strip() not in sel_act: continue
         
-        # SLIM FILTER LOGIKA
-        if target_numbers:
+        # --- VERBETERDE AGE FILTER LOGIKA ---
+        is_global_act = any(ws in act_name.lower() for ws in ["swimming", "athletics"])
+        
+        if target_numbers and not is_global_act:
             row_age_val = clean_val(r.iloc[11])
             row_nums = re.findall(r'\d+', row_age_val)
             if not row_nums or int(row_nums[0]) not in target_numbers:
                 continue
         
         is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
-        g_num = int(re.search(r'\d+', clean_val(r.iloc[11])).group()) if re.search(r'\d+', clean_val(r.iloc[11])) else 99
-        if "U" in str(r.iloc[11]).upper() and g_num >= 7: g_num = g_num - 6
+        g_raw = clean_val(r.iloc[11])
+        match = re.search(r'\d+', g_raw)
+        g_num = int(match.group()) if match else 99
+        if "U" in g_raw.upper() and g_num >= 7: g_num = g_num - 6
 
-        df_filtered.append({'data': r, 'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None), 'subject': str(r.iloc[3]).lower(), 'grade_val': g_num, 'is_ft': is_ft})
+        df_filtered.append({'data': r, 'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None), 'subject': act_name.lower(), 'grade_val': g_num, 'is_ft': is_ft})
 
     df_filtered.sort(key=lambda x: (not x['is_ft'], x['date'], x['subject'], x['grade_val']))
 
@@ -112,20 +116,26 @@ if not df_raw.empty:
         .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; line-height:1.2; }
         .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
         .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
-        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
+        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:12px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
         .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
         .btn { background:#800000; color:white !important; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
     </style>"""
 
     for item in df_filtered:
         r = item['data']
-        act_name = str(r.iloc[3])
-        is_acad_related = "academic" in str(r.iloc[2]).lower() or "afrikaans" in act_name.lower()
+        act_display_name = str(r.iloc[3])
+        is_acad_related = "academic" in str(r.iloc[2]).lower() or "afrikaans" in act_display_name.lower()
+        is_global_act = any(ws in act_display_name.lower() for ws in ["swimming", "athletics"])
+        
         row_age = clean_val(r.iloc[11])
-        prefix = "Gr " if is_acad_related else "U"
-        age_display = f"{prefix}{row_age} " if row_age else ""
-        t_act = translate_term(act_name, act_name)
-        t_detail = translate_term(clean_val(r.iloc[4]), act_name)
+        if is_global_act and not row_age:
+            age_display = ""
+        else:
+            prefix = "Gr " if is_acad_related else "U"
+            age_display = f"{prefix}{row_age} " if row_age else ""
+            
+        t_act = translate_term(act_display_name, act_display_name)
+        t_detail = translate_term(clean_val(r.iloc[4]), act_display_name)
         full_title = f"{t_act} {age_display}{t_detail}".strip()
         
         if search_q and search_q.lower() not in full_title.lower(): continue
@@ -139,7 +149,7 @@ if not df_raw.empty:
         if "http" in note_raw.lower(): btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
         else: note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
         
-        h += f"""<div class='card'><div class='card-title'>{full_title}</div><div class='info-row'>📅 {d_str}</div><div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_name).upper()}</span></div>{note_html if 'note_html' in locals() else ''}<div class='btn-box'>{btns}</div></div>"""
+        h += f"""<div class='card'><div class='card-title'>{full_title}</div><div class='info-row'>📅 {d_str}</div><div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_display_name).upper()}</span></div>{note_html if 'note_html' in locals() else ''}<div class='btn-box'>{btns}</div></div>"""
         note_html = ""
 
     components.html(h, height=2500, scrolling=True)
