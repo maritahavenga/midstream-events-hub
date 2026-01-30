@@ -7,7 +7,7 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
+st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="refresh")
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
@@ -57,8 +57,7 @@ if not df.empty:
     res = []
     for _, r in df.iterrows():
         n, cat = str(r.iloc[3]), str(r.iloc[2]).lower()
-        raw_dt = cl(r.iloc[5])
-        dt_obj = pd.to_datetime(raw_dt, dayfirst=True, errors='coerce')
+        dt_obj = pd.to_datetime(cl(r.iloc[5]), dayfirst=True, errors='coerce')
         ft = "full term" in str(r.iloc[12]).lower()
         if not ft and pd.notnull(dt_obj) and dt_obj.date() < today: continue
         if s_cat and not any(x.lower() in cat or (x=="Academics" and "academic" in cat) for x in s_cat): continue
@@ -66,25 +65,5 @@ if not df.empty:
         if tn and not any(x in n.lower() for x in ["swimming", "athletics"]):
             vn = re.findall(r'\d+', cl(r.iloc[11]))
             if not (vn and int(vn[0]) in tn): continue
-        m = re.search(r'\d+', cl(r.iloc[11]))
-        gv = int(m.group()) if m else 99
+        gv = int(re.search(r'\d+', cl(r.iloc[11])).group()) if re.search(r'\d+', cl(r.iloc[11])) else 99
         if "U" in str(r.iloc[11]).upper() and gv >= 7: gv -= 6
-        
-        # Formateer datum na "05 February 2026"
-        disp_d = dt_obj.strftime('%d %B %Y') if pd.notnull(dt_obj) else raw_dt
-        res.append({'r': r, 'dt': dt_obj if pd.notnull(dt_obj) else datetime.max.replace(tzinfo=None), 'n': n.lower(), 'g': gv, 'ft': ft, 'dd': disp_d})
-
-    res.sort(key=lambda x: (not x['ft'], x['dt'], x['n'], x['g']))
-    h = "<style>body{font-family:sans-serif;}.card{background:white;padding:20px;border-radius:15px;border-left:10px solid #800000;margin-bottom:18px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}.title{color:#800000;font-size:1.1rem;font-weight:800;margin-bottom:10px;}.venue{color:#008080;font-weight:800;text-transform:uppercase;}.btn{background:#800000;color:white!important;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:0.75rem;font-weight:700;display:inline-block;margin-top:10px;margin-right:5px;}</style>"
-    for i in res:
-        r, d, f, ds = i['r'], i['dt'], i['ft'], i['dd']
-        is_ac = "academic" in str(r.iloc[2]).lower() or any(x in str(r.iloc[3]).lower() for x in ["afrikaans", "eat", "ht", "math"])
-        age = cl(r.iloc[11])
-        pre = "Gr " if is_ac else "U"
-        age_d = f"{pre}{age} " if (age and not (any(x in str(r.iloc[3]).lower() for x in ["swimming", "athletics"]) and not age)) else ""
-        title = f"{tr(str(r.iloc[3]), str(r.iloc[3]))} {age_d}{tr(cl(r.iloc[4]), str(r.iloc[3]))}".strip()
-        if sq and sq.lower() not in title.lower(): continue
-        date_str = "FULL TERM" if f else ds
-        b1, b2 = ("Document", "Assessment Details") if is_ac else ("Programme", "Team List")
-        btns = ""
-        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='
