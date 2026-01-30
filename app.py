@@ -1,74 +1,64 @@
 import streamlit as st
 import pandas as pd
 import requests, io
+import random
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 
-# --- MODERNE STYL ---
+# --- STYLE ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
     .event-card {
         background: white;
-        padding: 24px;
-        border-radius: 18px;
-        border-left: 12px solid #800000;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.08);
-        margin-bottom: 18px;
+        padding: 20px;
+        border-radius: 15px;
+        border-left: 10px solid #800000;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
     }
-    .event-title { color: #800000; font-size: 1.4rem; font-weight: bold; margin-bottom: 8px; }
-    .date-text { color: #008080; font-size: 1.1rem; font-weight: 600; }
-    .venue-text { color: #555; font-size: 1rem; margin-top: 4px; }
+    .stApp { background-color: #f4f4f4; }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align:center; color:#800000; margin-bottom:0;'>LMCP EVENT HUB</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; color:#666; margin-top:0;'>Altyd op datum</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center; color:#800000;'>LMCP EVENT HUB</h1>", unsafe_allow_html=True)
 
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# ONS VOEG 'N RANDOM NOMMER BY SODAT GOOGLE NIE DIE OU DATA WYS NIE
+cache_buster = random.randint(1, 100000)
+URL = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv&x={cache_buster}"
 
-# --- HIERDIE DEEL STOP DIE BLOCKING ---
-@st.cache_data(ttl=300) # Die app onthou die data vir 5 MINUTE (300 sekondes)
-def get_safe_data():
+def load_now():
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(URL, headers=headers, timeout=10)
+        # Ons vra Google baie direk vir die data
+        r = requests.get(URL, timeout=15)
         if r.status_code == 200:
-            return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+            df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+            return df
     except:
         return None
     return None
 
-df = get_safe_data()
+df = load_now()
 
 if df is not None and not df.empty:
-    # Soekbalk vir ouers
-    search = st.text_input("🔍 Soek aktiwiteit (bv. Rugby, Tennis...)", "")
-
+    st.success("Data suksesvol gelaai!")
     for i in range(len(df)):
         try:
             row = df.iloc[i]
-            act = str(row.iloc[3]).strip()
-            date = str(row.iloc[5]).strip()
-            ven = str(row.iloc[6]).strip()
-
+            act = str(row.iloc[3]).strip()  # Activity
+            date = str(row.iloc[5]).strip() # Date
+            ven = str(row.iloc[6]).strip()  # Venue
+            
             if len(act) > 2 and "activity" not in act.lower():
-                # As daar gesoek word, filter die data
-                if search.lower() in act.lower() or search.lower() in ven.lower():
-                    st.markdown(f"""
-                        <div class="event-card">
-                            <div class="event-title">{act}</div>
-                            <div class="date-text">📅 {date}</div>
-                            <div class="venue-text">📍 {ven}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="event-card">
+                        <b style="color:#800000; font-size:1.2rem;">{act}</b><br>
+                        <span style="color:#008080;"><b>📅 {date}</b></span><br>
+                        <span style="color:#555;">📍 {ven}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
         except:
             continue
 else:
-    st.error("Besig om konneksie te verfris... Wag asseblief 'n oomblik.")
-    if st.button("Herlaai nou"):
-        st.cache_data.clear()
+    st.warning("Google is tans besig om die data voor te berei. Verfris asseblief die bladsy oor 10 sekondes.")
+    if st.button("Probeer weer"):
         st.rerun()
-
-st.markdown("---")
-st.caption("Data word elke 5 minute outomaties verfris vanaf Google Sheets.")
