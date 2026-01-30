@@ -38,6 +38,7 @@ if not df.empty:
         opts = [o for o in ao if "U" in o] if sc==["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
         sg = st.multiselect("Age Group", options=opts, key="stk_v")
     sq = st.text_input("Search Events...")
+    if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
     tn = set()
     for s in sg:
