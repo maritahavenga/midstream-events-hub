@@ -54,8 +54,9 @@ if not df_raw.empty:
             act_list = sorted(list(set([str(a).strip() for a in df_raw.iloc[:, 3] if a])))
             sel_act = st.multiselect("Activity / Subject", act_list, default=[], key="f_act")
         with c3:
-            age_list = sorted(list(set([clean_val(a) for a in df_raw.iloc[:, 11] if a]))) if df_raw.shape[1] > 11 else []
-            sel_age = st.multiselect("Gr / Age", age_list, default=[], key="f_age")
+            # Vaste lys opsies wat altyd dieselfde bly
+            age_options = ["1", "2", "3", "4", "5", "6", "7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
+            sel_age = st.multiselect("Gr / Age", age_options, default=[], key="f_age")
         
         search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
         
@@ -67,6 +68,25 @@ if not df_raw.empty:
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
     df_filtered = []
+
+    # Mapping vir slim filters
+    mapping = {
+        "1": ["1", "U7"], "U7": ["1", "U7"],
+        "2": ["2", "U8"], "U8": ["2", "U8"],
+        "3": ["3", "U9"], "U9": ["3", "U9"],
+        "4": ["4", "U10"], "U10": ["4", "U10"],
+        "5": ["5", "U11"], "U11": ["5", "U11"],
+        "6": ["6", "U12"], "U12": ["6", "U12"],
+        "7": ["7", "U13"], "U13": ["7", "U13"]
+    }
+
+    # Kry alle verwante grade/ouderdomme gebaseer op seleksie
+    expanded_sel_age = set()
+    for s in sel_age:
+        expanded_sel_age.add(s)
+        if s in mapping:
+            for related in mapping[s]:
+                expanded_sel_age.add(related)
 
     for _, r in df_raw.iterrows():
         dt_val = pd.to_datetime(r.iloc[5], dayfirst=True, errors='coerce')
@@ -81,7 +101,11 @@ if not df_raw.empty:
             if not match_found: continue
         
         if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
-        if sel_age and df_raw.shape[1] > 11 and clean_val(r.iloc[11]) not in sel_age: continue
+        
+        # SLIM AGE FILTER
+        if expanded_sel_age:
+            row_age = clean_val(r.iloc[11])
+            if row_age not in expanded_sel_age: continue
         
         df_filtered.append((r, dt_val))
 
@@ -103,7 +127,7 @@ if not df_raw.empty:
         act_raw = str(r.iloc[3])
         is_acad = "academic" in cat
         prefix = "Gr " if is_acad else "U"
-        age = clean_val(r.iloc[11]) if len(r)>11 else ""
+        age = clean_val(r.iloc[11])
         age_str = f"{prefix}{age}" if age else ""
         team_detail = clean_val(r.iloc[4])
         
