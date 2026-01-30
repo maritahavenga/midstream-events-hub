@@ -40,11 +40,22 @@ if not df.empty:
  st.markdown("</div>",unsafe_allow_html=True)
  ty,tn=datetime.now(pytz.timezone('Africa/Johannesburg')).date(),set()
  for s in sg:
-  v=int(re.findall(r'\d+',s)[0]); tn.update([v, v+6 if v<=7 else v-6])
+  v_match=re.findall(r'\d+',s)
+  if v_match:
+   v=int(v_match[0]); tn.update([v, v+6 if v<=7 else v-6])
  res=[]
  for _,r in df.iterrows():
   n,cat,av,rd=str(r.iloc[3]),str(r.iloc[2]).lower(),cl(r.iloc[11]),cl(r.iloc[5])
   dt=pd.to_datetime(rd,dayfirst=True,errors='coerce')
   cm=(any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)) if sc else True
   if not cm or (sa and c_act(n) not in sa): continue
-  vn
+  vn_match=re.findall(r'\d+',av)
+  if tn and vn_match and int(vn_match[0]) not in tn: continue
+  if not ("full term" in str(r.iloc[12]).lower()) and pd.notnull(dt) and dt.date()<ty: continue
+  res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
+ res.sort(key=lambda x:x['dt'])
+ h="<style>.card{background:white;padding:10px;border-radius:10px;border-left:8px solid #800000;margin-bottom:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);font-family:sans-serif;}.btn{background:#800000;color:white!important;padding:4px 8px;border-radius:5px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:4px 4px 0 0;}.nt{background:#f0f7f7;padding:5px;margin-top:5px;border-radius:5px;font-size:0.7rem;}</style>"
+ for i in res:
+  r,ds,v=i['r'],i['dd'],cl(i['r'].iloc[6])
+  cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
+  ia,ic="afrikaans"
