@@ -4,7 +4,7 @@ import requests
 import io, re
 from datetime import datetime
 import pytz
-import streamlit.components.v1 as components
+import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
@@ -56,41 +56,8 @@ if not df.empty:
     for s in sg:
         ns = re.findall(r'\d+', s)
         if ns:
-            nv = int(ns[0])
-            tn.add(nv)
-            tn.add(nv-6 if nv>=7 else nv+6)
+            nv = int(ns[0]); tn.add(nv); tn.add(nv-6 if nv>=7 else nv+6)
 
     res = []
     for _, r in df.iterrows():
-        n, cat = str(r.iloc[3]), str(r.iloc[2]).lower()
-        dn = "Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
-        if "eat" in n.lower(): dn = "Afrikaans Eerste Addisionele Taal"
-        elif "ht" in n.lower(): dn = "Afrikaans Hooftaal"
-        
-        c_m = True
-        if sc:
-            c_m = any(x.lower() in cat for x in sc)
-            if "Academics" in sc and "academic" in cat: c_m = True
-        
-        if not c_m or (sa and dn not in sa): continue
-        dt = pd.to_datetime(cl(r.iloc[5]), dayfirst=True, errors='coerce')
-        ft = "full term" in str(r.iloc[12]).lower()
-        if (not ft and pd.notnull(dt) and dt.date() < today): continue
-        if tn and not any(x in n.lower() for x in ["swimming", "athletics"]):
-            v_num = re.findall(r'\d+', cl(r.iloc[11]))
-            if not (v_num and int(v_num[0]) in tn): continue
-        res.append({'r':r, 'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None), 'n':n.lower(), 'ft':ft, 'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else cl(r.iloc[5])})
-
-    res.sort(key=lambda x: (not x['ft'], x['dt'], x['n']))
-    h = "<style>body{font-family:sans-serif;}.card{background:white;padding:15px;border-radius:12px;border-left:8px solid #800000;margin-bottom:12px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}.title{color:#800000;font-size:1.1rem;font-weight:bold;}.v-link{color:#008080;text-decoration:none;font-weight:bold;text-transform:uppercase;}.btn{background:#800000;color:white!important;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}</style>"
-    for i in res:
-        r, f, ds = i['r'], i['ft'], i['dd']
-        cat_v, act, age = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11])
-        title = f"{tr(act, act)} {('U' if 'sport' in cat_v else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]), act)}".strip()
-        if sq and sq.lower() not in title.lower(): continue
-        v_val, v_h = cl(r.iloc[6]), ""
-        if v_val: v_h = f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={v_val.replace(' ','+')}+Midstream' target='_blank' class='v-link'>{tr(v_val, act).upper()}</a></div>"
-        is_af = "afrikaans" in act.lower()
-        is_ac = "academic" in cat_v or any(x in act.lower() for x in ["math", "science", "wiskunde"])
-        b1 = "Dokumente" if is_af else ("Document" if is_ac else "Programme")
-        btns = "".join([f"<a href='{r.
+        n
