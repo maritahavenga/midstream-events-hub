@@ -6,9 +6,11 @@ from datetime import datetime
 import pytz
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
+
 st.set_page_config(page_title="LMCP Hub",layout="centered")
 st_autorefresh(interval=120000,key="r")
 U="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+
 def cl(v):return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
  r=str(a).strip()
@@ -17,10 +19,14 @@ def tr(t,a):
  d={"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
  for k,v in d.items():t=re.sub(rf'\b{k}\b',v,t,flags=re.IGNORECASE)
  return t
+
 @st.cache_data(ttl=10)
 def ld():
- r=requests.get(f"{U}&cb={datetime.now().timestamp()}",timeout=5)
- return pd.read_csv(io.StringIO(r.content.decode('utf-8')),dtype=str).fillna("")
+ try:
+  r=requests.get(f"{U}&cb={datetime.now().timestamp()}",timeout=5)
+  return pd.read_csv(io.StringIO(r.content.decode('utf-8')),dtype=str).fillna("")
+ except:return pd.DataFrame()
+
 df=ld()
 if not df.empty:
  st.markdown("<div style='background:white;padding:15px;border-radius:10px;border:1px solid #eee;'>",unsafe_allow_html=True)
@@ -29,13 +35,12 @@ if not df.empty:
  with c2:
   m=df.iloc[:,2].str.contains('|'.join(sc) if sc else ".*",case=False)
   if sc and "Academics" in sc:m|=df.iloc[:,2].str.contains("academic",case=False)
-  o_r=sorted(list(set(df[m].iloc[:,3].str.strip())))
+  orw=sorted(list(set(df[m].iloc[:,3].str.strip())))
   clo=set()
-  for o in o_r:
+  for o in orw:
    lo=o.lower()
    if "athletics" in lo:clo.add("Athletics")
    elif "hockey" in lo:clo.add("Hockey")
-   elif "tennis" in lo:clo.add("Tennis")
    elif "eat" in lo or "eerste" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
    elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
    else:clo.add(o)
@@ -45,28 +50,42 @@ if not df.empty:
   sg=st.multiselect("Age Group",al)
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
+
  today=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
- tn=set()
+ # --- SLIM FILTER LOGIKA ---
+ target_nums = set()
  for s in sg:
-  ns=re.findall(r'\d+',s)
-  if ns:
-   nv=int(ns[0]);tn.add(nv)
-   if nv<=7:tn.add(nv+6)
-   else:tn.add(nv-6)
+  nums = re.findall(r'\d+', s)
+  if nums:
+   n = int(nums[0])
+   target_nums.add(n)
+   if n <= 7: target_nums.add(n + 6) # Gr 4 -> soek ook 10
+   if n >= 7: target_nums.add(n - 6) # U10 -> soek ook 4
+
  res=[]
  for _,r in df.iterrows():
   n,cat,av=str(r.iloc[3]),str(r.iloc[2]).lower(),cl(r.iloc[11])
-  dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else ("Tennis" if "tennis" in n.lower() else n))
+  dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
   if "eat" in n.lower() or "eerste" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
   elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
+  
+  # 1. Kategorie filter
   cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat) if sc else True
   if not cm or (sa and dn not in sa):continue
-  if tn and av:
-   v_n=re.findall(r'\d+',av)
-   if v_n and int(v_n[0]) not in tn:continue
+  
+  # 2. Ouderdom filter (SLIM MAPPING)
+  if target_nums:
+   row_nums = re.findall(r'\d+', av)
+   if not row_nums: # As daar nie 'n ouderdom in die ry is nie (soos Athletics)
+    if not any(x in n.lower() for x in ["athletics","swimming"]): continue
+   else:
+    if not any(int(rn) in target_nums for rn in row_nums): continue
+
+  # 3. Datum filter
   rd=cl(r.iloc[5]);dt=pd.to_datetime(rd,dayfirst=True,errors='coerce');ft="full term" in str(r.iloc[12]).lower()
   if not ft and pd.notnull(dt) and dt.date()<today:continue
   res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
+
  res.sort(key=lambda x:(not x['ft'],x['dt'],x['n']))
  h="<style>.card{background:white;padding:12px;border-radius:10px;border-left:8px solid #800000;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);font-family:sans-serif;}.title{color:#800000;font-size:1rem;font-weight:bold;}.btn{background:#800000;color:white!important;padding:5px 8px;border-radius:5px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}.nt{background:#f0f7f7;padding:6px;margin-top:5px;border-radius:5px;font-size:0.7rem;}</style>"
  for i in res:
