@@ -9,12 +9,9 @@ st_autorefresh(interval=120000, key="r_token")
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
-
 def tr(t, a):
-    r = str(a).strip()
-    t = re.sub(r'\bG\b', 'Girls', t)
-    if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b', r):
-        return "Afrikaans " + ("Eerste Addisionele Taal" if "eat" in r.lower() or "eerste" in r.lower() else "Hooftaal")
+    r = str(a).strip(); t = re.sub(r'\bG\b', 'Girls', t)
+    if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b', r): return "Afrikaans "+("Eerste Addisionele Taal" if "eat" in r.lower() or "eerste" in r.lower() else "Hooftaal")
     d = {"Saal": "Hall", "Veld": "Field", "Atletiek": "Athletics", "Wiskunde": "Math"}
     for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
     return t
@@ -23,9 +20,7 @@ def c_a(n):
     n = str(n).lower()
     for x in ["athletics", "atletiek", "hockey", "rugby", "netball", "netbal", "tennis"]:
         if x in n: return x.capitalize().replace("Netbal", "Netball").replace("Atletiek", "Athletics")
-    if any(k in n for k in ["eat", "ht", "hooftaal", "eerste"]):
-        return "Afrikaans " + ("EAT" if "eat" in n else "HT")
-    return n.capitalize()
+    return "Afrikaans "+("EAT" if "eat" in n else "HT") if any(k in n for k in ["eat","ht","hooftaal","eerste"]) else n.capitalize()
 
 @st.cache_data(ttl=10)
 def ld():
@@ -35,9 +30,8 @@ def ld():
     except: return pd.DataFrame()
 
 df = ld()
-
 if not df.empty:
-    st.markdown("<div style='background:#fff;padding:20px;border-radius:15px;border:1px solid #eee;box-shadow:0 4px 15px rgba(0,0,0,0.05);margin-bottom:25px;'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:#fff;padding:15px;border-radius:12px;border:1px solid #eee;box-shadow:0 4px 10px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2:
@@ -46,28 +40,10 @@ if not df.empty:
         sa = st.multiselect("Activity", sorted(list({c_a(o) for o in df[m].iloc[:, 3]})))
     with c3:
         ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-        opts = [o for o in ao if "U" in o] if sc == ["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
+        opts = [o for o in ao if "U" in o] if sc==["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
         sg = st.multiselect("Age Group", options=opts, key="stk_val")
-    sq = st.text_input("Search Events...", placeholder="Type to filter results...")
+    sq = st.text_input("Search Events...")
     st.markdown("</div>", unsafe_allow_html=True)
 
     tn = set()
-    for s in sg:
-        v_m = re.findall(r'\d+', s)
-        if v_m: 
-            v = int(v_m[0])
-            tn.update([v, v+6 if v<=7 else v-6])
-
-    res = []
-    for _, r in df.iterrows():
-        n, cat, av, rd = str(r.iloc[3]), str(r.iloc[2]).lower(), cl(r.iloc[11]), cl(r.iloc[5])
-        dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
-        if sc and not (any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)): continue
-        if sa and c_a(n) not in sa: continue
-        v_m = re.findall(r'\d+', av)
-        if tn and v_m and int(v_m[0]) not in tn: continue
-        res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
-
-    res.sort(key=lambda x: x['dt'])
-    
-    h = "<style>.card{background:white;padding:20px;border-radius:12px;border-left:10
+    for s
