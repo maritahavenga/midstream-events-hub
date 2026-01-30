@@ -36,6 +36,10 @@ if not df.empty:
         with c1: s_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"])
         with c2:
             o = sorted(list(set(df.iloc[:, 3].str.strip())))
+            if s_cat:
+                m = df.iloc[:, 2].str.contains('|'.join(s_cat), case=False, na=False)
+                if "Academics" in s_cat: m |= df.iloc[:, 2].str.contains("academic", case=False, na=False)
+                o = sorted(list(set(df[m].iloc[:, 3].str.strip())))
             s_act = st.multiselect("Activity", o)
         with c3: s_age = st.multiselect("Gr / Age", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
         sq = st.text_input("Search")
@@ -76,4 +80,13 @@ if not df.empty:
         title = f"{tr(str(r.iloc[3]), str(r.iloc[3]))} {age_d}{tr(cl(r.iloc[4]), str(r.iloc[3]))}".strip()
         if sq and sq.lower() not in title.lower(): continue
         ds = "FULL TERM" if f else (d.strftime('%d %B %Y') if d != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
-        b1, b
+        b1, b2 = ("Document", "Assessment Details") if is_ac else ("Programme", "Team List")
+        btns = ""
+        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{b1}</a>"
+        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>{b2}</a>"
+        nr = cl(r.iloc[10])
+        note = f"<div style='background:#e7f3f3;padding:10px;margin-top:10px;border-radius:8px;font-size:0.8rem;'>{nr}</div>" if nr and "http" not in nr.lower() else ""
+        if "http" in nr.lower(): btns += f"<a href='{nr}' target='_blank' class='btn'>Info</a>"
+        h += f"<div class='card'><div class='title'>{title}</div><div>📅 {ds}</div><div class='venue'>📍 {tr(str(r.iloc[6]), str(r.iloc[3])).upper()}</div>{note}<div>{btns}</div></div>"
+    components.html(h, height=3000, scrolling=True)
+st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
