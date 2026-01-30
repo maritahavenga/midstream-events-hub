@@ -20,8 +20,10 @@ def tr(t,a):
  return t
 @st.cache_data(ttl=10)
 def ld():
- r=requests.get(f"{U}&cb={datetime.now().timestamp()}",timeout=5)
- return pd.read_csv(io.StringIO(r.content.decode('utf-8')),dtype=str).fillna("")
+ try:
+  r=requests.get(f"{U}&cb={datetime.now().timestamp()}",timeout=5)
+  return pd.read_csv(io.StringIO(r.content.decode('utf-8')),dtype=str).fillna("")
+ except:return pd.DataFrame()
 df=ld()
 if not df.empty:
  st.markdown("<div style='background:white;padding:20px;border-radius:12px;border:1px solid #eee;'>",unsafe_allow_html=True)
@@ -60,27 +62,3 @@ if not df.empty:
   cm=True
   if sc:cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)
   if not cm or (sa and dn not in sa):continue
-  dt=pd.to_datetime(cl(r.iloc[5]),dayfirst=True,errors='coerce')
-  ft="full term" in str(r.iloc[12]).lower()
-  if (not ft and pd.notnull(dt) and dt.date()<today):continue
-  if tn and not any(x in n.lower() for x in ["swimming","athletics"]):
-   v_n=re.findall(r'\d+',cl(r.iloc[11]))
-   if not(v_n and int(v_n[0]) in tn):continue
-  res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else cl(r.iloc[5])})
- res.sort(key=lambda x:(not x['ft'],x['dt'],x['n']))
- h="<style>body{font-family:sans-serif;}.card{background:white;padding:15px;border-radius:12px;border-left:8px solid #800000;margin-bottom:12px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}.title{color:#800000;font-size:1.1rem;font-weight:bold;}.v-link{color:#008080;text-decoration:none;font-weight:bold;text-transform:uppercase;}.btn{background:#800000;color:white!important;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}</style>"
- for i in res:
-  r,f,ds=i['r'],i['ft'],i['dd']
-  cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
-  ia="afrikaans" in act.lower()
-  ic="academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"])
-  b1="Dokumente" if ia else ("Document" if ic else "Programme")
-  b2="Assessment" if ic or ia else "Team List"
-  btns="".join([f"<a href='{r.iloc[j]}' target='_blank' class='btn'>{b1 if j==7 else b2}</a>" for j in [7,8] if "http" in str(r.iloc[j]).lower()])
-  t_s=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]),act)}".strip()
-  if sq and sq.lower() not in t_s.lower():continue
-  vv,vh=cl(r.iloc[6]),""
-  if vv:vh=f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={vv.replace(' ','+')}+Midstream' target='_blank' class='venue-link' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.85rem;'>{tr(vv,act).upper()}</a></div>"
-  h+=f"<div class='card'><div class='title'>{t_s}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}<div>{btns}</div></div>"
- v1.html(h,height=3000,scrolling=True)
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
