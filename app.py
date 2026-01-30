@@ -1,99 +1,53 @@
 import streamlit as st
 import pandas as pd
 
-# Bladsy instellings
-st.set_page_config(page_title="LMCP Event Hub", layout="centered")
-
-# --- DIE MOOI ONTWERP (CSS) ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #f4f4f4; }
-    .header-banner {
-        background: linear-gradient(135deg, #800000 0%, #a00000 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 0 0 25px 25px;
-        text-align: center;
-        margin-top: -60px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        font-family: sans-serif;
-    }
-    .event-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        border-left: 10px solid #800000;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        font-family: sans-serif;
-    }
-    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+st.set_page_config(page_title="LMCP Hub", layout="centered")
 
 # --- BANNER ---
-st.markdown("""
-    <div class="header-banner">
-        <h1 style='margin:0;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
-        <p style='margin:0; opacity:0.9;'>Primary Event Hub</p>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center; color:#800000;'>MIDSTREAM EVENT HUB</h1>", unsafe_allow_html=True)
 
-# --- DATA KONNEKSIE ---
-# Ons gebruik die mees direkte pad na jou blad (Sheet ID en GID)
-SHEET_ID = "1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8"
-GID = "37057995"
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
+# ONS GEBRUIK DIE PUBLIEKE CSV SKAKEL (DIT IS DIE MEES REGUIT PAD)
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
-@st.cache_data(ttl=10) # Verfris elke 10 sekondes
-def get_data():
+@st.cache_data(ttl=5)
+def load_raw_data():
     try:
-        # Hierdie lees die CSV direk in 'n tabel in
-        return pd.read_csv(URL, on_bad_lines='skip')
+        # Ons probeer die data direk lees
+        df = pd.read_csv(URL)
+        return df
     except Exception as e:
+        st.error(f"Google Fout: {e}")
         return None
 
-df = get_data()
-
-st.write("") 
+df = load_raw_data()
 
 if df is not None:
-    search = st.text_input("🔍 Soek vir aktiwiteit...", "")
+    st.success("✅ ONS HET DATA!")
     
-    st.markdown("### Opkomende Events")
+    # Wys 'n soekbalk
+    search = st.text_input("🔍 Soek...", "")
     
-    found_any = False
-    # Ons kyk deur die rye (ons begin by ry 0)
+    # Wys die data in mooi boksies
     for index, row in df.iterrows():
         try:
-            # Ons gebruik die kolom-nommers: 3=Activity, 5=Date, 6=Venue
+            # Kolom nommers (A=0, B=1, C=2, D=3, E=4, F=5, G=6)
+            # Volgens jou sheet is Aktiwiteit in D (3), Datum in F (5), Venue in G (6)
             act = str(row.iloc[3]).strip()
             date = str(row.iloc[5]).strip()
             ven = str(row.iloc[6]).strip()
-            
-            # Slaan leë rye of die opskrif ry oor
-            if len(act) < 2 or "activity" in act.lower() or "nan" in act.lower():
-                continue
-            
-            # Soek filter
-            if search.lower() in act.lower() or search.lower() in ven.lower():
-                found_any = True
-                st.markdown(f"""
-                    <div class="event-card">
-                        <div class="event-title">{act}</div>
-                        <div style="color:#008080; font-weight:bold;">📅 {date}</div>
-                        <div style="color:#555;">📍 {ven.upper()}</div>
+
+            if len(act) > 2 and "activity" not in act.lower():
+                if search.lower() in act.lower() or search.lower() in ven.lower():
+                    st.markdown(f"""
+                    <div style="background:white; padding:15px; border-radius:10px; border-left:8px solid #800000; margin-bottom:10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <b style="color:#800000; font-size:1.1rem;">{act}</b><br>
+                        <span style="color:#008080;">📅 {date}</span> | <span style="color:#555;">📍 {ven}</span>
                     </div>
                     """, unsafe_allow_html=True)
         except:
             continue
-
-    if not found_any:
-        st.info("Besig om data te sinkroniseer... Verfris asseblief oor 'n paar sekondes.")
 else:
-    st.error("Kon nie die Google Sheet bereik nie. Maak seker die blad is op 'Anyone with the link can view' gestel.")
-
-# --- REFRESH ---
-if st.button("🔄 Herlaai Nou"):
-    st.cache_data.clear()
-    st.rerun()
+    st.warning("Wag tans vir Google om die 'Publish' skakel aktief te maak. Dit kan tot 2 minute neem.")
+    if st.button("Probeer weer"):
+        st.cache_data.clear()
+        st.rerun()
