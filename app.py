@@ -32,7 +32,8 @@ if not df.empty:
     c1, c2, c3 = st.columns(3)
     with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2:
-        m = df.iloc[:, 2].str.contains('|'.join(sc), case=False) if sc else df.iloc[:, 2].notnull()
+        m = df.iloc[:, 2].str.contains('|'.join(sc) if sc else ".*", case=False)
+        if sc and "Academics" in sc: m |= df.iloc[:, 2].str.contains("academic", case=False)
         orw = sorted(list(set(df[m].iloc[:, 3].str.strip())))
         clo = set()
         for o in orw:
@@ -56,7 +57,8 @@ if not df.empty:
         ns = re.findall(r'\d+', s)
         if ns:
             nv = int(ns[0])
-            tn.add(nv); tn.add(nv-6 if nv>=7 else nv+6)
+            tn.add(nv)
+            tn.add(nv-6 if nv>=7 else nv+6)
 
     res = []
     for _, r in df.iterrows():
@@ -64,7 +66,13 @@ if not df.empty:
         dn = "Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
         if "eat" in n.lower(): dn = "Afrikaans Eerste Addisionele Taal"
         elif "ht" in n.lower(): dn = "Afrikaans Hooftaal"
-        if (sc and not any(x.lower() in cat for x in sc)) or (sa and dn not in sa): continue
+        
+        c_m = True
+        if sc:
+            c_m = any(x.lower() in cat for x in sc)
+            if "Academics" in sc and "academic" in cat: c_m = True
+        
+        if not c_m or (sa and dn not in sa): continue
         dt = pd.to_datetime(cl(r.iloc[5]), dayfirst=True, errors='coerce')
         ft = "full term" in str(r.iloc[12]).lower()
         if (not ft and pd.notnull(dt) and dt.date() < today): continue
@@ -81,11 +89,8 @@ if not df.empty:
         title = f"{tr(act, act)} {('U' if 'sport' in cat_v else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]), act)}".strip()
         if sq and sq.lower() not in title.lower(): continue
         v_val, v_h = cl(r.iloc[6]), ""
-        if v_val: v_h = f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/{v_val.replace(' ','+')}+Midstream' target='_blank' class='v-link'>{tr(v_val, act).upper()}</a></div>"
+        if v_val: v_h = f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={v_val.replace(' ','+')}+Midstream' target='_blank' class='v-link'>{tr(v_val, act).upper()}</a></div>"
         is_af = "afrikaans" in act.lower()
         is_ac = "academic" in cat_v or any(x in act.lower() for x in ["math", "science", "wiskunde"])
         b1 = "Dokumente" if is_af else ("Document" if is_ac else "Programme")
-        btns = "".join([f"<a href='{r.iloc[j]}' target='_blank' class='btn'>{b1 if j==7 else ('Assessment' if is_ac or is_af else 'Team List')}</a>" for j in [7,8] if "http" in str(r.iloc[j]).lower()])
-        h += f"<div class='card'><div class='title'>{title}</div><div>📅 {'FULL TERM' if f else ds}</div>{v_h}<div>{btns}</div></div>"
-    components.html(h, height=3000, scrolling=True)
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+        btns = "".join([f"<a href='{r.
