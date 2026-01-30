@@ -65,6 +65,7 @@ if not df.empty:
     for s in sg:
         v_m = re.findall(r'\d+', s); v = int(v_m[0]) if v_m else 0
         if v: tn.update([v, v+6 if v<=7 else v-6])
+    
     res = []
     for _, r in df.iterrows():
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
@@ -75,6 +76,7 @@ if not df.empty:
         v_m = re.findall(r'\d+', age); v_n = int(v_m[0]) if v_m else -1
         if tn and v_n not in tn: continue
         res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
+    
     res.sort(key=lambda x: x['dt'])
 
     h = """<style>
@@ -85,6 +87,7 @@ if not df.empty:
     .nt-box{background:#e0f2f1;padding:12px;margin-top:10px;border-radius:8px;font-size:0.95rem;color:#333;border-left:5px solid #800000;line-height:1.4;}
     .hockey-team{border: 2px dotted #800000; background:#ffffff; padding:10px; margin-bottom:10px; border-radius:8px; font-weight:bold; color:#800000;}
     </style>"""
+    
     for i in res:
         r, ds = i['r'], i['ds']
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
@@ -108,5 +111,8 @@ if not df.empty:
         vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{content}<div style='margin-top:10px;'>{btns}</div></div>"
+    
+    # Gebruik 'height=3000' om seker te maak alle kaarte pas in die boks
     v1.html(h, height=3000, scrolling=True)
+
 st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
