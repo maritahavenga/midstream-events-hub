@@ -72,3 +72,14 @@ if df is not None and not df.empty:
                     <div class="event-title">{display_title}</div>
                     <div style="color:#555; font-size:0.9rem;">
                         <b>Target: {grade}</b> | 📅 {date} | 📍 {ven}
+                    </div>
+                    {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 1 else ''}
+                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT</a>' if 'http' in str(lnk) else ''}
+                </div>
+            """, unsafe_allow_html=True)
+else:
+    st.info("🔄 Besig om die nuutste data op te laai... Verfris asb oor 5 sekondes.")
+
+if st.button("Herlaai"):
+    st.cache_data.clear()
+    st.rerun()
