@@ -7,16 +7,23 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# 2. Oorspronklike Skoon Banner (Net die logo en titel)
-st.markdown("<div style='text-align: center;'><img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='160'><h2 style='color: #800000; font-family: sans-serif; margin-bottom: 25px;'>LMCP Digital Hub</h2></div>", unsafe_allow_html=True)
+# 2. Oorspronklike Teal Banner met Logo (Presies soos dit was)
+st.markdown("""
+    <div style='background-color: #008080; padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 25px;'>
+        <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='150' style='filter: brightness(0) invert(1);'>
+        <h2 style='color: white; font-family: sans-serif; margin-top: 15px;'>LMCP Digital Hub</h2>
+    </div>
+""", unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
+    # Volle maande vir datums
     m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
     for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
+    # Venue en Terme
     d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","G":"Girls"}
     for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
     return t
@@ -25,8 +32,9 @@ def c_a(n):
     n = str(n).lower()
     for x in ["athletics","atletiek","hockey","rugby","netball","netbal","tennis"]:
         if x in n: return x.capitalize().replace("Netbal","Netball").replace("Atletiek","Athletics")
-    if "eat" in n or "eerste" in n: return "Afrikaans FAL"
-    if "ht" in n or "hooftaal" in n: return "Afrikaans HL"
+    # Oorspronklike name behou
+    if "eat" in n or "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
+    if "ht" in n or "hooftaal" in n: return "Afrikaans Hooftaal"
     return n.capitalize()
 
 @st.cache_data(ttl=1)
@@ -82,7 +90,7 @@ if not df.empty:
         r, ds = i['r'], i['ds']
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-        is_afr = "afrikaans" in act.lower() or "eat" in act.lower() or "ht" in act.lower()
+        is_afr = "afrikaans" in act.lower() or "eerste" in act.lower() or "hooftaal" in act.lower()
         b1, b_info = ("Dokument", "Inligting") if is_afr else ("Documents", "Information")
         b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
         btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
@@ -92,7 +100,7 @@ if not df.empty:
         age_lbl = (("U" if ("sport" in cv or any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])) else "Gr ") + age) if age else ""
         ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
         if sq and sq.lower() not in ts.lower(): continue
-        vh = f"<div class='venue'>📍 <a href='https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
+        vh = f"<div class='venue'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{boxes}<div style='margin-top:10px;'>{btns}</div></div>"
     v1.html(h, height=3000, scrolling=True)
 st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
