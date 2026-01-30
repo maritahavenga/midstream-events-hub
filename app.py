@@ -1,75 +1,67 @@
 import streamlit as st
 import pandas as pd
 import requests, io
-import time
 
-st.set_page_config(page_title="LMCP Event Hub", layout="centered")
+st.set_page_config(page_title="LMCP Hub", layout="centered")
 
-# --- STYLE ---
+# --- CSS VIR DIE LOOK ---
 st.markdown("""
     <style>
-    .event-card {
-        background-color: white;
+    .stApp { background-color: #f9f9f9; }
+    .card {
+        background: white;
         padding: 20px;
-        border-radius: 15px;
-        border-left: 10px solid #800000;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        border-left: 8px solid #800000;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
     }
-    .header-style {
-        text-align: center;
-        background: #800000;
-        color: white;
-        padding: 20px;
-        border-radius: 0 0 20px 20px;
-        margin-top: -60px;
-    }
+    .title { color: #800000; font-weight: bold; font-size: 1.2rem; }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown('<div class="header-style"><h1>LMCP EVENT HUB</h1></div>', unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center; color:#800000;'>LMCP EVENT HUB</h1>", unsafe_allow_html=True)
 
-# JOU SKAKEL
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# ONS GEBRUIK DIE DIREKTE EXPORT SKAKEL (DIT IS STABILER AS 'PUBLISH')
+SHEET_ID = "1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8"
+GID = "37057995"
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
 
-# ONS HAAL @st.cache_data UIT SODAT HY NIE "VRIES" NIE
-def load_data_force():
-    for i in range(3): # Probeer 3 keer as Google stadig is
-        try:
-            r = requests.get(URL, timeout=5)
-            if r.status_code == 200:
-                data = r.content.decode('utf-8')
-                df = pd.read_csv(io.StringIO(data), dtype=str).fillna("")
-                if not df.empty:
-                    return df
-            time.sleep(1) # Wag 'n sekonde voor weer probeer
-        except:
-            continue
-    return pd.DataFrame()
+def fetch_data():
+    try:
+        # Ons "masker" die app sodat Google dink dit is 'n gewone browser
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(URL, headers=headers, timeout=10)
+        if r.status_code == 200:
+            return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        else:
+            return None
+    except:
+        return None
 
-df = load_data_force()
+df = fetch_data()
 
-st.write("") # Spasie
-
-if not df.empty:
-    st.success("✅ Data is lewendig")
+if df is not None and not df.empty:
+    st.success("Konneksie Herstel!")
     for _, row in df.iterrows():
         try:
-            act = str(row.iloc[3]).strip()
-            date = str(row.iloc[5]).strip()
-            ven = str(row.iloc[6]).strip()
+            act = str(row.iloc[3]).strip()  # Activity (Kolom D)
+            date = str(row.iloc[5]).strip() # Date (Kolom F)
+            ven = str(row.iloc[6]).strip()  # Venue (Kolom G)
             
             if len(act) < 2 or "activity" in act.lower(): continue
 
             st.markdown(f"""
-                <div class="event-card">
-                    <b style="color:#800000; font-size:1.2rem;">{act}</b><br>
-                    <span style="color:#555;">📅 {date} | 📍 {ven}</span>
+                <div class="card">
+                    <div class="title">{act}</div>
+                    <div style="color:#008080; font-weight:bold;">📅 {date}</div>
+                    <div style="color:#555;">📍 {ven}</div>
                 </div>
                 """, unsafe_allow_html=True)
         except:
             continue
 else:
-    st.error("Google neem te lank om te antwoord.")
-    if st.button("Dwing Herlaai"):
+    st.error("Google blokkeer steeds die toegang.")
+    st.info("As dit nog steeds wys, is die dokument dalk weer op 'Restricted' gestel onder die 'Share' knoppie.")
+    if st.button("Probeer weer"):
         st.rerun()
