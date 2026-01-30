@@ -1,53 +1,96 @@
 import streamlit as st
 import pandas as pd
+import requests, io
 
-st.set_page_config(page_title="LMCP Hub", layout="centered")
+# Bladsy instellings
+st.set_page_config(page_title="LMCP Event Hub", layout="centered")
+
+# --- DIE MOOI LOOK (CSS) ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #f4f4f4; }
+    .header-banner {
+        background: linear-gradient(135deg, #800000 0%, #a00000 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 0 0 25px 25px;
+        text-align: center;
+        margin-top: -60px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        font-family: sans-serif;
+    }
+    .event-card {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        border-left: 10px solid #800000;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        font-family: sans-serif;
+    }
+    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- BANNER ---
-st.markdown("<h1 style='text-align:center; color:#800000;'>MIDSTREAM EVENT HUB</h1>", unsafe_allow_html=True)
+st.markdown("""
+    <div class="header-banner">
+        <h1 style='margin:0;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
+        <p style='margin:0; opacity:0.9;'>Primary Event Hub</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ONS GEBRUIK DIE PUBLIEKE CSV SKAKEL (DIT IS DIE MEES REGUIT PAD)
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# JOU WERKende SKAKEL
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
-@st.cache_data(ttl=5)
-def load_raw_data():
+def get_data():
     try:
-        # Ons probeer die data direk lees
-        df = pd.read_csv(URL)
-        return df
-    except Exception as e:
-        st.error(f"Google Fout: {e}")
+        # Ons gebruik 'n timeout en 'n browser header
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(URL, headers=headers, timeout=10)
+        if r.status_code == 200:
+            return pd.read_csv(io.StringIO(r.content.decode('utf-8')))
+        return None
+    except:
         return None
 
-df = load_raw_data()
+df = get_data()
 
-if df is not None:
-    st.success("✅ ONS HET DATA!")
+st.write("") 
+
+if df is not None and not df.empty:
+    search = st.text_input("🔍 Soek vir aktiwiteit...", "")
     
-    # Wys 'n soekbalk
-    search = st.text_input("🔍 Soek...", "")
-    
-    # Wys die data in mooi boksies
+    found_any = False
     for index, row in df.iterrows():
         try:
-            # Kolom nommers (A=0, B=1, C=2, D=3, E=4, F=5, G=6)
-            # Volgens jou sheet is Aktiwiteit in D (3), Datum in F (5), Venue in G (6)
+            # Kolomme: 3=Activity, 5=Date, 6=Venue
             act = str(row.iloc[3]).strip()
             date = str(row.iloc[5]).strip()
             ven = str(row.iloc[6]).strip()
-
-            if len(act) > 2 and "activity" not in act.lower():
-                if search.lower() in act.lower() or search.lower() in ven.lower():
-                    st.markdown(f"""
-                    <div style="background:white; padding:15px; border-radius:10px; border-left:8px solid #800000; margin-bottom:10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <b style="color:#800000; font-size:1.1rem;">{act}</b><br>
-                        <span style="color:#008080;">📅 {date}</span> | <span style="color:#555;">📍 {ven}</span>
+            
+            if len(act) < 2 or "activity" in act.lower() or "nan" in act.lower():
+                continue
+            
+            if search.lower() in act.lower() or search.lower() in ven.lower():
+                found_any = True
+                st.markdown(f"""
+                    <div class="event-card">
+                        <div class="event-title">{act}</div>
+                        <div style="color:#008080; font-weight:bold;">📅 {date}</div>
+                        <div style="color:#555;">📍 {ven.upper()}</div>
                     </div>
                     """, unsafe_allow_html=True)
         except:
             continue
+
+    if not found_any and search == "":
+        st.info("Besig om data te sinkroniseer... Verfris asseblief oor 'n paar sekondes.")
 else:
-    st.warning("Wag tans vir Google om die 'Publish' skakel aktief te maak. Dit kan tot 2 minute neem.")
-    if st.button("Probeer weer"):
-        st.cache_data.clear()
-        st.rerun()
+    st.warning("Wag tans vir Google om die data-stroom oop te maak. Klik op die knoppie hieronder as dit nie verskyn nie.")
+
+# REFRESH KNOPPIE
+if st.button("🔄 Herlaai Nou"):
+    st.rerun()
+
+st.caption("© 2026 Midstream College Primary Hub")
