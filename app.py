@@ -3,10 +3,15 @@ from datetime import datetime
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 
-# --- LUUKSE PYTHON BANNER ---
-st.title("LAERSKOOL MIDSTREAM COLLEGE PRIMARY")
-st.subheader("Digital Hub")
-st.markdown("---")
+# --- BANNER MET VOLLE SKOOLNAAM ---
+st.markdown("""
+    <div style='text-align: center;'>
+        <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='160'>
+        <h1 style='color: #800000; font-family: sans-serif; margin-top: 10px;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
+        <h3 style='color: #008080; font-family: sans-serif; font-weight: normal;'>Digital Hub</h3>
+        <hr style='border: 1px solid #eee;'>
+    </div>
+""", unsafe_allow_html=True)
 
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
@@ -45,14 +50,8 @@ if not df.empty:
             if sc and "Academics" in sc: m |= df.iloc[:, 2].str.contains("academic", case=False)
             sa = st.multiselect("Activity", sorted(list({c_a(o) for o in df[m].iloc[:, 3]})))
         with c3:
-            ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-            is_sp = "Sport" in sc or any(x in ["Tennis","Rugby","Hockey","Netball","Athletics"] for x in sa)
-            is_ac = "Academics" in sc or any("Afrikaans" in x for x in sa)
-            opts = [o for o in ao if "U" in o] if (is_sp and not is_ac) else ([o for o in ao if "Gr" in o] if (is_ac and not is_sp) else ao)
-            sg = st.multiselect("Age Group", options=opts)
-    
-    sq = st.text_input("Search...", placeholder="Type here...")
-    now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
+            ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","
+                  now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
     tn = set()
     for s in sg:
         v_m = re.findall(r'\d+', s); v = int(v_m[0]) if v_m else 0
@@ -75,44 +74,42 @@ if not df.empty:
         r, ds = i['r'], i['ds']
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-        
-        # Ouderdom Label
-        is_sp_card = "sport" in cv or any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])
-        age_lbl = (("U" if is_sp_card else "Gr ") + age) if age else ""
+
+        is_sport_card = "sport" in cv or any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])
+        age_lbl = (("U" if is_sport_card else "Gr ") + age) if age else ""
         title_text = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}"
-        
+
         if sq and sq.lower() not in title_text.lower(): continue
 
-        # --- DIE KAART ---
         with st.container():
-            st.markdown(f"### {title_text}")
-            st.write(f"📅 **{tr(ds, act)}**")
+            st.markdown(f"### <span style='color:#800000;'>{title_text}</span>", unsafe_allow_html=True)
             
-            if ven:
-                map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
-                st.markdown(f"📍 [**{tr(ven, act).upper()}**]({map_url})")
-            
-            # Teal Notas (st.info in Streamlit is Teal)
-            t_txt = f"**Teams:** {t_l}" if t_l and "http" not in t_l.lower() else ""
-            n_txt = f"**Note:** {i_r}" if i_r and "http" not in i_r.lower() else ""
-            
-            if t_txt or n_txt:
-                with st.chat_message("assistant", avatar="📌"):
-                    if "Hockey" in title_text and t_txt:
-                        st.warning(t_txt) # Dotted-gevoel boksie vir Hockey
-                    if t_txt and not "Hockey" in title_text: st.write(t_txt)
-                    if n_txt: st.write(n_txt)
+            c_meta1, c_meta2 = st.columns([1, 1])
+            with c_meta1: st.markdown(f"📅 **{tr(ds, act)}**")
+            with c_meta2:
+                if ven:
+                    map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
+                    st.markdown(f"📍 [**{tr(ven, act).upper()}**]({map_url})")
 
-            # Knoppies
-            is_afr = "afrikaans" in act.lower() or "eerste" in act.lower() or "hooftaal" in act.lower()
-            b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
-            b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
-            
-            col_b1, col_b2, col_b3 = st.columns([1,1,1])
-            if "http" in cl(r.iloc[7]).lower(): col_b1.link_button(b1, cl(r.iloc[7]))
-            if "http" in t_l.lower(): col_b2.link_button(b2, t_l)
-            if "http" in i_r.lower(): col_b3.link_button(b_info, i_r)
+            # Hockey Dotted Box
+            if "Hockey" in c_a(act) and t_l and "http" not in t_l.lower():
+                st.markdown(f"""<div style="border: 2px dotted #800000; padding: 10px; border-radius: 8px; color: #800000; font-weight: bold; margin-bottom: 10px;">Teams: {t_l}</div>""", unsafe_allow_html=True)
+            elif t_l and "http" not in t_l.lower():
+                st.info(f"**Teams:** {t_l}")
+
+            if i_r and "http" not in i_r.lower():
+                st.info(f"**Note:** {i_r}")
+
+            is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
+            b1, b2, b_info = ("Documents", "Team List", "Information")
+            if is_afr: b1, b2, b_info = "Dokumente", "Assessering", "Inligting"
+            elif "academic" in cv: b2 = "Assessment"
+
+            cb1, cb2, cb3 = st.columns(3)
+            if "http" in cl(r.iloc[7]).lower(): cb1.link_button(b1, cl(r.iloc[7]), use_container_width=True)
+            if "http" in t_l.lower(): cb2.link_button(b2, t_l, use_container_width=True)
+            if "http" in i_r.lower(): cb3.link_button(b_info, i_r, use_container_width=True)
             
             st.markdown("---")
 
-st.markdown("<center style='color:gray;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
+st.markdown("<center style='color:gray; font-size:0.8rem;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
