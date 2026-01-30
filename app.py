@@ -85,14 +85,29 @@ if not df.empty:
     res.sort(key=lambda x:x["dt"])
 
 # ⛔ STOP HIER – PLAK DEEL 2 DIREK HIERONDER
- html = """
+    html = """
     <style>
-    .card{background:white;padding:20px;border-radius:12px;
-    border-left:10px solid #800000;margin-bottom:15px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);}
-    .title{color:#800000;font-weight:bold;font-size:1.1rem;}
-    .btn{background:#800000;color:white;padding:8px 14px;
-    border-radius:8px;text-decoration:none;margin-right:8px;}
+    .card{
+        background:white;
+        padding:20px;
+        border-radius:12px;
+        border-left:10px solid #800000;
+        margin-bottom:15px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    }
+    .title{
+        color:#800000;
+        font-weight:bold;
+        font-size:1.1rem;
+    }
+    .btn{
+        background:#800000;
+        color:white;
+        padding:8px 14px;
+        border-radius:8px;
+        text-decoration:none;
+        margin-right:8px;
+    }
     </style>
     """
 
@@ -102,23 +117,24 @@ if not df.empty:
         age = cl(r.iloc[11])
         ven = cl(r.iloc[6])
 
-        is_sp = any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics"])
+        is_sp = any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
         age_lbl = f"U{age}" if is_sp and age else f"Gr {age}" if age else ""
 
-        title = f"{c_a(act)} {age_lbl} {tr(r.iloc[4],act)}"
+        title = f"{c_a(act)} {age_lbl} {tr(r.iloc[4], act)}"
         if sq and sq.lower() not in title.lower():
             continue
 
-        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream" if ven else ""
+        map_url = (
+            f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
+            if ven else ""
+        )
 
         html += f"""
         <div class='card'>
-        <div class='title'>{title}</div>
-        <div>📅 {tr(i['ds'],act)}</div>
-        <div><a href='{map_url}' target='_blank'>{ven}</a></div>
+            <div class='title'>{title}</div>
+            <div>📅 {tr(i['ds'], act)}</div>
+            {'<div>📍 <a href="'+map_url+'" target="_blank">'+ven+'</a></div>' if ven else ''}
         </div>
         """
 
     v1.html(html, height=2500, scrolling=True)
-
-st.markdown("<center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
