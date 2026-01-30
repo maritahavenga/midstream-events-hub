@@ -6,12 +6,12 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# Die Skoon Banner (Presies soos die een wat vroeër gewerk het)
+# Die Skoon Banner
 st.markdown("""
     <div style='text-align: center;'>
         <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='160'>
-        <h1 style='color: #800000; font-family: sans-serif;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
-        <h3 style='color: #555; font-family: sans-serif;'>Digital Hub</h3>
+        <h1 style='color: #800000; font-family: sans-serif; margin-bottom: 5px;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
+        <h3 style='color: #555; font-family: sans-serif; margin-top: 0;'>Digital Hub</h3>
     </div>
 """, unsafe_allow_html=True)
 
@@ -93,9 +93,9 @@ if not df.empty:
         b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
         b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
         
-        btns = "".join([f<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a> for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
+        # HIER IS DIE REGSTELLING: f voor die string gevoeg
+        btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
         
-        # Skoon Notes/Teams teks (geen boksies nie)
         t_txt = f"<div style='margin-top:10px;'><b>Teams:</b><br>{t_l}</div>" if t_l and "http" not in t_l.lower() else ""
         n_txt = f"<div style='margin-top:10px;'><b>Note:</b><br>{i_r}</div>" if i_r and "http" not in i_r.lower() else ""
         
