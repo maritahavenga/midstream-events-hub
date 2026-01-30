@@ -15,8 +15,8 @@ def cl(v):return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
     s=str(a).strip()
     t=t.replace(" G "," Girls ").replace(" G"," Girls")
-    if re.search(r'(?i)\b(EAT|Afrikaans EAT)\b',s):t=t.replace(a,"Afrikaans Eerste Addisionele Taal")
-    elif re.search(r'(?i)\b(HT|Afrikaans HT)\b',s):t=t.replace(a,"Afrikaans Hooftaal")
+    if re.search(r'(?i)\b(EAT|Afrikaans EAT|Eerste Addisionele)\b',s):t=t.replace(a,"Afrikaans Eerste Addisionele Taal")
+    elif re.search(r'(?i)\b(HT|Afrikaans HT|Hooftaal)\b',s):t=t.replace(a,"Afrikaans Hooftaal")
     if any(k in s.lower() for k in ["afrikaans","eat","ht"]):return t
     d={"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
     for k,v in d.items():t=re.sub(rf'\b{k}\b',v,t,flags=re.IGNORECASE)
@@ -49,12 +49,16 @@ if not df.empty:
             else:clo.add(o)
         sa=st.multiselect("Activity",sorted(list(clo)))
     with c3:
-        al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+        # Dinamiese Age Filter
+        if sc == ["Sport"]: al=["U7","U8","U9","U10","U11","U12","U13"]
+        elif sc and "Sport" not in str(sc): al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7"]
+        else: al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
         sg=st.multiselect("Age Group",al)
     sq=st.text_input("Search")
     st.markdown("</div>",unsafe_allow_html=True)
 
-    today=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
+    sa_tz=pytz.timezone('Africa/Johannesburg')
+    today=datetime.now(sa_tz).date()
     tn=set()
     for s in sg:
         ns=re.findall(r'\d+',s)
@@ -84,11 +88,12 @@ if not df.empty:
     for i in res:
         r,f,ds=i['r'],i['ft'],i['dd']
         cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
-        ia,ic="afrikaans" in act.lower(),("academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"]))
+        ia="afrikaans" in act.lower() or "eat" in act.lower()
+        ic="academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"])
         b1="Dokumente" if ia else ("Document" if ic else "Programme")
         b2="Assessment" if ic or ia else "Team List"
         btns=""
-        for j,txt in [(7,b1),(8,b2),(10,"Info")]:
+        for j,txt in [(7,b1),(8,b2),(10,"Information")]:
             val=cl(r.iloc[j])
             if "http" in val.lower():btns+=f"<a href='{val}' target='_blank' class='btn'>{txt}</a>"
         note=""
