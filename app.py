@@ -6,17 +6,23 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
+# Skool Logo en Opskrif
+st.markdown("<div style='text-align: center;'><img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='180'><h2 style='color: #800000; font-family: sans-serif;'>LMCP Digital Hub</h2></div>", unsafe_allow_html=True)
+
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
-    r = str(a).strip(); t = re.sub(r'\bG\b', 'Girls', t)
-    # Fix for full month names
+    # Skakel "Feb" om na die volle Engelse "February"
     m_map = {"Jan": "January", "Feb": "February", "Fev": "February", "Mar": "March", "Apr": "April", "May": "May", "Jun": "June", "Jul": "July", "Aug": "August", "Sep": "September", "Oct": "October", "Nov": "November", "Dec": "December"}
-    for k, v in m_map.items(): t = t.replace(k, v)
-    d = {"Saal": "Hall", "Veld": "Field", "Atletiek": "Athletics", "Wiskunde": "Math"}
-    for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
+    for k, v in m_map.items(): 
+        t = re.sub(rf'\b{k}\b', v, t)
+    
+    # Algemene vertalings vir die kaart
+    d = {"Saal": "Hall", "Veld": "Field", "Atletiek": "Athletics", "Wiskunde": "Math", "G": "Girls"}
+    for k, v in d.items(): 
+        t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
     return t
 
 def c_a(n):
@@ -46,12 +52,12 @@ if not df.empty:
         sa = st.multiselect("Activity", act_opts)
     with c3:
         ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-        # Logic: If ANY sport activity is chosen, show U. Otherwise Gr.
+        # As enige sport gekies is, wys U. As slegs akademie gekies is, wys Gr.
         is_sp = "Sport" in sc or any(x in ["Tennis", "Rugby", "Hockey", "Netball", "Athletics"] for x in sa)
         is_ac = "Academics" in sc or any("Afrikaans" in x for x in sa)
         opts = [o for o in ao if "U" in o] if (is_sp and not is_ac) else ([o for o in ao if "Gr" in o] if (is_ac and not is_sp) else ao)
         sg = st.multiselect("Age Group", options=opts, key="stk_v")
-    sq = st.text_input("Search Events...", placeholder="Type to filter...")
+    sq = st.text_input("Search Events...")
     if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
     now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
@@ -65,7 +71,7 @@ if not df.empty:
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
         dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
         
-        # 1. Filter out past events (Allowing events from today onwards)
+        # Slegs toekomstige datums
         if pd.notnull(dt) and dt.date() < now: continue
         
         if sc and not (any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)): continue
@@ -100,20 +106,23 @@ if not df.empty:
         
         notes = []
         if t_l and "http" not in t_l.lower(): notes.append(f"<b>Teams:</b> {t_l}")
-        if i_raw := cl(r.iloc[10]) and "http" not in i_raw.lower(): notes.append(f"<b>Note:</b> {cl(r.iloc[10])}")
+        if i_r and "http" not in i_r.lower(): notes.append(f"<b>Note:</b> {i_r}")
         nt_h = f"<div class='nt'>{'<br>'.join(notes)}</div>" if notes else ""
         
+        # Titel en Ouderdom Logika
         clean_act = c_a(act)
         is_sp_card = "sport" in cv or any(x in clean_act for x in ["Tennis", "Rugby", "Hockey", "Netball", "Athletics"])
         age_lbl = (("U" if is_sp_card else "Gr ") + age) if age else ""
         ts = f"{clean_act} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
         
         if sq and sq.lower() not in ts.lower(): continue
-        # Fixed Google Maps Link
-        vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
+        
+        # Google Maps Skakel (Direct Google Maps search)
+        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
+        vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{nt_h}<div style='margin-top:15px;'>{''.join(btns_list)}</div></div>"
     
     v1.html(h, height=3500, scrolling=True)
 
-st.markdown("<center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
