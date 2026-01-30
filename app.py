@@ -1,9 +1,3 @@
-Dit is die rede! Omdat Category in Kolom A sit, het al jou data een of twee plekke na links geskuif vergeleke met my vorige kode. Die rekenaar probeer nou "Activity" lees in 'n kolom wat eintlik die "Date" is, en dan raak hy verward en wys niks.
-
-Kom ons pas die "mapping" nou presies aan by jou Upcoming tab waar Category in Kolom A is.
-
-Plak hierdie reggestelde kode in GitHub:
-Python
 import streamlit as st
 import pandas as pd
 import requests, io
@@ -36,10 +30,11 @@ def load_data():
 df = load_data()
 
 if df is not None and not df.empty:
-    # FILTERS (Nou belyn met Kolom A, B, ens.)
-    all_cats = sorted([c for c in df.iloc[:, 0].unique() if len(str(c)) > 1])
+    # 1. Category Filter (Kolom A = Index 0)
+    all_cats = sorted([str(c) for c in df.iloc[:, 0].unique() if len(str(c)) > 1])
     sel_cats = st.multiselect("1. Category:", all_cats)
 
+    # 2. Age Group Filter (Kolom L = Index 9 in jou 11-kolom lys)
     age_options = ["U7 (Gr 1)", "U8 (Gr 2)", "U9 (Gr 3)", "U10 (Gr 4)", "U11 (Gr 5)", "U12 (Gr 6)", "U13 (Gr 7)"]
     sel_ages = st.multiselect("2. Age Group / Grade:", age_options)
 
@@ -48,16 +43,14 @@ if df is not None and not df.empty:
     for i in range(len(df)):
         row = df.iloc[i]
         
-        # ONS TEL VANAF A=0
+        # Mapping gebaseer op jou Upcoming Tab (A tot K)
         cat = str(row.iloc[0])   # A: Category
         act = str(row.iloc[1])   # B: Activity
         team = str(row.iloc[2])  # C: Team / Assessment
         date = str(row.iloc[3])  # D: Date
         ven = str(row.iloc[4])   # E: Venue
         lnk = str(row.iloc[5])   # F: Link
-        # Age Group is nou waarskynlik in Kolom I of J (nommer 8 of 9)
-        # Ons soek hom dinamies in die ry
-        age_info = str(row.iloc[9]) if len(row) > 9 else str(row.iloc[-2])
+        age_info = str(row.iloc[9]) if len(row) > 9 else ""
 
         # Filter Logika
         m_cat = not sel_cats or cat in sel_cats
@@ -77,11 +70,8 @@ if df is not None and not df.empty:
                     {f'<a href="{lnk}" target="_blank" class="map-btn">📂 VIEW</a>' if 'http' in str(lnk) else ''}
                 </div>
             """, unsafe_allow_html=True)
-    
-    if count == 0 and len(df) > 0:
-        st.info("Found data, but it doesn't match your filters. Try 'Select All' in Category.")
 else:
-    st.error("Still not seeing data. Please check if your 'Upcoming' tab is published to the web as CSV.")
+    st.error("No data found. Please check your Google Sheet.")
 
 if st.button("Refresh Hub"):
     st.cache_data.clear()
