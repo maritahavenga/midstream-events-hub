@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-import requests, io
 
-# 1. Stel bladsy wydte en titel in
+# Bladsy instellings
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
-# 2. Skool-spesifieke CSS
+# --- DIE MOOI ONTWERP (CSS) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f4f4f4; }
@@ -17,6 +16,7 @@ st.markdown("""
         text-align: center;
         margin-top: -60px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        font-family: sans-serif;
     }
     .event-card {
         background: white;
@@ -27,75 +27,74 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         font-family: sans-serif;
     }
-    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; margin-bottom: 5px; }
-    .event-date { color: #008080; font-weight: bold; font-size: 1.1rem; }
-    .event-venue { color: #555; font-size: 0.95rem; }
+    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- BANNER ---
 st.markdown("""
     <div class="header-banner">
-        <h1 style='margin:0; font-size:1.8rem; font-family: sans-serif;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
-        <p style='margin:0; opacity:0.9; font-family: sans-serif;'>Digital Event Hub</p>
+        <h1 style='margin:0;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
+        <p style='margin:0; opacity:0.9;'>Primary Event Hub</p>
     </div>
     """, unsafe_allow_html=True)
 
-# 3. DATA KONNEKSIE (Sonder Cache wat kan vries)
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# --- DATA KONNEKSIE ---
+# Ons gebruik die mees direkte pad na jou blad (Sheet ID en GID)
+SHEET_ID = "1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8"
+GID = "37057995"
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
 
-def load_data_direct():
+@st.cache_data(ttl=10) # Verfris elke 10 sekondes
+def get_data():
     try:
-        # Ons dwing Google om vars data te gee met 'n random nommer
-        import time
-        t = int(time.time())
-        r = requests.get(f"{URL}&refresh={t}", timeout=10)
-        if r.status_code == 200:
-            df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-            return df
-    except:
+        # Hierdie lees die CSV direk in 'n tabel in
+        return pd.read_csv(URL, on_bad_lines='skip')
+    except Exception as e:
         return None
-    return None
 
-df = load_data_direct()
+df = get_data()
 
 st.write("") 
 
-if df is not None and not df.empty:
-    search = st.text_input("🔍 Soek vir sport of aktiwiteit...", "")
+if df is not None:
+    search = st.text_input("🔍 Soek vir aktiwiteit...", "")
     
     st.markdown("### Opkomende Events")
     
     found_any = False
-    for i in range(len(df)):
+    # Ons kyk deur die rye (ons begin by ry 0)
+    for index, row in df.iterrows():
         try:
-            row = df.iloc[i]
-            act = str(row.iloc[3]).strip()  # Activity
-            date = str(row.iloc[5]).strip() # Date
-            ven = str(row.iloc[6]).strip()  # Venue
+            # Ons gebruik die kolom-nommers: 3=Activity, 5=Date, 6=Venue
+            act = str(row.iloc[3]).strip()
+            date = str(row.iloc[5]).strip()
+            ven = str(row.iloc[6]).strip()
             
-            if len(act) < 2 or "activity" in act.lower():
+            # Slaan leë rye of die opskrif ry oor
+            if len(act) < 2 or "activity" in act.lower() or "nan" in act.lower():
                 continue
             
+            # Soek filter
             if search.lower() in act.lower() or search.lower() in ven.lower():
                 found_any = True
                 st.markdown(f"""
                     <div class="event-card">
                         <div class="event-title">{act}</div>
-                        <div class="event-date">📅 {date}</div>
-                        <div class="event-venue">📍 {ven.upper()}</div>
+                        <div style="color:#008080; font-weight:bold;">📅 {date}</div>
+                        <div style="color:#555;">📍 {ven.upper()}</div>
                     </div>
                     """, unsafe_allow_html=True)
         except:
             continue
 
     if not found_any:
-        st.info("Geen aktiwiteite gevind nie.")
+        st.info("Besig om data te sinkroniseer... Verfris asseblief oor 'n paar sekondes.")
 else:
-    # As die data weg is, wys ons 'n help-knoppie
-    st.warning("Google se konneksie is tans traag. Klik op die knoppie hieronder om te herlaai.")
-    if st.button("🔄 Herlaai Data"):
-        st.rerun()
+    st.error("Kon nie die Google Sheet bereik nie. Maak seker die blad is op 'Anyone with the link can view' gestel.")
 
-st.markdown("---")
-st.caption("© 2026 Midstream College Primary Hub")
+# --- REFRESH ---
+if st.button("🔄 Herlaai Nou"):
+    st.cache_data.clear()
+    st.rerun()
+Hoekom hierdie een gaan werk:
