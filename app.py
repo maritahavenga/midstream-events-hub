@@ -54,8 +54,7 @@ if not df_raw.empty:
             act_list = sorted(list(set([str(a).strip() for a in df_raw.iloc[:, 3] if a])))
             sel_act = st.multiselect("Activity / Subject", act_list, default=[], key="f_act")
         with c3:
-            # VASTE LYS: Geen geheue van die spreadsheet nie
-            age_options = ["1", "2", "3", "4", "5", "6", "7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
+            age_options = ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
             sel_age = st.multiselect("Gr / Age Group", age_options, default=[], key="f_age")
         
         search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
@@ -68,24 +67,29 @@ if not df_raw.empty:
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
     
-    # Tweerigting Mapping (6 wys U12, U12 wys 6)
-    mapping = {"1":["1","U7"], "U7":["1","U7"], "2":["2","U8"], "U8":["2","U8"], "3":["3","U9"], "U9":["3","U9"], "4":["4","U10"], "U10":["4","U10"], "5":["5","U11"], "U11":["5","U11"], "6":["6","U12"], "U12":["6","U12"], "7":["7","U13"], "U13":["7","U13"]}
+    mapping = {
+        "Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"],
+        "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"],
+        "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"],
+        "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"],
+        "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"],
+        "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"],
+        "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]
+    }
+    
     expanded_sel_age = set(sel_age)
     for s in sel_age:
         if s in mapping: expanded_sel_age.update(mapping[s])
 
     df_filtered = []
     for _, r in df_raw.iterrows():
-        # DATUM LOGIKA: Hanteer kalender-datums korrek
         raw_date_str = str(r.iloc[5])
-        # Probeer eers YYYY-MM-DD (Kalender standaard), dan DD/MM/YYYY
         dt_val = pd.to_datetime(raw_date_str, errors='coerce')
         if pd.isnull(dt_val):
             dt_val = pd.to_datetime(raw_date_str, dayfirst=True, errors='coerce')
         
         if pd.notnull(dt_val) and dt_val.date() < today: continue
         
-        # Filters
         if sel_cat:
             row_cat = str(r.iloc[2]).lower()
             if not any(s.lower() in row_cat or (s=="Academics" and "academic" in row_cat) for s in sel_cat): continue
@@ -93,16 +97,31 @@ if not df_raw.empty:
         if expanded_sel_age and clean_val(r.iloc[11]) not in expanded_sel_age: continue
         
         is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
-        df_filtered.append({'data': r, 'date': dt_val, 'is_ft': is_ft})
+        
+        # Stoor alle sorteer-velde
+        df_filtered.append({
+            'data': r,
+            'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None),
+            'subject': str(r.iloc[3]).lower(),
+            'grade': str(r.iloc[11]).lower(),
+            'team': str(r.iloc[4]).lower(),
+            'is_ft': is_ft
+        })
 
-    # Sorteer: Full Term heel bo
-    df_filtered.sort(key=lambda x: (not x['is_ft'], x['date'] if pd.notnull(x['date']) else datetime.max.replace(tzinfo=None)))
+    # KRITIESE SORTERING: is_ft -> datum -> subject -> grade -> team
+    df_filtered.sort(key=lambda x: (
+        not x['is_ft'], 
+        x['date'], 
+        x['subject'], 
+        x['grade'], 
+        x['team']
+    ))
 
     h = """<style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background: transparent; }
         .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; }
+        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; line-height:1.2; }
         .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
         .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
         .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
@@ -113,27 +132,4 @@ if not df_raw.empty:
     for item in df_filtered:
         r = item['data']
         is_acad = "academic" in str(r.iloc[2]).lower()
-        title = f"{translate_term(str(r.iloc[3]), str(r.iloc[3]))} {'Gr ' if is_acad else 'U'}{clean_val(r.iloc[11])} {translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))}"
-        
-        if search_q and search_q.lower() not in title.lower(): continue
-
-        # Datum-vertoon: Gebruik dag-maand-jaar formaat
-        d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if pd.notnull(item['date']) else str(r.iloc[5]))
-        
-        btns = ""
-        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{'Document' if is_acad else 'Programme'}</a>"
-        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
-        
-        note = clean_val(r.iloc[10]).replace("$", "")
-        note_html = f"<div class='note-box'>NOTE: {note}</div>" if note else ""
-        
-        h += f"""<div class='card'>
-            <div class='card-title'>{title.strip()}</div>
-            <div class='info-row'>📅 {d_str}</div>
-            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</span></div>
-            {note_html}<div class='btn-box'>{btns}</div>
-        </div>"""
-
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+        row_age = clean_val(r.iloc
