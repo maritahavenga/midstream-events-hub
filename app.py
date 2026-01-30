@@ -36,9 +36,9 @@ if not df.empty:
     with c2:
         m=df.iloc[:,2].str.contains('|'.join(sc) if sc else ".*",case=False)
         if sc and "Academics" in sc:m|=df.iloc[:,2].str.contains("academic",case=False)
-        o_r=sorted(list(set(df[m].iloc[:,3].str.strip())))
+        orw=sorted(list(set(df[m].iloc[:,3].str.strip())))
         clo=set()
-        for o in o_r:
+        for o in orw:
             lo=o.lower()
             if "athletics" in lo:clo.add("Athletics")
             elif "hockey" in lo:clo.add("Hockey")
@@ -50,21 +50,16 @@ if not df.empty:
         al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
         sg=st.multiselect("Age Group",al)
     sq=st.text_input("Search")
-    if st.button("REFRESH HUB"):st.cache_data.clear();st.rerun()
     st.markdown("</div>",unsafe_allow_html=True)
 
-    sa_tz=pytz.timezone('Africa/Johannesburg')
-    today=datetime.now(sa_tz).date()
-    
+    today=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
     tn=set()
     for s in sg:
         ns=re.findall(r'\d+',s)
         if ns:
-            nv=int(ns[0])
-            tn.add(nv)
-            # Smart mapping: Gr 4 (4) <-> U10 (10)
-            if nv <= 7: tn.add(nv + 6)
-            elif nv >= 7: tn.add(nv - 6)
+            nv=int(ns[0]);tn.add(nv)
+            if nv<=7:tn.add(nv+6)
+            elif nv>=7:tn.add(nv-6)
 
     res=[]
     for _,r in df.iterrows():
@@ -72,30 +67,29 @@ if not df.empty:
         dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
         if "eat" in n.lower() or "eerste addisionele" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
         elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
-        
         cm=True
         if sc:cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)
         if not cm or (sa and dn not in sa):continue
-        
-        rd=cl(r.iloc[5])
-        dt=pd.to_datetime(rd,dayfirst=True,errors='coerce')
-        ft="full term" in str(r.iloc[12]).lower()
+        rd=cl(r.iloc[5]);dt=pd.to_datetime(rd,dayfirst=True,errors='coerce');ft="full term" in str(r.iloc[12]).lower()
         if (not ft and pd.notnull(dt) and dt.date()<today):continue
-        
         if tn and not any(x in n.lower() for x in ["swimming","athletics"]):
-            v_n=re.findall(r'\d+',cl(r.iloc[11]))
-            if not(v_n and int(v_n[0]) in tn):continue
-            
+            vn=re.findall(r'\d+',cl(r.iloc[11]))
+            if not(vn and int(vn[0]) in tn):continue
         res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
 
     res.sort(key=lambda x:(not x['ft'],x['dt'],x['n']))
-    
-    h="<style>body{font-family:sans-serif;}.card{background:white;padding:18px;border-radius:15px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 15px rgba(0,0,0,0.05);}.title{color:#800000;font-size:1.1rem;font-weight:800;}.btn{background:#800000;color:white!important;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:0.75rem;font-weight:700;display:inline-block;margin-top:10px;margin-right:6px;}</style>"
-    
+    h="<style>body{font-family:sans-serif;}.card{background:white;padding:15px;border-radius:12px;border-left:8px solid #800000;margin-bottom:12px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}.title{color:#800000;font-size:1.1rem;font-weight:bold;}.btn{background:#800000;color:white!important;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}</style>"
     for i in res:
         r,f,ds=i['r'],i['ft'],i['dd']
         cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
-        ia="afrikaans" in act.lower()
-        ic="academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"])
+        ia,ic="afrikaans" in act.lower(),("academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"]))
         b1="Dokumente" if ia else ("Document" if ic else "Programme")
-        b2="Assessment" if ic or ia else "Team List
+        b2="Assessment" if ic or ia else "Team List"
+        btns="".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else b2}</a>" for j in [7,8] if "http" in cl(r.iloc[j]).lower()])
+        ts=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]),act)}".strip()
+        if sq and sq.lower() not in ts.lower():continue
+        vv,vh=cl(r.iloc[6]),""
+        if vv:vh=f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={vv.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.85rem;'>{tr(vv,act).upper()}</a></div>"
+        h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}<div>{btns}</div></div>"
+    v1.html(h,height=3000,scrolling=True)
+st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
