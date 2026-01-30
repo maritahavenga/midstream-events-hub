@@ -57,21 +57,4 @@ if not df_raw.empty:
                 act_opts = sorted(list(set(df_raw.iloc[:, 3].str.strip())))
             sel_act = st.multiselect("Activity / Subject", act_opts, key="f_act")
         with c3:
-            age_opts = ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
-            sel_age = st.multiselect("Gr / Age Group", age_opts, key="f_age")
-        search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
-        if st.button("REFRESH HUB", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    SA_TIME = pytz.timezone('Africa/Johannesburg')
-    today = datetime.now(SA_TIME).date()
-    target_nums = set()
-    for s in sel_age:
-        nums = re.findall(r'\d+', s)
-        if nums:
-            n = int(nums[0])
-            target_nums.add(n)
-            if n >= 7: target_nums.add(n - 6)
-            if n <= 7
+            age_opts = ["Gr 1", "
