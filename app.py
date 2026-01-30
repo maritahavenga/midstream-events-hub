@@ -14,15 +14,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
-# --- SLIM VERTALER VIR STAFF INPUT ---
 def fix_text(t):
-    # Vertaal G, g, Dogters, Meisies na Girls
     t = re.sub(rf'\b(g|G|dogters|meisies|Dogters|Meisies)\b', 'Girls', t)
-    # Vertaal EAT en HT
     t = t.replace("EAT", "Afrikaans FAL").replace("HT", "Afrikaans HL")
     return t
 
@@ -30,8 +27,14 @@ def fix_text(t):
 def ld():
     try:
         r = requests.get(f"{U}&ts={datetime.now().timestamp()}", timeout=15)
-        return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-    except: return pd.DataFrame()
+        if r.status_code == 200:
+            return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        else:
+            st.error(f"Sheet error: {r.status_code}")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Connection error: {e}")
+        return pd.DataFrame()
 
 df = ld()
 
@@ -46,6 +49,7 @@ if not df.empty:
         sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
     sq = st.text_input("🔍 Search Events", placeholder="Type event name...")
     st.markdown("</div>", unsafe_allow_html=True)
+
     now = datetime.now(pytz.timezone("Africa/Johannesburg")).date()
     res = []
 
@@ -53,17 +57,18 @@ if not df.empty:
         try:
             cat, act, desc, date_str, ven, age = str(r.iloc[2]), str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6]), cl(r.iloc[11])
             
-            # KRITIES: Forceer DD/MM/YYYY formaat vir SA datums
-            dt = pd.to_datetime(date_str, format='%d/%m/%Y', errors="coerce")
-            if pd.isnull(dt): # Probeer alternatief as staff dit anders insleutel
-                dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
-                
+            # SLIM DATUM LESER: Probeer DD/MM/YYYY eerste
+            dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
+            
+            # As datum steeds nie lees nie, of in die verlede is (voor vandag)
             if pd.notnull(dt) and dt.date() < now: continue
             
+            # Formateer vir vertoon
             pretty_date = dt.strftime("%#d %B %Y") if pd.notnull(dt) else date_str
             res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": desc})
         except: continue
 
+    # Sorteer datums (gooi ongeldige datums heel onder)
     res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
     h = """
@@ -78,54 +83,53 @@ if not df.empty:
     </style>
     """
 
-    for i in res:
-        r = i["r"]
-        act, age, ven = fix_text(str(r.iloc[3])), cl(r.iloc[11]), str(r.iloc[6])
-        t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-        
-        desc_clean = fix_text(i['desc'])
-        is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
-        prefix = "U" if is_sp else "Gr "
-        age_lbl = f"{prefix}{age}" if age else ""
-        
-        full_title = f"{act} {age_lbl} {desc_clean}".strip()
-        if sq and sq.lower() not in full_title.lower(): continue
+    if not res:
+        st.info("Geen opkomende events gevind nie. Gaan asseblief die datums in die sheet na.")
+    else:
+        for i in res:
+            r = i["r"]
+            act, age, ven = fix_text(str(r.iloc[3])), cl(r.iloc[11]), str(r.iloc[6])
+            t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
+            
+            desc_clean = fix_text(i['desc'])
+            is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
+            prefix = "U" if is_sp else "Gr "
+            age_lbl = f"{prefix}{age}" if age else ""
+            
+            full_title = f"{act} {age_lbl} {desc_clean}".strip()
+            
+            if sq and sq.lower() not in full_title.lower(): continue
 
-        # Verdeelde Notas
-        nt_html = ""
-        if t_l and "http" not in t_l.lower():
-            nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
-        if i_r and "http" not in i_r.lower():
-            nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
+            nt_html = ""
+            if t_l and "http" not in t_l.lower():
+                nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
+            if i_r and "http" not in i_r.lower():
+                nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
 
-        # Knoppies Vertaling
-        is_afr = any(x in full_title.lower() for x in ["afrikaans", "fal", "hl", "eerste", "hooftaal"])
-        b1, b2, b3 = ("Documents", "Team List", "Information") if not is_afr else ("Dokumente", "Spanlys", "Inligting")
-        
-        btns = ""
-        if "http" in cl(r.iloc[7]): btns += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>{b1}</a>"
-        if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
-        if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>{b3}</a>"
+            is_afr = any(x in full_title.lower() for x in ["afrikaans", "fal", "hl", "eerste", "hooftaal"])
+            b1, b2, b3 = ("Documents", "Team List", "Information") if not is_afr else ("Dokumente", "Spanlys", "Inligting")
+            
+            btns = ""
+            if "http" in cl(r.iloc[7]): btns += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>{b1}</a>"
+            if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
+            if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>{b3}</a>"
 
-        # --- UNIVERSELE VENUE FIX ---
-        v_search = ven
-        if "menlopark" in ven.lower(): v_search = "Hoërskool Menlopark"
-        # Voeg Midstream by soektog vir akkuraatheid behalwe as dit 'n ander skool is
-        map_url = f"https://www.google.com/maps/search/?api=1&query={v_search.replace(' ','+')}"
-        
-        vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{ven.upper()}</a></div>" if ven and ven != "nan" else ""
+            v_search = ven
+            if "menlopark" in ven.lower(): v_search = "Hoërskool Menlopark"
+            map_url = f"https://www.google.com/maps/search/?api=1&query={v_search.replace(' ','+')}"
+            
+            vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{ven.upper()}</a></div>" if ven and ven != "nan" else ""
 
-        h += f"""
-        <div class='card'>
-            <div class='title'>{full_title}</div>
-            <div class='date'>📅 {i['ds']}</div>
-            {vh}
-            {nt_html}
-            <div class='btn-row'>{btns}</div>
-        </div>
-        """
-    
-    import streamlit.components.v1 as components
-    components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
+            h += f"""
+            <div class='card'>
+                <div class='title'>{full_title}</div>
+                <div class='date'>📅 {i['ds']}</div>
+                {vh}
+                {nt_html}
+                <div class='btn-row'>{btns}</div>
+            </div>
+            """
+        import streamlit.components.v1 as components
+        components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
 
 st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
