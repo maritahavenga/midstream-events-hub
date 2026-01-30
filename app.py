@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="LMCP Digital Hub", layout="centered")
-st_autorefresh(interval=120000, key="datarefresh")
+st_autorefresh(interval=120000, key="refresh")
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
@@ -41,8 +41,7 @@ if not df.empty:
                 if "Academics" in s_cat: m |= df.iloc[:, 2].str.contains("academic", case=False, na=False)
                 o = sorted(list(set(df[m].iloc[:, 3].str.strip())))
             s_act = st.multiselect("Activity", o)
-        with c3:
-            s_age = st.multiselect("Gr / Age", ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"])
+        with c3: s_age = st.multiselect("Gr / Age", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
         sq = st.text_input("Search")
         if st.button("REFRESH HUB", use_container_width=True): st.cache_data.clear(); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
@@ -60,4 +59,15 @@ if not df.empty:
     res = []
     for _, r in df.iterrows():
         n, cat = str(r.iloc[3]), str(r.iloc[2]).lower()
-        dt = pd.to_datetime(str(r.iloc[5]),
+        dt = pd.to_datetime(str(r.iloc[5]), dayfirst=True, errors='coerce')
+        ft = "full term" in str(r.iloc[12]).lower()
+        if not ft and pd.notnull(dt) and dt.date() < today: continue
+        if s_cat and not any(x.lower() in cat or (x=="Academics" and "academic" in cat) for x in s_cat): continue
+        if s_act and n.strip() not in s_act: continue
+        if tn and not any(x in n.lower() for x in ["swimming", "athletics"]):
+            vn = re.findall(r'\d+', cl(r.iloc[11]))
+            if not (vn and int(vn[0]) in tn): continue
+        m = re.search(r'\d+', cl(r.iloc[11]))
+        gv = int(m.group()) if m else 99
+        if "U" in str(r.iloc[11]).upper() and gv >= 7: gv -= 6
+        res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None), 'n': n.lower(), 'g': gv, 'ft': ft})
