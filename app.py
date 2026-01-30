@@ -51,48 +51,7 @@ if not df_raw.empty:
             sel_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"], key="f_cat")
         
         with c2:
-            # DYNAMIESE FILTER: Wys net aktiwiteite in die gekose kategorie
             if sel_cat:
                 mask = df_raw.iloc[:, 2].str.contains('|'.join(sel_cat), case=False, na=False)
                 if "Academics" in sel_cat: mask |= df_raw.iloc[:, 2].str.contains("academic", case=False, na=False)
-                act_options = sorted(list(set(df_raw[mask].iloc[:, 3].str.strip())))
-            else:
-                act_options = sorted(list(set(df_raw.iloc[:, 3].str.strip())))
-            sel_act = st.multiselect("Activity / Subject", act_options, key="f_act")
-            
-        with c3:
-            age_options = ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
-            sel_age = st.multiselect("Gr / Age Group", age_options, key="f_age")
-        
-        search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
-        if st.button("REFRESH HUB", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    SA_TIME = pytz.timezone('Africa/Johannesburg')
-    today = datetime.now(SA_TIME).date()
-    
-    target_numbers = set()
-    for s in sel_age:
-        nums = re.findall(r'\d+', s)
-        if nums:
-            n = int(nums[0])
-            target_numbers.add(n)
-            if n >= 7: target_numbers.add(n - 6)
-            if n <= 7: target_numbers.add(n + 6)
-
-    df_filtered = []
-    for _, r in df_raw.iterrows():
-        act_name = str(r.iloc[3])
-        row_cat = str(r.iloc[2]).lower()
-        
-        # 1. Datum & Full Term check
-        dt_val = pd.to_datetime(str(r.iloc[5]), errors='coerce')
-        if pd.isnull(dt_val): dt_val = pd.to_datetime(str(r.iloc[5]), dayfirst=True, errors='coerce')
-        is_ft = "full term" in str(r.iloc[12]).lower()
-        if not is_ft and pd.notnull(dt_val) and dt_val.date() < today: continue
-
-        # 2. Kategorie & Aktiwiteit Filter
-        if sel_cat and not any(s.lower() in row_cat or (s=="Academics" and "academic" in row_cat) for s in sel_cat): continue
-        if sel_act and act
+                act_options = sorted(
