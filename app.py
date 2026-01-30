@@ -21,16 +21,18 @@ def clean_val(val):
 def translate_term(text, activity_name=""):
     act_str = str(activity_name).strip()
     
-    # 1. Formele Afrikaanse Name
-    if re.search(r'(?i)\bafrikaans eat\b', act_str):
+    # 1. Forceer formele Afrikaanse name (HT / EAT)
+    # Ons vervang die kortpaaie met die volle name
+    if re.search(r'(?i)\bEAT\b', act_str):
         text = text.replace(activity_name, "Afrikaans Eerste Addisionele Taal")
-    elif re.search(r'(?i)\bafrikaans ht\b', act_str):
+    elif re.search(r'(?i)\bHT\b', act_str):
         text = text.replace(activity_name, "Afrikaans Hooftaal")
         
-    afrikaans_keywords = ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]
-    if any(k in act_str.lower() for k in afrikaans_keywords):
+    # As dit Afrikaans is, moenie verder vertaal nie
+    if any(k in act_str.lower() for k in ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]):
         return text
 
+    # Algemene vertalings
     translations = {
         "Saal": "Hall", "Ouditorium": "Auditorium", "Musiekkamer": "Music Room",
         "Swembad": "Pool", "Tennisbane": "Tennis Courts", "Netbalbane": "Netball Courts",
@@ -67,105 +69,5 @@ if not df_raw.empty:
             sel_age = st.multiselect("Gr / Age Group", age_options, default=[], key="f_age")
         
         search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
-        
         if st.button("REFRESH HUB", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    SA_TIME = pytz.timezone('Africa/Johannesburg')
-    today = datetime.now(SA_TIME).date()
-    
-    mapping = {"Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"], "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"], "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"], "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"], "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"], "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"], "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]}
-    expanded_sel_age = set(sel_age)
-    for s in sel_age:
-        if s in mapping: expanded_sel_age.update(mapping[s])
-
-    df_filtered = []
-    for _, r in df_raw.iterrows():
-        raw_date_str = str(r.iloc[5])
-        dt_val = pd.to_datetime(raw_date_str, errors='coerce')
-        if pd.isnull(dt_val):
-            dt_val = pd.to_datetime(raw_date_str, dayfirst=True, errors='coerce')
-        
-        if pd.notnull(dt_val) and dt_val.date() < today: continue
-        
-        if sel_cat:
-            row_cat = str(r.iloc[2]).lower()
-            if not any(s.lower() in row_cat or (s=="Academics" and "academic" in row_cat) for s in sel_cat): continue
-        if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
-        if expanded_sel_age and clean_val(r.iloc[11]) not in expanded_sel_age: continue
-        
-        is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
-        
-        grade_raw = clean_val(r.iloc[11])
-        grade_num = int(re.search(r'\d+', grade_raw).group()) if re.search(r'\d+', grade_raw) else 99
-        if "U" in grade_raw.upper() and grade_num >= 7:
-            grade_num = grade_num - 6
-
-        df_filtered.append({
-            'data': r,
-            'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None),
-            'subject': str(r.iloc[3]).lower(),
-            'grade_sort': grade_num,
-            'team': str(r.iloc[4]).lower(),
-            'is_ft': is_ft
-        })
-
-    # SORTERING: is_ft (Full Term) altyd eerste vir ALLE kategorieë
-    df_filtered.sort(key=lambda x: (
-        not x['is_ft'], 
-        x['date'], 
-        x['subject'], 
-        x['grade_sort'], 
-        x['team']
-    ))
-
-    h = """<style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background: transparent; }
-        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; line-height:1.2; }
-        .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
-        .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
-        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
-        .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
-        .btn { background:#800000; color:white !important; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
-    </style>"""
-
-    for item in df_filtered:
-        r = item['data']
-        is_acad = "academic" in str(r.iloc[2]).lower()
-        row_age = clean_val(r.iloc[11])
-        prefix = "Gr " if is_acad else "U"
-        age_display = f"{prefix}{row_age}" if row_age else ""
-        
-        translated_act = translate_term(str(r.iloc[3]), str(r.iloc[3]))
-        translated_detail = translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))
-        full_title = f"{translated_act} {age_display} {translated_detail}"
-        
-        if search_q and search_q.lower() not in full_title.lower(): continue
-
-        d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if item['date'] != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
-        
-        btns = ""
-        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{'Document' if is_acad else 'Programme'}</a>"
-        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
-        
-        note_raw = clean_val(r.iloc[10]).replace("$", "")
-        if "http" in note_raw.lower():
-            btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
-            note_html = ""
-        else:
-            note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
-        
-        h += f"""<div class='card'>
-            <div class='card-title'>{full_title.strip()}</div>
-            <div class='info-row'>📅 {d_str}</div>
-            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</span></div>
-            {note_html}<div class='btn-box'>{btns}</div>
-        </div>"""
-
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+            st.cache_data.
