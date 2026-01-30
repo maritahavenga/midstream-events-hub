@@ -34,8 +34,7 @@ def ld():
     try:
         # Cache buster dwing vars data vanaf Google
         r = requests.get(f"{U}&nocache={datetime.now().timestamp()}", timeout=15)
-        # Slaan die eerste ry oor as dit die QUERY formule bevat
-        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), skiprows=0, dtype=str).fillna("")
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
         return df
     except: return pd.DataFrame()
 
@@ -62,7 +61,6 @@ if not df.empty:
             r_date = str(r.iloc[C_DATE]).strip()
             dt = pd.to_datetime(r_date, dayfirst=True, errors="coerce")
             
-            # Slegs toekomstige events
             if pd.notnull(dt) and dt.date() < now: continue
             
             pretty_date = dt.strftime("%#d %B %Y") if pd.notnull(dt) else r_date
@@ -101,12 +99,9 @@ if not df.empty:
             if t_l and "http" not in t_l.lower(): nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
             if i_r and "http" not in i_r.lower(): nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
 
-            is_afr = any(x in full_title.lower() for x in ["afrikaans", "eerste", "hooftaal"])
-            b1, b2 = ("Documents", "Team List") if not is_afr else ("Dokumente", "Spanlys")
-            
             btns = ""
-            if "http" in cl(r.iloc[C_DOC]): btns += f"<a class='btn' href='{cl(r.iloc[C_DOC])}' target='_blank'>{b1}</a>"
-            if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
+            if "http" in cl(r.iloc[C_DOC]): btns += f"<a class='btn' href='{cl(r.iloc[C_DOC])}' target='_blank'>Documents</a>"
+            if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>Teams</a>"
             if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>Info</a>"
 
             map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}"
@@ -115,12 +110,3 @@ if not df.empty:
             h += f"<div class='card'><div class='title'>{full_title}</div><div class='date'>📅 {i['ds']}</div>{vh}{nt_html}<div class='btn-row'>{btns}</div></div>"
         
         import streamlit.components.v1 as components
-        components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
-
-else:
-    st.warning("🔄 Data word gelaai... As dit blank bly, verfris die bladsy.")
-    if st.button("Force Refresh"):
-        st.cache_data.clear()
-        st.rerun()
-
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
