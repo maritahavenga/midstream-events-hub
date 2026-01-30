@@ -3,10 +3,11 @@ from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
-# ================= PAGE CONFIG =================
+# ================= CONFIG & STYLE =================
 st.set_page_config(page_title="LMCP Hub", layout="centered")
-st_autorefresh(interval=120000, key="r")
+st_autorefresh(interval=120000, key="refresh_token")
 
+# Google Sheet CSV URL
 DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 # ================= HELPERS =================
@@ -14,16 +15,21 @@ def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(text, activity):
     text, activity = str(text), str(activity).lower()
+    # Afrikaans benamings
     if any(x in activity for x in ["eat", "ht", "hooftaal", "eerste"]):
         return "Afrikaans " + ("Eerste Addisionele Taal" if "eat" in activity or "eerste" in activity else "Hooftaal")
+    # Vertalings & Girls regstelling
     repl = {"Saal": "Hall", "Veld": "Field", "Atletiek": "Athletics", "Wiskunde": "Math", " G ": " Girls ", " G": " Girls"}
-    for k, v in repl.items(): text = re.sub(rf"\b{k}\b", v, text, flags=re.IGNORECASE)
+    for k, v in repl.items(): 
+        text = re.sub(rf"\b{k}\b", v, text, flags=re.IGNORECASE)
     return text
 
-def c_a(name):
+def clean_activity_name(name):
     name = str(name).lower()
+    # Skoonmaak van Sport name (verwyder kodes soos P4/P8)
     for s in ["athletics", "atletiek", "hockey", "rugby", "netball", "netbal", "tennis"]:
-        if s in name: return s.capitalize().replace("Netbal", "Netball").replace("Atletiek", "Athletics")
+        if s in name: 
+            return s.capitalize().replace("Netbal", "Netball").replace("Atletiek", "Athletics")
     if any(x in name for x in ["eat", "ht", "hooftaal", "eerste"]):
         return "Afrikaans " + ("EAT" if "eat" in name else "HT")
     return name.capitalize()
@@ -38,70 +44,44 @@ def load_data():
 
 df = load_data()
 
-# ================= UI =================
+# ================= UI FILTERS (Oorspronklike Look) =================
 if not df.empty:
-    st.markdown("<div style='background:white;padding:10px;border-radius:10px;border:1px solid #eee;'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:#f9f9f9;padding:20px;border-radius:15px;border:1px solid #ddd;margin-bottom:20px;'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     
-    with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
+    with c1: 
+        sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     
     with c2:
         mask = df.iloc[:, 2].str.contains("|".join(sc) if sc else ".*", case=False)
         if "Academics" in sc: mask |= df.iloc[:, 2].str.contains("academic", case=False)
-        sa = st.multiselect("Activity", sorted({c_a(x) for x in df[mask].iloc[:, 3]}))
+        # Gebruik skoon name vir die dropdown
+        sa = st.multiselect("Activity", sorted({clean_activity_name(x) for x in df[mask].iloc[:, 3]}))
     
     with c3:
-        ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-        if sc == ["Sport"]: opts = [o for o in ao if "U" in o]
-        elif sc and "Sport" not in str(sc): opts = [o for o in ao if "Gr" in o]
-        else: opts = ao
-        sg = st.multiselect("Age Group", opts, key="stk_final")
+        # Dinamiese maar STICKY Age Group
+        all_ages = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+        if sc == ["Sport"]: opts = [o for o in all_ages if "U" in o]
+        elif sc and "Sport" not in str(sc): opts = [o for o in all_ages if "Gr" in o]
+        else: opts = all_ages
+        sg = st.multiselect("Age Group", opts, key="sticky_age_key")
 
-    sq = st.text_input("Search")
+    sq = st.text_input("Search Events...", placeholder="Type to search...")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ================= AGE & FILTER LOGIC =================
+    # ================= LOGIKA: Gr 4 = U10 MAPPING =================
     age_match = set()
     for s in sg:
         nums = re.findall(r"\d+", s)
         if nums:
             v = int(nums[0])
-            age_match.update([v, v-6 if v > 7 else v+6])
+            age_match.add(v)
+            # Voeg die maatjie by: Gr 4 (4) <-> U10 (10)
+            age_match.add(v - 6 if v > 7 else v + 6)
 
+    # ================= FILTER & SORTERING =================
     results = []
     for _, row in df.iterrows():
         cat, act, age, rd = str(row.iloc[2]).lower(), str(row.iloc[3]), cl(row.iloc[11]), cl(row.iloc[5])
-        if sc and not (any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)): continue
-        if sa and c_a(act) not in sa: continue
         
-        nums = re.findall(r"\d+", age)
-        if age_match and nums and int(nums[0]) not in age_match: continue
-        
-        dv = pd.to_datetime(rd, dayfirst=True, errors="coerce")
-        results.append({"r": row, "dt": dv if pd.notnull(dv) else datetime(2099, 1, 1), "ds": rd})
-
-    results.sort(key=lambda x: x["dt"])
-
-    # ================= HTML CARDS =================
-    h = "<style>.card{background:white;padding:12px;border-radius:10px;border-left:8px solid #800000;margin-bottom:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);font-family:sans-serif;}.title{color:#800000;font-weight:bold;}.btn{background:#800000;color:white!important;padding:5px 8px;border-radius:5px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}.nt{background:#f0f7f7;padding:6px;margin-top:5px;border-radius:5px;font-size:0.75rem;}</style>"
-    
-    for item in results:
-        r, ds = item["r"], item["ds"]
-        cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
-        
-        ia, ic = "afrikaans" in act.lower() or "eat" in act.lower(), "academic" in cv or any(x in act.lower() for x in ["math", "science"])
-        b1, b2 = "Dokumente" if ia else ("Document" if ic else "Programme"), "Assessment" if ic or ia else "Team List"
-        
-        btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else 'Information')}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
-        note = f"<div class='nt'>{cl(r.iloc[10])}</div>" if cl(r.iloc[10]) and "http" not in cl(r.iloc[10]).lower() else ""
-        
-        al = (("U" if "sport" in cv else "Gr ") + age) if age else ""
-        ts = f"{tr(act, act)} {al} {tr(cl(r.iloc[4]), act)}".strip()
-        
-        if sq and sq.lower() not in ts.lower(): continue
-        vh = f"<div style='margin-top:4px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.8rem;'>{tr(ven, act).upper()}</a></div>" if ven else ""
-        h += f"<div class='card'><div class='title'>{ts}</div><div>📅 {ds}</div>{vh}{note}<div>{btns}</div></div>"
-
-    v1.html(h, height=3000, scrolling=True)
-
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+        if sc and not (
