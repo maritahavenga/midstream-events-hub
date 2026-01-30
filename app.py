@@ -19,9 +19,17 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text, activity_name=""):
-    afrikaans_variants = ["afrikaans", "eat", "eerste addisionele taal"]
-    if any(variant in str(activity_name).lower() for variant in afrikaans_variants):
+    # Spesifieke transformasies vir Afrikaanse vakname
+    act_lower = str(activity_name).lower()
+    if "afrikaans eat" in act_lower:
+        return text.replace(activity_name, "Afrikaans Eerste Addisionele Taal")
+    if "afrikaans ht" in act_lower:
+        return text.replace(activity_name, "Afrikaans Hooftaal")
+        
+    afrikaans_variants = ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]
+    if any(variant in act_lower for variant in afrikaans_variants):
         return text
+
     translations = {
         "Saal": "Hall", "Ouditorium": "Auditorium", "Musiekkamer": "Music Room",
         "Swembad": "Pool", "Tennisbane": "Tennis Courts", "Netbalbane": "Netball Courts",
@@ -98,7 +106,6 @@ if not df_raw.empty:
         
         is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
         
-        # Stoor alle sorteer-velde
         df_filtered.append({
             'data': r,
             'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None),
@@ -108,7 +115,7 @@ if not df_raw.empty:
             'is_ft': is_ft
         })
 
-    # KRITIESE SORTERING: is_ft -> datum -> subject -> grade -> team
+    # SORTERING: Full Term -> Datum -> Subject -> Grade -> Team
     df_filtered.sort(key=lambda x: (
         not x['is_ft'], 
         x['date'], 
