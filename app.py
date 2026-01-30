@@ -7,7 +7,9 @@ st_autorefresh(interval=120000, key="r")
 U="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 def cl(v): return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
- r=str(a).strip(); t=t.replace(" G "," Girls ").replace(" G"," Girls")
+ r=str(a).strip()
+ # Hierdie reël keer dat 'Girls' nie 'Girlsirls' word nie:
+ t=re.sub(r'\bG\b', 'Girls', t)
  if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b',r): return "Afrikaans "+("Eerste Addisionele Taal" if "eat" in r.lower() or "eerste" in r.lower() else "Hooftaal")
  d={"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
  for k,v in d.items(): t=re.sub(rf'\b{k}\b',v,t,flags=re.IGNORECASE)
