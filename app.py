@@ -6,30 +6,40 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# --- BANNER (Oorspronklike Styl) ---
+# --- BANNER MET JOU LOGO ---
 st.markdown("""
-    <div style='text-align: center; margin-bottom: 25px;'>
-        <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='160'>
-        <h1 style='color: #800000; font-family: sans-serif; margin-bottom: 5px;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
-        <h3 style='color: #008080; font-family: sans-serif; margin-top: 0; font-weight: normal;'>Digital Hub</h3>
+    <div style='text-align: center; margin-bottom: 10px;'>
+        <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='180'>
+        <h1 style='color: #800000; font-family: sans-serif; margin-bottom: 0;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
+        <p style='color: #008080; font-size: 1.2rem; margin-top: 5px;'>Digital Hub</p>
     </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+# --- NAV BAR ---
+st.markdown("""
+    <div style='background-color: #800000; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 25px;'>
+        <a href='#' style='color: white; text-decoration: none; margin: 0 15px; font-weight: bold;'>HOME</a>
+        <a href='https://www.midstream-college.co.za/' target='_blank' style='color: white; text-decoration: none; margin: 0 15px; font-weight: bold;'>SCHOOL WEBSITE</a>
+    </div>
+""", unsafe_allow_html=True)
+
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
     t = str(t).replace("-", " ").replace("/", " ")
+    # G hoofletter fix vir Gala
+    t = t.replace("gala", "Gala").replace("swimming", "Swimming")
     m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
     for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
-    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","G":"Girls"}
+    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","G ":"Girls "}
     for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
     return t
 
 def c_a(n):
     n = str(n).lower()
-    for x in ["athletics","atletiek","hockey","rugby","netball","netbal","tennis"]:
+    for x in ["athletics","atletiek","hockey","rugby","netball","netbal","tennis","swimming"]:
         if x in n: return x.capitalize().replace("Netbal","Netball").replace("Atletiek","Athletics")
     if "eat" in n or "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
     if "ht" in n or "hooftaal" in n: return "Afrikaans Hooftaal"
@@ -52,22 +62,18 @@ if not df.empty:
         sa = st.multiselect("Activity", sorted(list({c_a(o) for o in df[m].iloc[:, 3]})))
     with c3:
         ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-        opts = ao # Hou dit eenvoudig vir stabiliteit
-        sg = st.multiselect("Age Group", options=opts, key="stk_v")
+        sg = st.multiselect("Age Group", options=ao)
     sq = st.text_input("Search Events...", placeholder="Type to filter...")
-    if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
     now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
     res = []
     for _, r in df.iterrows():
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
         dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
-        
         if pd.notnull(dt) and dt.date() < now: continue
         if sc and not any(x.lower() in cat for x in sc): continue
         if sa and c_a(act) not in sa: continue
         if sg and not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
-        
         res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
     
     res.sort(key=lambda x: x['dt'])
@@ -75,7 +81,7 @@ if not df.empty:
     h = """<style>
     .card{background:white!important;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
     .title{color:#800000!important;font-weight:bold;font-size:1.15rem;margin-bottom:8px;}
-    .btn{background:#800000;color:white!important;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:0.85rem;margin:8px 8px 8px 0;display:inline-block;font-weight:600;}
+    .btn{background:#800000;color:white!important;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:0.85rem;margin:8px 8px 8px 0;display:inline-block;font-weight:500;}
     .nt-box{background:#f0f7f7!important;padding:12px;margin-top:12px;border-radius:8px;font-size:0.95rem;border-left:5px solid #008080;color:#333;}
     </style>"""
     
@@ -84,21 +90,27 @@ if not df.empty:
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
         
+        # --- KRITIESE OUDERDOM LOGIKA ---
+        is_sp_card = "sport" in cv or any(x in act.lower() for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"])
+        is_ac_card = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde"])
+        
+        # Prioriteit: As dit sport is, altyd U. As dit akademies is, altyd Gr.
+        prefix = "U" if is_sp_card else ("Gr " if is_ac_card else "")
+        age_lbl = (prefix + age) if age else ""
+        
+        ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
+        if sq and sq.lower() not in ts.lower(): continue
+
         is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
         b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
         b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
         
-        # Reggestelde Knoppie-logika
         btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
-        
         t_txt = f"<b>Teams:</b><br>{t_l}<br><br>" if t_l and "http" not in t_l.lower() else ""
         n_txt = f"<b>Note:</b><br>{i_r}" if i_r and "http" not in i_r.lower() else ""
         content = f"<div class='nt-box'>{t_txt}{n_txt}</div>" if t_txt or n_txt else ""
         
-        age_lbl = (("U" if any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"]) else "Gr ") + age) if age else ""
-        ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
-        
-        if sq and sq.lower() not in ts.lower(): continue
+        # MAPS FIX
         map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream"
         vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
