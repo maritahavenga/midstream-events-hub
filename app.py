@@ -106,7 +106,7 @@ if not df.empty:
     res.sort(key=lambda x:x["dt"])
 
 # ⛔ STOP HIER – PLAK DEEL 2 DIREK HIERONDER
- html = """
+    html = """
     <style>
     .card{
         background:white;
@@ -160,3 +160,4 @@ st.markdown(
     "</center>",
     unsafe_allow_html=True
 )
+
