@@ -15,7 +15,8 @@ def cl(v):return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
  r=str(a).strip()
  t=t.replace(" G "," Girls ").replace(" G"," Girls")
- if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b',r):return "Afrikaans "+("Eerste Addisionele Taal" if "eat" in r.lower() or "eerste" in r.lower() else "Hooftaal")
+ if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b',r):
+  return "Afrikaans "+("Eerste Addisionele Taal" if "eat" in r.lower() or "eerste" in r.lower() else "Hooftaal")
  d={"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
  for k,v in d.items():t=re.sub(rf'\b{k}\b',v,t,flags=re.IGNORECASE)
  return t
@@ -35,33 +36,32 @@ if not df.empty:
  with c2:
   m=df.iloc[:,2].str.contains('|'.join(sc) if sc else ".*",case=False)
   if sc and "Academics" in sc:m|=df.iloc[:,2].str.contains("academic",case=False)
-  orw=sorted(list(set(df[m].iloc[:,3].str.strip())))
+  o_r=sorted(list(set(df[m].iloc[:,3].str.strip())))
   clo=set()
-  for o in orw:
+  for o in o_r:
    lo=o.lower()
    if "athletics" in lo:clo.add("Athletics")
    elif "hockey" in lo:clo.add("Hockey")
+   elif "tennis" in lo:clo.add("Tennis")
    elif "eat" in lo or "eerste" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
    elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
    else:clo.add(o)
   sa=st.multiselect("Activity",sorted(list(clo)))
  with c3:
-  # ONS HOU HIERDIE LYS STABIEL SODAT DIT NIE RESET NIE
+  # ONS HOU DIE OPSIES STABIEL SODAT DIT NIE RESET NIE
   al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
   sg=st.multiselect("Age Group",al)
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
 
  today=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
- # --- SMART MAPPING LOGIKA ---
- target_nums = set()
+ tn=set()
  for s in sg:
-  nums = re.findall(r'\d+', s)
-  if nums:
-   n = int(nums[0])
-   target_nums.add(n)
-   if n <= 7: target_nums.add(n + 6) # As Gr 4 gekies is, voeg 10 by
-   if n >= 7: target_nums.add(n - 6) # As U10 gekies is, voeg 4 by
+  ns=re.findall(r'\d+',s)
+  if ns:
+   nv=int(ns[0]);tn.add(nv)
+   if nv<=7:tn.add(nv+6) # Gr 4 -> soek ook 10
+   if nv>=7:tn.add(nv-6) # U10 -> soek ook 4
 
  res=[]
  for _,r in df.iterrows():
@@ -69,17 +69,11 @@ if not df.empty:
   dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
   if "eat" in n.lower() or "eerste" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
   elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
-  
   cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat) if sc else True
   if not cm or (sa and dn not in sa):continue
-  
-  if target_nums:
-   row_nums = re.findall(r'\d+', av)
-   if not row_nums:
-    if not any(x in n.lower() for x in ["athletics","swimming"]): continue
-   else:
-    if not any(int(rn) in target_nums for rn in row_nums): continue
-
+  if tn and av:
+   v_n=re.findall(r'\d+',av)
+   if v_n and int(v_n[0]) not in tn:continue
   rd=cl(r.iloc[5]);dt=pd.to_datetime(rd,dayfirst=True,errors='coerce');ft="full term" in str(r.iloc[12]).lower()
   if not ft and pd.notnull(dt) and dt.date()<today:continue
   res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
