@@ -39,13 +39,26 @@ if not df_raw.empty:
     with st.container():
         st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; margin-bottom:20px;'>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
-        with c1: s_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"])
+        
+        # 1. Kategorie Filter
+        with c1: 
+            s_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"])
+        
+        # 2. Aktiwiteit Filter (PAS AAN BY KATEGORIE)
         with c2:
-            opts = sorted(list(set(df_raw.iloc[:, 3].str.strip())))
+            if s_cat:
+                mask = df_raw.iloc[:, 2].str.contains('|'.join(s_cat), case=False, na=False)
+                if "Academics" in s_cat: mask |= df_raw.iloc[:, 2].str.contains("academic", case=False, na=False)
+                opts = sorted(list(set(df_raw[mask].iloc[:, 3].str.strip())))
+            else:
+                opts = sorted(list(set(df_raw.iloc[:, 3].str.strip())))
             s_act = st.multiselect("Activity / Subject", opts)
+            
+        # 3. Age Filter
         with c3:
             age_opts = ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
-            s_age = st.multiselect("Gr / Age", age_opts)
+            s_age = st.multiselect("Gr / Age Group", age_opts)
+            
         sq = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
         if st.button("REFRESH HUB", use_container_width=True):
             st.cache_data.clear()
@@ -70,15 +83,16 @@ if not df_raw.empty:
         
         if not is_f and pd.notnull(dt) and dt.date() < today: continue
         
-        # Filter Logika: As niks gekies is nie, wys alles. As iets gekies is, moet dit pas.
+        # Filtreer Logika
         if s_cat and not any(s.lower() in cat_row or (s=="Academics" and "academic" in cat_row) for s in s_cat): continue
         if s_act and name.strip() not in s_act: continue
-        if t_nums and not any(ws in name.lower() for ws in ["swimming", "athletics"]):
+        
+        is_global = any(ws in name.lower() for ws in ["swimming", "athletics"])
+        if t_nums and not is_global:
             v = clean_val(r.iloc[11])
             vn = re.findall(r'\d+', v)
             if not (vn and int(vn[0]) in t_nums): continue
             
-        # Veilige g_val berekening
         g_raw = clean_val(r.iloc[11])
         g_match = re.search(r'\d+', g_raw)
         g_val = int(g_match.group()) if g_match else 99
@@ -92,12 +106,13 @@ if not df_raw.empty:
     
     for i in filtered_list:
         r, d, is_f = i['r'], i['d'], i['f']
-        is_ac = "academic" in str(r.iloc[2]).lower() or any(x in str(r.iloc[3]).lower() for x in ["afrikaans", "eat", "ht", "math", "science", "wiskunde"])
+        act_display = str(r.iloc[3])
+        is_ac = "academic" in str(r.iloc[2]).lower() or any(x in act_display.lower() for x in ["afrikaans", "eat", "ht", "math", "science"])
         age = clean_val(r.iloc[11])
         pre = "Gr " if is_ac else "U"
-        age_d = f"{pre}{age} " if age and not (any(x in str(r.iloc[3]).lower() for x in ["swimming", "athletics"]) and not age) else ""
+        age_d = f"{prefix if 'prefix' in locals() else pre}{age} " if age and not (any(ws in act_display.lower() for ws in ["swimming", "athletics"]) and not row_age if 'row_age' in locals() else not age) else ""
         
-        title = f"{translate_term(str(r.iloc[3]), str(r.iloc[3]))} {age_d}{translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))}".strip()
+        title = f"{translate_term(act_display, act_display)} {age_d}{translate_term(clean_val(r.iloc[4]), act_display)}".strip()
         if sq and sq.lower() not in title.lower(): continue
         
         d_s = "FULL TERM" if is_f else (d.strftime('%d %B %Y') if d != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
@@ -111,8 +126,4 @@ if not df_raw.empty:
         note = f"<div style='background:#e7f3f3;padding:10px;margin-top:10px;border-radius:8px;font-size:0.8rem;'>NOTE: {n_raw}</div>" if n_raw and "http" not in n_raw.lower() else ""
         if "http" in n_raw.lower(): btns += f"<a href='{n_raw}' target='_blank' class='btn'>Info</a>"
         
-        h += f"<div class='card'><div class='card-title'>{title}</div><div>📅 {d_s}</div><div class='venue'>📍 {translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</div>{note}<div style='margin-top:10px;'>{btns}</div></div>"
-    
-    components.html(h, height=3000, scrolling=True)
-
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+        h += f"<div class='card'><div class='card-title'>{title}</div><div>📅 {d_s}</div><div class='venue'>📍 {translate_term(str(r.iloc[6]), act_display).upper()}</div>{note}<div style='margin-top:10px;'>{btns}</div>
