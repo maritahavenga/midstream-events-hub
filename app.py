@@ -5,7 +5,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 
-# --- BANNER (Netjies en Skoon) ---
+# --- BANNER ---
 st.markdown("""
 <div style='text-align:center; padding: 10px;'>
     <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='170'>
@@ -14,9 +14,19 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
+
+# NUWE DATUM FORMATERINGS-FUNKSIE
+def fmt_dt(dt_str):
+    try:
+        # Lees die datum uit Excel (verwag DD/MM/YYYY)
+        d_obj = pd.to_datetime(dt_str, dayfirst=True)
+        # Verander na "5 February 2026"
+        return d_obj.strftime("%#d %B %Y") # Die # verwyder die 0 voor die dag op Windows, op Linux is dit -
+    except:
+        return dt_str
 
 @st.cache_data(ttl=1)
 def ld():
@@ -28,7 +38,6 @@ def ld():
 df = ld()
 
 if not df.empty:
-    # --- FILTER BOKS (Grys agtergrond vir professionele look) ---
     st.markdown("<div style='background-color:#f9f9f9; padding:20px; border-radius:15px; border:1px solid #eee; margin-bottom:20px;'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
@@ -47,57 +56,77 @@ if not df.empty:
             cat, act, desc, date_str, ven, age = str(r.iloc[2]), str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6]), cl(r.iloc[11])
             dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
             if pd.notnull(dt) and dt.date() < now: continue
-            if sc and not any(x.lower() in cat.lower() for x in sc): continue
-            if sa and not any(x in act for x in sa): continue
-            if sg and not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
-            res.append({"r": r, "dt": dt if pd.notnull(dt) else datetime(2099, 1, 1), "ds": date_str, "desc": desc})
+            
+            # Formateer die datum vir vertoon
+            pretty_date = fmt_dt(date_str)
+            
+            res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": desc})
         except: continue
 
-    res.sort(key=lambda x: x['dt'])
+    res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
-    if not res:
-        st.info("No upcoming events found.")
-    else:
-        for i in res:
-            r = i["r"]
-            act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), str(r.iloc[6])
-            t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-            
-            # U / Gr Label Logika
-            is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
-            prefix = "U" if is_sp else "Gr "
-            age_lbl = f"{prefix}{age}" if age else ""
-            
-            full_title = f"{act} {age_lbl} {i['desc']}".strip()
-            if sq and sq.lower() not in full_title.lower(): continue
+    # TERUG NA DIE MOOI RAAMPIE STYLE
+    h = """<style>
+    .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 10px solid #800000;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        font-family: sans-serif;
+    }
+    .title { color: #800000; font-weight: bold; font-size: 1.2rem; margin-bottom: 5px; }
+    .date { color: #555; font-weight: 600; margin-bottom: 8px; }
+    .venue { color: #008080; font-weight: bold; margin-bottom: 12px; }
+    .nt-box { background: #f0f7f7; padding: 10px; border-radius: 8px; border-left: 4px solid #008080; margin-bottom: 10px; font-size: 0.9rem; }
+    .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+    .btn { background: #800000; color: white !important; padding: 8px 15px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; font-weight: bold; }
+    </style>"""
 
-            # --- DIE KAART ONTWERP ---
-            with st.container():
-                # Titel in Maroon
-                st.markdown(f"### <span style='color:#800000;'>{full_title}</span>", unsafe_allow_html=True)
-                
-                # Datum en Venue (Teal ikoon gevoel)
-                st.markdown(f"📅 **{i['ds']}**")
-                if ven and ven != "nan":
-                    map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream"
-                    st.markdown(f"📍 <a href='{map_url}' target='_blank' style='color:#008080; font-weight:bold; text-decoration:none;'>{ven.upper()}</a>", unsafe_allow_html=True)
+    for i in res:
+        r = i["r"]
+        act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), str(r.iloc[6])
+        t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
+        
+        is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
+        prefix = "U" if is_sp else "Gr "
+        age_lbl = f"{prefix}{age}" if age else ""
+        
+        full_title = f"{act} {age_lbl} {i['desc']}".strip()
+        if sq and sq.lower() not in full_title.lower(): continue
 
-                # Notas & Spanne (Teal agtergrond boksies)
-                if t_l and "http" not in t_l.lower():
-                    st.info(f"**Teams:** {t_l}")
-                if i_r and "http" not in i_r.lower():
-                    st.success(f"**Note:** {i_r}") # Success gee 'n ligte groen/teal boksie
+        # Notas
+        nt_html = ""
+        if (t_l and "http" not in t_l.lower()) or (i_r and "http" not in i_r.lower()):
+            nt_html = f"<div class='nt-box'>"
+            if t_l and "http" not in t_l.lower(): nt_html += f"<b>Teams:</b> {t_l}<br>"
+            if i_r and "http" not in i_r.lower(): nt_html += f"<b>Note:</b> {i_r}"
+            nt_html += "</div>"
 
-                # Knoppies langs mekaar
-                is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
-                b1, b2, b3 = ("Documents", "Team List", "Information")
-                if is_afr: b1, b2, b3 = ("Dokumente", "Spanlys", "Inligting")
-                
-                col1, col2, col3 = st.columns([1,1,1])
-                if "http" in cl(r.iloc[7]): col1.link_button(b1, r.iloc[7], use_container_width=True)
-                if "http" in t_l: col2.link_button(b2, t_l, use_container_width=True)
-                if "http" in i_r: col3.link_button(b3, i_r, use_container_width=True)
-                
-                st.markdown("<hr style='border: 0.5px solid #eee;'>", unsafe_allow_html=True)
+        # Knoppies
+        is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
+        b1, b2, b3 = ("Documents", "Team List", "Information") if not is_afr else ("Dokumente", "Spanlys", "Inligting")
+        
+        btns = ""
+        if "http" in cl(r.iloc[7]): btns += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>{b1}</a>"
+        if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
+        if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>{b3}</a>"
 
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
+        map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream"
+        vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{ven.upper()}</a></div>" if ven and ven != "nan" else ""
+
+        h += f"""
+        <div class='card'>
+            <div class='title'>{full_title}</div>
+            <div class='date'>📅 {i['ds']}</div>
+            {vh}
+            {nt_html}
+            <div class='btn-row'>{btns}</div>
+        </div>
+        """
+    
+    import streamlit.components.v1 as components
+    components.html(f"<div style='padding:10px;'>{h}</div>", height=3000, scrolling=True)
+
+st.markdown("<center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
