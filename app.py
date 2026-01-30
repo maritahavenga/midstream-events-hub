@@ -15,42 +15,72 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# --- GOOGLE SHEET CSV ---
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig-2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-def cl(v): 
-    return str(v).replace(".0","").replace("nan","").strip()
+# --- HELPERS ---
+def cl(v):
+    return str(v).replace(".0", "").replace("nan", "").strip()
 
-def tr(t,a):
+def tr(t, a):
     t = str(t).replace("-", " ").replace("/", " ")
-    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
-    for k,v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.I)
+    d = {
+        "Saal": "Hall",
+        "Veld": "Field",
+        "Atletiek": "Athletics",
+        "Wiskunde": "Math"
+    }
+    for k, v in d.items():
+        t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
     return t
 
 def c_a(n):
     n = str(n).lower()
-    for x in ["hockey","rugby","netball","swimming","athletics","tennis"]:
-        if x in n: return x.capitalize()
-    if "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
-    if "hooftaal" in n: return "Afrikaans Hooftaal"
+    for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"]:
+        if x in n:
+            return x.capitalize()
+    if "eerste" in n:
+        return "Afrikaans Eerste Addisionele Taal"
+    if "hooftaal" in n:
+        return "Afrikaans Hooftaal"
     return n.capitalize()
 
+# --- DATA LOAD (FIXED PARSER) ---
 @st.cache_data(ttl=60)
 def ld():
-    r = requests.get(U)
-    return pd.read_csv(io.StringIO(r.text), dtype=str).fillna("")
+    try:
+        r = requests.get(U, timeout=10)
+        return pd.read_csv(
+            io.StringIO(r.text),
+            dtype=str,
+            engine="python",
+            on_bad_lines="skip"
+        ).fillna("")
+    except Exception as e:
+        st.error("⚠️ Kon nie data laai nie")
+        st.write(e)
+        return pd.DataFrame()
 
+# --- LOAD DATA ---
 df = ld()
 
+# --- MAIN APP ---
 if not df.empty:
 
-    # --- FILTERS ---
-    c1,c2,c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
     with c1:
-        sc = st.multiselect("Category", ["Sport","Culture","Academics"])
+        sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2:
-        sa = st.multiselect("Activity", sorted({c_a(x) for x in df.iloc[:,3]}))
+        sa = st.multiselect(
+            "Activity",
+            sorted({c_a(x) for x in df.iloc[:, 3]})
+        )
     with c3:
-        sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
+        sg = st.multiselect(
+            "Age Group",
+            ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7",
+             "U7","U8","U9","U10","U11","U12","U13"]
+        )
 
     sq = st.text_input("Search events")
 
@@ -66,7 +96,7 @@ if not df.empty:
 
         dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
         if pd.isnull(dt):
-            dt = datetime(2099,1,1)
+            dt = datetime(2099, 1, 1)
         elif dt.date() < now:
             continue
 
@@ -77,15 +107,19 @@ if not df.empty:
             continue
 
         if sg and age:
-            if not any(v.replace("Gr ","").replace("U","") in age for v in sg):
+            if not any(v.replace("Gr ", "").replace("U", "") in age for v in sg):
                 continue
 
-        res.append({"r":r,"dt":dt,"ds":rd})
+        res.append({
+            "r": r,
+            "dt": dt,
+            "ds": rd
+        })
 
-    res.sort(key=lambda x:x["dt"])
+    res.sort(key=lambda x: x["dt"])
 
 # ⛔ STOP HIER – PLAK DEEL 2 DIREK HIERONDER
-    html = """
+  html = """
     <style>
     .card{
         background:white;
@@ -94,19 +128,13 @@ if not df.empty:
         border-left:10px solid #800000;
         margin-bottom:15px;
         box-shadow:0 4px 12px rgba(0,0,0,0.08);
+        font-family:sans-serif;
     }
     .title{
         color:#800000;
         font-weight:bold;
         font-size:1.1rem;
-    }
-    .btn{
-        background:#800000;
-        color:white;
-        padding:8px 14px;
-        border-radius:8px;
-        text-decoration:none;
-        margin-right:8px;
+        margin-bottom:6px;
     }
     </style>
     """
@@ -133,8 +161,15 @@ if not df.empty:
         <div class='card'>
             <div class='title'>{title}</div>
             <div>📅 {tr(i['ds'], act)}</div>
-            {'<div>📍 <a href="'+map_url+'" target="_blank">'+ven+'</a></div>' if ven else ''}
+            {f"<div>📍 <a href='{map_url}' target='_blank'>{ven}</a></div>" if ven else ""}
         </div>
         """
 
-    v1.html(html, height=2500, scrolling=True)
+    v1.html(html, height=2600, scrolling=True)
+
+st.markdown(
+    "<center style='font-size:0.8rem;color:#999;'>"
+    "LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026"
+    "</center>",
+    unsafe_allow_html=True
+)
