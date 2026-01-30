@@ -8,10 +8,11 @@ st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 st.markdown("""
     <style>
     .nav-bar { background: linear-gradient(135deg, #800000 0%, #a00000 100%); color: white; padding: 25px; text-align: center; border-radius: 0 0 20px 20px; margin-top: -60px; }
-    .card { background: white; padding: 20px; border-radius: 15px; border-left: 10px solid #800000; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .card { background: white; padding: 20px; border-radius: 15px; border-left: 10px solid #800000; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); position: relative; }
     .tag-cat { background: #800000; color: white; padding: 3px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: bold; }
     .event-title { color: #222; font-size: 1.2rem; font-weight: 700; margin: 8px 0; }
     .map-btn { display: inline-block; background-color: white; color: #008080 !important; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: bold; border: 1px solid #008080; margin-top: 10px; }
+    .info-text { font-size: 0.85rem; color: #666; background: #f0f2f6; padding: 10px; border-radius: 8px; margin-top: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -22,52 +23,51 @@ URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SE
 @st.cache_data(ttl=2)
 def load_data():
     try:
-        # Ons dwing 'n nuwe versoek af
         r = requests.get(f"{URL}&cb={pd.Timestamp.now().timestamp()}", timeout=15)
-        # Lees die data sonder om te worry oor die "header"
-        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), header=None)
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8'))).fillna("")
         return df
     except:
         return None
 
 df = load_data()
 
-# As daar data is, maar die eerste ry is dalk die opskrifte
-if df is not None and len(df) > 1:
-    # Ons skuif die eerste ry na die opskrifte
-    df.columns = df.iloc[0]
-    df = df[1:].reset_index(drop=True)
-    df = df.fillna("")
-
-    # Filter op die eerste kolom (Category)
+if df is not None and not df.empty:
+    # 1. Filters gebaseer op Kolom A (Category) en Kolom J (Age Group)
     all_cats = sorted(df.iloc[:, 0].unique().astype(str))
     sel_cats = st.multiselect("Select Category:", all_cats)
 
+    all_ages = sorted(df.iloc[:, 9].unique().astype(str)) # Kolom J
+    sel_ages = st.multiselect("Filter by Grade/Age:", [a for a in all_ages if a.strip()])
+
+    # 2. Display Loop
     for i in range(len(df)):
         row = df.iloc[i]
-        # Veiligheids-mapping: gebruik kolomnommers
-        c = str(row.iloc[0]) # Category
-        a = str(row.iloc[1]) # Activity
-        t = str(row.iloc[2]) # Team
-        d = str(row.iloc[3]) # Date
-        v = str(row.iloc[4]) # Venue
-        l = str(row.iloc[5]) # Link
+        # Mapping volgens jou foto:
+        cat = str(row.iloc[0])   # A: Category
+        act = str(row.iloc[1])   # B: Activity/Subject
+        team = str(row.iloc[2])  # C: Team / Assessment
+        date = str(row.iloc[3])  # D: Date
+        ven = str(row.iloc[4])   # E: Venue
+        lnk = str(row.iloc[5])   # F: Programme Link
+        note = str(row.iloc[8])  # I: Information
+        age = str(row.iloc[9])   # J: Age Group
 
-        if not sel_cats or c in sel_cats:
+        if (not sel_cats or cat in sel_cats) and (not sel_ages or age in sel_ages):
             st.markdown(f"""
                 <div class="card">
-                    <span class="tag-cat">{c}</span>
-                    <div style="color:#008080; font-weight:bold; margin-top:5px;">{a}</div>
-                    <div class="event-title">{t}</div>
-                    <div style="color:#555;">📅 <b>{d}</b> | 📍 {v}</div>
-                    {f'<a href="{l}" target="_blank" class="map-btn">📂 VIEW</a>' if 'http' in l else ''}
+                    <span class="tag-cat">{cat}</span>
+                    <div style="color:#008080; font-weight:bold; margin-top:5px;">{act}</div>
+                    <div class="event-title">{team}</div>
+                    <div style="color:#555;">
+                        <b>Gr {age}</b> | 📅 {date} | 📍 {ven}
+                    </div>
+                    {f'<div class="info-text">ℹ️ {note}</div>' if note else ''}
+                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 VIEW DOCUMENT</a>' if 'http' in lnk else ''}
                 </div>
             """, unsafe_allow_html=True)
-elif df is not None and len(df) == 1:
-    st.warning("I can see the headers, but there are no events listed in the rows below. Check your 'Upcoming' tab filters.")
 else:
-    st.error("Still no data connection. Check if the 'Upcoming' tab has data and is published.")
+    st.warning("Verbind tans met Google Sheets... Maak seker die 'Upcoming' tab het data.")
 
-if st.button("Refresh Now"):
+if st.button("Refresh Hub"):
     st.cache_data.clear()
     st.rerun()
