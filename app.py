@@ -1,4 +1,4 @@
-Dit beteken ons skuif die Information vanaf I na H (indeks 7). Nou is die belyning tussen jou Google Sheet en die app sekerlik 100% perfek.Die Finale Kolom-Mapping (A-K):A: Category (0)B: Activity / Subject (1)C: Assessment (2)D: Date (3)E: Venue (4)F: Link (5)G: Team (6)H: Information (7) $\leftarrow$ Hierdie een is nou reg.J: Age Group / Grade (9)K: Display Duration (10)Plak hierdie finaal-belynde kode in GitHub:Pythonimport streamlit as st
+import streamlit as st
 import pandas as pd
 import requests, io
 
