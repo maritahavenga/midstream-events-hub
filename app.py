@@ -3,7 +3,6 @@ from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
-# ================= CONFIG =================
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
@@ -38,8 +37,7 @@ def ld():
 df = ld()
 
 if not df.empty:
-    # --- Filter UI ---
-    st.markdown("<div style='background:#ffffff;padding:20px;border-radius:15px;border:1px solid #eeeeee;box-shadow:0 4px 15px rgba(0,0,0,0.05);margin-bottom:25px;'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:#fff;padding:20px;border-radius:15px;border:1px solid #eee;box-shadow:0 4px 15px rgba(0,0,0,0.05);margin-bottom:25px;'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2:
@@ -53,7 +51,6 @@ if not df.empty:
     sq = st.text_input("Search Events...", placeholder="Type to filter results...")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Logic ---
     tn = set()
     for s in sg:
         v_m = re.findall(r'\d+', s)
@@ -63,4 +60,14 @@ if not df.empty:
 
     res = []
     for _, r in df.iterrows():
-        n, cat, av, rd = str(r.iloc[3]), str(r.iloc[2]).lower
+        n, cat, av, rd = str(r.iloc[3]), str(r.iloc[2]).lower(), cl(r.iloc[11]), cl(r.iloc[5])
+        dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
+        if sc and not (any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)): continue
+        if sa and c_a(n) not in sa: continue
+        v_m = re.findall(r'\d+', av)
+        if tn and v_m and int(v_m[0]) not in tn: continue
+        res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
+
+    res.sort(key=lambda x: x['dt'])
+    
+    h = "<style>.card{background:white;padding:20px;border-radius:12px;border-left:10
