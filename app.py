@@ -29,9 +29,9 @@ if not df.empty:
  with c2:
   m=df.iloc[:,2].str.contains('|'.join(sc) if sc else ".*",case=False)
   if sc and "Academics" in sc:m|=df.iloc[:,2].str.contains("academic",case=False)
-  orw=sorted(list(set(df[m].iloc[:,3].str.strip())))
+  o_r=sorted(list(set(df[m].iloc[:,3].str.strip())))
   clo=set()
-  for o in orw:
+  for o in o_r:
    lo=o.lower()
    if "athletics" in lo:clo.add("Athletics")
    elif "hockey" in lo:clo.add("Hockey")
@@ -79,7 +79,7 @@ if not df.empty:
   ts=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]),act)}".strip()
   if sq and sq.lower() not in ts.lower():continue
   vv,vh=cl(r.iloc[6]),""
-  if vv:vh=f"<div style='margin-top:4px;'>📍 <a href='http://google.com/maps/search/{vv.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.8rem;'>{tr(vv,act).upper()}</a></div>"
+  if vv:vh=f"<div style='margin-top:4px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={vv.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.8rem;'>{tr(vv,act).upper()}</a></div>"
   h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}{nt}<div>{btns}</div></div>"
  v1.html(h,height=3000,scrolling=True)
 st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
