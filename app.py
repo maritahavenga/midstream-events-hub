@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
 import requests, io, re, pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit.components.v1 as v1
-from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
-st_autorefresh(interval=120000, key="r_token")
 
 # --- BANNER ---
 st.markdown("""
@@ -17,109 +15,108 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# JOU SPESIFIEKE SKAKEL
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig-2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-def cl(v): return str(v).replace(".0","").replace("nan","").strip()
-
-def tr(t,a):
-    t = str(t).replace("-", " ").replace("/", " ")
-    t = t.replace("swimming", "Swimming").replace("gala", "Gala")
-    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math"}
-    for k,v in d.items(): t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
-    return t
-
-def c_a(n):
-    n = str(n).lower()
-    for x in ["hockey","rugby","netball","swimming","athletics","tennis"]:
-        if x in n: return x.capitalize()
-    if "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
-    if "hooftaal" in n: return "Afrikaans Hooftaal"
-    return n.capitalize()
-
+# --- DATA LOAD ---
 @st.cache_data(ttl=1)
-def ld():
+def load_data():
     try:
-        # Ons voeg 'n tydstempel by die skakel om Google te dwing om nuwe data te gee
-        r = requests.get(f"{U}&cache_bust={datetime.now().timestamp()}", timeout=10)
-        return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-    except: return pd.DataFrame()
+        # Ons dwing Google om die varsste data te stuur
+        response = requests.get(f"{U}&ts={datetime.now().timestamp()}", timeout=15)
+        if response.status_code == 200:
+            return pd.read_csv(io.StringIO(response.content.decode('utf-8')), dtype=str).fillna("")
+        else:
+            st.error(f"Google Sheet fout: Status {response.status_code}")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Konneksie Fout: {e}")
+        return pd.DataFrame()
 
-df = ld()
+df = load_data()
+
+# --- AS DATA LAAI ---
 if not df.empty:
-    st.markdown("<div style='background:#fff;padding:20px;border-radius:15px;border:1px solid #eee;box-shadow:0 4px 15px rgba(0,0,0,0.05);margin-bottom:25px;'>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
-    with c2: sa = st.multiselect("Activity", sorted({c_a(x) for x in df.iloc[:,3]}))
-    with c3: sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
-    sq = st.text_input("Search events", placeholder="Type to search...")
-    if st.button("🔄 Force Refresh Data"): 
+    # 🔄 Refresh Knoppie heel bo-aan
+    if st.button("🔄 REFRESH DATA"):
         st.cache_data.clear()
         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Vandag se datum (30 Jan 2026)
+    st.markdown("---")
+    
+    # Filters
+    c1, c2, c3 = st.columns(3)
+    with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
+    with c2: 
+        activities = sorted(list(df.iloc[:, 3].unique()))
+        sa = st.multiselect("Activity", activities)
+    with c3: 
+        sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
+
     now = datetime.now(pytz.timezone("Africa/Johannesburg")).date()
     res = []
 
     for _, r in df.iterrows():
-        cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
-        
-        # DATE PARSING (DD/MM/YYYY)
-        dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
-        
-        # WYS ALLES VAN VANDAG AF VORENTOE (insluitend vandag)
-        if pd.notnull(dt) and dt.date() < now: continue
-        
-        # FILTERS
-        if sc and not any(x.lower() in cat for x in sc): continue
-        if sa and not any(x.lower() in act.lower() for x in sa): continue
-        if sg and age:
-            if not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
+        try:
+            cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), str(r.iloc[11]), str(r.iloc[5])
+            dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
+            
+            # Filter slegs as dit 'n geldige datum is en dit is in die verlede (voor gister)
+            if pd.notnull(dt) and dt.date() < (now - timedelta(days=1)): continue
+            
+            # Kategorie filter
+            if sc and not any(x.lower() in cat for x in sc): continue
+            # Aktiwiteit filter
+            if sa and not any(x in act for x in sa): continue
+            # Ouderdom filter
+            if sg and not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
 
-        res.append({"r":r,"dt":dt if pd.notnull(dt) else datetime(2099,1,1),"ds":rd})
+            res.append({"r": r, "dt": dt if pd.notnull(dt) else datetime(2099, 1, 1), "ds": rd})
+        except:
+            continue
 
-    res.sort(key=lambda x:x["dt"])
+    res.sort(key=lambda x: x["dt"])
 
-    html = """<style>
+    # --- HTML KAARTE ---
+    html_content = """<style>
     .card{background:white;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
-    .title{color:#800000;font-weight:bold;font-size:1.15rem;margin-bottom:6px;}
-    .venue{color:#008080;font-weight:bold;margin-top:8px;}
-    .btn{background:#800000;color:white!important;padding:8px 15px;border-radius:6px;text-decoration:none;font-size:0.8rem;margin-right:10px;display:inline-block;}
+    .title{color:#800000;font-weight:bold;font-size:1.1rem;}
+    .venue{color:#008080;font-weight:bold;margin-top:5px;}
+    .btn{background:#800000;color:white!important;padding:8px 12px;border-radius:6px;text-decoration:none;font-size:0.8rem;margin-right:8px;display:inline-block;margin-top:10px;}
     </style>"""
 
     if not res:
-        st.info("No upcoming events found. Note: Events before today are automatically hidden.")
+        st.info("Geen data gevind vir vandag of die toekoms nie. Gaan asseblief die datums in die Google Sheet na.")
     else:
         for i in res:
             r = i["r"]
-            act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
-            cat_raw = str(r.iloc[2]).lower()
+            act, age, ven = str(r.iloc[3]), str(r.iloc[11]), str(r.iloc[6])
             
-            # --- U / GR LOGIKA ---
-            is_sp = "sport" in cat_raw or any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
-            is_ac = "academic" in cat_raw or any(x in act.lower() for x in ["afrikaans","wiskunde","math","atp"])
-            prefix = "U" if is_sp else ("Gr " if is_ac else "")
+            # U / Gr Label
+            prefix = "U" if any(x in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"]) else "Gr "
             age_lbl = f"{prefix}{age}" if age else ""
-
-            title = f"{c_a(act)} {age_lbl} {tr(r.iloc[4], act)}"
-            if sq and sq.lower() not in title.lower(): continue
-
+            
+            title = f"{act} {age_lbl}".strip()
+            
+            # Knoppies
             b_html = ""
-            if "http" in cl(r.iloc[7]): b_html += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>Documents</a>"
-            if "http" in cl(r.iloc[8]): b_html += f"<a class='btn' href='{cl(r.iloc[8])}' target='_blank'>Team List</a>"
-            if "http" in cl(r.iloc[10]): b_html += f"<a class='btn' href='{cl(r.iloc[10])}' target='_blank'>Info</a>"
+            if "http" in str(r.iloc[7]): b_html += f"<a class='btn' href='{r.iloc[7]}' target='_blank'>Documents</a>"
+            if "http" in str(r.iloc[8]): b_html += f"<a class='btn' href='{r.iloc[8]}' target='_blank'>Teams</a>"
+            if "http" in str(r.iloc[10]): b_html += f"<a class='btn' href='{r.iloc[10]}' target='_blank'>Info</a>"
 
-            map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream" if ven else "#"
+            map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream" if ven else "#"
 
-            html += f"""
+            html_content += f"""
             <div class='card'>
                 <div class='title'>{title}</div>
-                <div style='color:#555;'>📅 {tr(i['ds'], act)}</div>
-                {f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven,act).upper()}</a></div>" if ven else ""}
-                <div style='margin-top:15px;'>{b_html}</div>
+                <div>📅 {i['ds']}</div>
+                {f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;'>{ven.upper()}</a></div>" if ven else ""}
+                <div>{b_html}</div>
             </div>
             """
-        v1.html(html, height=3000, scrolling=True)
+        
+        v1.html(html_content, height=2500, scrolling=True)
+
+else:
+    st.warning("⚠️ Die data kon nie van Google gelaai word nie. Maak seker die skakel is korrek gepubliseer as CSV.")
 
 st.markdown("<center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
