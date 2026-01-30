@@ -1,122 +1,43 @@
-import streamlit as st, pandas as pd, requests, io, re, pytz
-from datetime import datetime
-import streamlit.components.v1 as v1
-from streamlit_autorefresh import st_autorefresh
+now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
+res = []
 
-st.set_page_config(page_title="LMCP Hub", layout="centered")
-st_autorefresh(interval=120000, key="r_token")
+for _, r in df.iterrows():
 
-# --- BANNER MET LOGO ---
-st.markdown("""
-    <div style='text-align: center; margin-bottom: 20px;'>
-        <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='180'>
-        <h1 style='color: #800000; font-family: sans-serif; margin-bottom: 0;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
-        <p style='color: #008080; font-size: 1.2rem; margin-top: 5px;'>Digital Hub</p>
-    </div>
-""", unsafe_allow_html=True)
+    cat = str(r.iloc[2]).lower().strip()
+    act = str(r.iloc[3]).strip()
+    age = cl(r.iloc[11])
+    rd  = cl(r.iloc[5])
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+    # --- DATUM (ROBUST) ---
+    dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
+    if pd.isnull(dt):
+        dt = datetime(2099, 1, 1)
+    elif dt.date() < now:
+        continue
 
-def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
+    # --- CATEGORY FILTER ---
+    if sc:
+        if not any(x.lower() in cat for x in sc):
+            # allow academics hidden in activity name
+            if not (
+                "academics" in [x.lower() for x in sc]
+                and any(k in act.lower() for k in ["afrikaans", "wiskunde", "hooftaal", "eerste"])
+            ):
+                continue
 
-def tr(t, a):
-    t = str(t).replace("-", " ").replace("/", " ")
-    t = t.replace("gala", "Gala").replace("swimming", "Swimming")
-    m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
-    for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
-    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","G ":"Girls "}
-    for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
-    return t
+    # --- ACTIVITY FILTER (FIXED) ---
+    if sa and not any(x.lower() in act.lower() for x in sa):
+        continue
 
-def c_a(n):
-    n = str(n).lower()
-    for x in ["athletics","atletiek","hockey","rugby","netball","netbal","tennis","swimming"]:
-        if x in n: return x.capitalize().replace("Netbal","Netball").replace("Atletiek","Athletics")
-    if "eat" in n or "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
-    if "ht" in n or "hooftaal" in n: return "Afrikaans Hooftaal"
-    return n.capitalize()
+    # --- AGE FILTER (SAFE) ---
+    if sg and age:
+        if not any(v.replace("Gr ", "").replace("U", "") in age for v in sg):
+            continue
 
-@st.cache_data(ttl=1)
-def ld():
-    try:
-        r = requests.get(U, timeout=8)
-        return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-    except: return pd.DataFrame()
+    res.append({
+        "r": r,
+        "dt": dt,
+        "ds": rd
+    })
 
-df = ld()
-if not df.empty:
-    st.markdown("<div style='background:#fff;padding:20px;border-radius:15px;border:1px solid #eee;box-shadow:0 4px 15px rgba(0,0,0,0.05);margin-bottom:25px;'>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
-    with c2:
-        m = df.iloc[:, 2].str.contains('|'.join(sc) if sc else ".*", case=False)
-        sa = st.multiselect("Activity", sorted(list({c_a(o) for o in df[m].iloc[:, 3]})))
-    with c3:
-        ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-        sg = st.multiselect("Age Group", options=ao)
-    sq = st.text_input("Search Events...", placeholder="Type to filter...")
-    st.markdown("</div>", unsafe_allow_html=True)
-    now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
-    res = []
-    for _, r in df.iterrows():
-        cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
-        dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
-        
-        if pd.notnull(dt) and dt.date() < now: continue
-        
-        # RELAXED FILTER: Maak seker Academics wys data
-        if sc:
-            cat_match = any(x.lower() in cat for x in sc)
-            # Spesiale kyk vir Academics as dit in aktiwiteitnaam staan maar nie in kategorie nie
-            if "academics" in [x.lower() for x in sc] and ("academic" in cat or "afrikaans" in act.lower()):
-                cat_match = True
-            if not cat_match: continue
-            
-        if sa and c_a(act) not in sa: continue
-        if sg and not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
-        
-        res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
-    
-    res.sort(key=lambda x: x['dt'])
-
-    h = """<style>
-    .card{background:white!important;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
-    .title{color:#800000!important;font-weight:bold;font-size:1.15rem;margin-bottom:8px;}
-    .btn{background:#800000;color:white!important;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:0.85rem;margin:8px 8px 8px 0;display:inline-block;font-weight:500;}
-    .nt-box{background:#f0f7f7!important;padding:12px;margin-top:12px;border-radius:8px;font-size:0.95rem;border-left:5px solid #008080;color:#333;line-height:1.4;}
-    </style>"""
-    
-    for i in res:
-        r, ds = i['r'], i['ds']
-        cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
-        t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-        
-        # --- ROBUUSTE U / GR LOGIKA ---
-        # Kyk na kategorie EN aktiwiteit naam
-        is_sp = "sport" in cv or any(x in act.lower() for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"])
-        is_ac = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde", "atp"])
-        
-        # Prioritiseer Sport (U) bo alles as dit sport is
-        prefix = "U" if is_sp else ("Gr " if is_ac else "")
-        age_lbl = (prefix + age) if age else ""
-        
-        ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
-        if sq and sq.lower() not in ts.lower(): continue
-
-        is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
-        b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
-        b2 = "Team List" if not (is_ac or is_afr) else ("Assessment" if not is_afr else "Assessering")
-        
-        btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
-        t_txt = f"<b>Teams:</b><br>{t_l}<br><br>" if t_l and "http" not in t_l.lower() else ""
-        n_txt = f"<b>Note:</b><br>{i_r}" if i_r and "http" not in i_r.lower() else ""
-        content = f"<div class='nt-box'>{t_txt}{n_txt}</div>" if t_txt or n_txt else ""
-        
-        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
-        vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
-        
-        h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{content}<div style='margin-top:10px;'>{btns}</div></div>"
-    
-    v1.html(h, height=3000, scrolling=True)
-
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
+res.sort(key=lambda x: x["dt"])
