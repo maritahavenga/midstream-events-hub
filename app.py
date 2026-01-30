@@ -65,7 +65,6 @@ if not df.empty:
     
     res.sort(key=lambda x: x['dt'])
     
-    # CSS vir die kaarte en die nota-boksie
     h = """<style>
     .card{background:white;padding:18px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 10px rgba(0,0,0,0.08);font-family:sans-serif;}
     .title{color:#800000;font-weight:bold;font-size:1.1rem;margin-bottom:8px;}
@@ -75,32 +74,35 @@ if not df.empty:
     
     for i in res:
         r, ds = i['r'], i['ds']
-        cv, act, age, ven, info_raw = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6]), cl(r.iloc[10])
+        cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
+        t_list, i_raw = cl(r.iloc[8]), cl(r.iloc[10]) # Kolom 8 is Teams, 10 is Info
         
-        # Bepaal knoppie name
+        # Knoppie name
         ia, ic = "afrikaans" in act.lower() or "eat" in act.lower(), "academic" in cv or any(x in act.lower() for x in ["math", "science"])
         b1 = "Dokumente" if ia else ("Document" if ic else "Programme")
         b2 = "Assessment" if ic or ia else "Team List"
         
-        # Genereer knoppies vanaf kolomme 7, 8 en 10 (as 10 'n link bevat)
+        # Bou knoppies slegs vir LINKS
         btns_list = []
         if "http" in cl(r.iloc[7]).lower(): btns_list.append(f"<a href='{cl(r.iloc[7])}' target='_blank' class='btn'>{b1}</a>")
-        if "http" in cl(r.iloc[8]).lower(): btns_list.append(f"<a href='{cl(r.iloc[8])}' target='_blank' class='btn'>{b2}</a>")
-        if "http" in info_raw.lower(): btns_list.append(f"<a href='{info_raw}' target='_blank' class='btn'>Information</a>")
+        if "http" in t_list.lower(): btns_list.append(f"<a href='{t_list}' target='_blank' class='btn'>{b2}</a>")
+        if "http" in i_raw.lower(): btns_list.append(f"<a href='{i_raw}' target='_blank' class='btn'>Information</a>")
         btns = "".join(btns_list)
         
-        # Vertoon teks notas (haal link uit teks as dit daar is)
-        clean_note = re.sub(r'http\S+', '', info_raw).strip()
-        nt = f"<div class='nt'><b>Note:</b><br>{clean_note}</div>" if clean_note else ""
+        # Versamel alle TEKS wat nie links is nie vir die grys boksie
+        notes = []
+        if t_list and "http" not in t_list.lower(): notes.append(f"<b>Teams:</b> {t_list}")
+        if i_raw and "http" not in i_raw.lower(): notes.append(f"<b>Note:</b> {i_raw}")
+        
+        nt_html = f"<div class='nt'>{'<br>'.join(notes)}</div>" if notes else ""
         
         al = (("U" if "sport" in cv else "Gr ") + age) if age else ""
         ts = f"{tr(act,act)} {al} {tr(cl(r.iloc[4]),act)}".strip()
         
         if sq and sq.lower() not in ts.lower(): continue
-        
         vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
         
-        h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {ds}</div>{vh}{nt}<div style='margin-top:12px;'>{btns}</div></div>"
+        h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {ds}</div>{vh}{nt_html}<div style='margin-top:12px;'>{btns}</div></div>"
     
     v1.html(h, height=3500, scrolling=True)
 
