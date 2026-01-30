@@ -53,5 +53,12 @@ if not df_raw.empty:
         with c2:
             if sel_cat:
                 mask = df_raw.iloc[:, 2].str.contains('|'.join(sel_cat), case=False, na=False)
-                if "Academics" in sel_cat: mask |= df_raw.iloc[:, 2].str.contains("academic", case=False, na=False)
-                act_options = sorted(
+                if "Academics" in sel_cat: 
+                    mask |= df_raw.iloc[:, 2].str.contains("academic", case=False, na=False)
+                act_options = sorted(list(set(df_raw[mask].iloc[:, 3].str.strip())))
+            else:
+                act_options = sorted(list(set(df_raw.iloc[:, 3].str.strip())))
+            sel_act = st.multiselect("Activity / Subject", act_options, key="f_act")
+            
+        with c3:
+            age_options = ["Gr 1", "Gr 2
