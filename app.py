@@ -50,8 +50,14 @@ if not df.empty:
             if sc and "Academics" in sc: m |= df.iloc[:, 2].str.contains("academic", case=False)
             sa = st.multiselect("Activity", sorted(list({c_a(o) for o in df[m].iloc[:, 3]})))
         with c3:
-            ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","
-                  now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
+            ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+            is_sp = "Sport" in sc or any(x in ["Tennis","Rugby","Hockey","Netball","Athletics"] for x in sa)
+            is_ac = "Academics" in sc or any("Afrikaans" in x for x in sa)
+            opts = [o for o in ao if "U" in o] if (is_sp and not is_ac) else ([o for o in ao if "Gr" in o] if (is_ac and not is_sp) else ao)
+            sg = st.multiselect("Age Group", options=opts)
+    
+    sq = st.text_input("Search Events...", placeholder="Type here to filter...")
+    now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
     tn = set()
     for s in sg:
         v_m = re.findall(r'\d+', s); v = int(v_m[0]) if v_m else 0
