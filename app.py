@@ -16,27 +16,57 @@ def cl(v):
     return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
-    r = str(a).strip()
-    t = str(t).replace(" G ", " Girls ").replace(" G", " Girls")
+    t = str(t)
+    a = str(a)
 
-    if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b', r):
+    if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b', a):
         return "Afrikaans " + (
             "Eerste Addisionele Taal"
-            if "eat" in r.lower() or "eerste" in r.lower()
+            if "eat" in a.lower() or "eerste" in a.lower()
             else "Hooftaal"
         )
 
-    d = {
+    replacements = {
         "Saal": "Hall",
         "Veld": "Field",
         "Atletiek": "Athletics",
-        "Wiskunde": "Math"
+        "Wiskunde": "Math",
+        " G ": " Girls ",
+        " G": " Girls"
     }
-    for k, v in d.items():
-        t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
+
+    for k, v in replacements.items():
+        t = re.sub(rf"\b{k}\b", v, t, flags=re.IGNORECASE)
 
     return t
 
 def c_a(n):
-    n = n.lower()
-    for x in ["]()
+    n = str(n).lower()
+
+    sports = [
+        "athletics", "atletiek",
+        "hockey",
+        "rugby",
+        "netball", "netbal",
+        "tennis"
+    ]
+
+    for s in sports:
+        if s in n:
+            return s.capitalize().replace("Netbal", "Netball").replace("Atletiek", "Athletics")
+
+    if any(x in n for x in ["eat", "ht", "hooftaal", "eerste"]):
+        return "Afrikaans " + (
+            "Eerste Addisionele Taal"
+            if "eat" in n or "eerste" in n
+            else "Hooftaal"
+        )
+
+    return n.capitalize()
+
+# ---------------- DATA ----------------
+@st.cache_data(ttl=10)
+def ld():
+    try:
+        r = requests.get(f"{U}&cb={datetime.now().timestamp()}", timeout=5)
+        return pd.read_csv(io.StringIO(r.content.decode("utf-8")), dtype=str).fillna("")
