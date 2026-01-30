@@ -34,9 +34,9 @@ if not df.empty:
   clo={tr(o,o) for o in orw}
   sa=st.multiselect("Activity",sorted(list(clo)))
  with c3:
+  # ONS HOU DIE LYS VOLLEDIG SODAT DIT NIE RESET NIE
   ao=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
-  do=[o for o in ao if "U" in o] if sc==["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
-  sg=st.multiselect("Age Group",options=do,key="stk")
+  sg=st.multiselect("Age Group",options=ao,key="stk")
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
  ty=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
