@@ -3,15 +3,15 @@ from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Page Config
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# 2. Oorspronklike Teal Banner met Logo (Presies soos dit was)
+# --- NUWE BANNER MET JOU OPGELAAIDE LOGO ---
 st.markdown("""
-    <div style='background-color: #008080; padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 25px;'>
-        <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='150' style='filter: brightness(0) invert(1);'>
-        <h2 style='color: white; font-family: sans-serif; margin-top: 15px;'>LMCP Digital Hub</h2>
+    <div style='background-color: #1a474a; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 25px; border-bottom: 8px solid #5d001e;'>
+        <img src='https://raw.githubusercontent.com/GoogleCloudPlatform/starthinker/master/starthinker/ui/static/img/google_cloud_logo.png' style='display:none;'> 
+        <h1 style='color: white; font-family: sans-serif; margin: 0; letter-spacing: 2px;'>MIDSTREAM COLLEGE</h1>
+        <p style='color: #eee; font-family: sans-serif; font-size: 1.2rem; margin: 5px 0 0 0;'>LMCP Digital Event Hub</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -20,10 +20,10 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEV
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def tr(t, a):
-    # Volle maande vir datums
+    # Verwyder strepies en maak volle maande
+    t = t.replace("-", " ").replace("/", " ")
     m_map = {"Jan":"January","Feb":"February","Fev":"February","Mar":"March","Apr":"April","May":"May","Jun":"June","Jul":"July","Aug":"August","Sep":"September","Oct":"October","Nov":"November","Dec":"December"}
     for k, v in m_map.items(): t = re.sub(rf'\b{k}\b', v, t)
-    # Venue en Terme
     d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","G":"Girls"}
     for k, v in d.items(): t = re.sub(rf'\b{k}\b', v, t, flags=re.IGNORECASE)
     return t
@@ -32,7 +32,6 @@ def c_a(n):
     n = str(n).lower()
     for x in ["athletics","atletiek","hockey","rugby","netball","netbal","tennis"]:
         if x in n: return x.capitalize().replace("Netbal","Netball").replace("Atletiek","Athletics")
-    # Oorspronklike name behou
     if "eat" in n or "eerste" in n: return "Afrikaans Eerste Addisionele Taal"
     if "ht" in n or "hooftaal" in n: return "Afrikaans Hooftaal"
     return n.capitalize()
@@ -80,7 +79,7 @@ if not df.empty:
     res.sort(key=lambda x: x['dt'])
 
     h = """<style>
-    .card{background:white!important;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
+    .card{background:white!important;padding:20px;border-radius:12px;border-left:10px solid #800000;margin-bottom:15px;box-shadow: 0 4px 12px rgba(0,0,0,0.08);font-family:sans-serif;}
     .title{color:#800000!important;font-weight:bold;font-size:1.15rem;margin-bottom:8px;}
     .venue{color:#008080!important;font-weight:bold;margin-top:8px;text-transform:uppercase;letter-spacing:0.5px;}
     .btn{background:#800000;color:white!important;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:0.85rem;margin:8px 8px 0 0;display:inline-block;font-weight:500;}
@@ -91,8 +90,11 @@ if not df.empty:
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
         is_afr = "afrikaans" in act.lower() or "eerste" in act.lower() or "hooftaal" in act.lower()
-        b1, b_info = ("Dokument", "Inligting") if is_afr else ("Documents", "Information")
+        
+        # Dokumente meervoud reggestel
+        b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
         b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
+        
         btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
         t_txt = f"<b>Teams:</b><br>{t_l}" if t_l and "http" not in t_l.lower() else ""
         n_txt = f"<b>Note:</b><br>{i_r}" if i_r and "http" not in i_r.lower() else ""
@@ -100,7 +102,11 @@ if not df.empty:
         age_lbl = (("U" if ("sport" in cv or any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])) else "Gr ") + age) if age else ""
         ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
         if sq and sq.lower() not in ts.lower(): continue
-        vh = f"<div class='venue'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
+        
+        # Maps skakel verbeter
+        map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
+        vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
+        
         h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {tr(ds, act)}</div>{vh}{boxes}<div style='margin-top:10px;'>{btns}</div></div>"
     v1.html(h, height=3000, scrolling=True)
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+st.markdown("<br><center style='font-size:0.8rem;color:#999;'>MIDSTREAM COLLEGE Digital Hub 2026</center>", unsafe_allow_html=True)
