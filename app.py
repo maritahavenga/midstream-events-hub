@@ -79,4 +79,3 @@ else:
     if st.button("🔄 Refresh Connection"):
         st.cache_data.clear()
         st.rerun()
-Waarom hierdie kode?
