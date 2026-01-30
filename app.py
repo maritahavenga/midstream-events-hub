@@ -46,18 +46,22 @@ df_raw = load_data(EVENTS_URL)
 
 if not df_raw.empty:
     with st.container():
-        st.markdown("<div style='background:white; padding:15px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:15px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            sel_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"], key="f_cat")
+            sel_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"], default=[], key="f_cat")
         with c2:
             act_list = sorted(list(set([str(a).strip() for a in df_raw.iloc[:, 3] if a])))
-            sel_act = st.multiselect("Activity / Subject", act_list, key="f_act")
+            sel_act = st.multiselect("Activity / Subject", act_list, default=[], key="f_act")
         with c3:
             age_list = sorted(list(set([clean_val(a) for a in df_raw.iloc[:, 11] if a]))) if df_raw.shape[1] > 11 else []
-            sel_age = st.multiselect("Gr / Age", age_list, key="f_age")
+            sel_age = st.multiselect("Gr / Age", age_list, default=[], key="f_age")
         
         search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
+        
+        if st.button("REFRESH HUB", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     SA_TIME = pytz.timezone('Africa/Johannesburg')
@@ -81,8 +85,12 @@ if not df_raw.empty:
         
         df_filtered.append((r, dt_val))
 
-    # --- KRITIESE CSS UPDATE VIR MOBIEL ---
     h = """<style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
-        body { font-family: 'Inter', sans-serif; background: transparent; padding: 5px; }
-        .card { background:white; padding:18px; border-radius:15
+        body { font-family: 'Inter', sans-serif; background: transparent; }
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:5px; line-height:1.2; }
+        .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
+        .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
+        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
+        .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size:
