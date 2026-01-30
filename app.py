@@ -8,23 +8,22 @@ st.set_page_config(page_title="LMCP Hub", layout="centered")
 # --- BANNER ---
 st.markdown("""
 <div style='text-align:center; padding: 10px;'>
-    <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='170'>
+    <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='180'>
     <h1 style='color:#800000; font-family:sans-serif; margin-bottom:0;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
     <p style='color:#008080; font-size:1.2rem; margin-top:5px; font-weight:bold;'>Digital Event Hub</p>
 </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
-# NUWE DATUM FORMATERINGS-FUNKSIE
+# Korrekte Datum Formaat: 5 February 2026
 def fmt_dt(dt_str):
     try:
-        # Lees die datum uit Excel (verwag DD/MM/YYYY)
         d_obj = pd.to_datetime(dt_str, dayfirst=True)
-        # Verander na "5 February 2026"
-        return d_obj.strftime("%#d %B %Y") # Die # verwyder die 0 voor die dag op Windows, op Linux is dit -
+        # Gebruik %e vir dag sonder voorste nul
+        return d_obj.strftime("%e %B %Y").strip()
     except:
         return dt_str
 
@@ -57,32 +56,32 @@ if not df.empty:
             dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
             if pd.notnull(dt) and dt.date() < now: continue
             
-            # Formateer die datum vir vertoon
             pretty_date = fmt_dt(date_str)
-            
             res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": desc})
         except: continue
 
     res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
-    # TERUG NA DIE MOOI RAAMPIE STYLE
-    h = """<style>
+    # --- KRITIES: DIE STYL MOET BINNE DIE HTML BLOK WEES ---
+    h = """
+    <style>
     .card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 10px solid #800000;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-        font-family: sans-serif;
+        background: white !important;
+        padding: 20px !important;
+        border-radius: 12px !important;
+        border-left: 10px solid #800000 !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
+        font-family: sans-serif !important;
     }
-    .title { color: #800000; font-weight: bold; font-size: 1.2rem; margin-bottom: 5px; }
-    .date { color: #555; font-weight: 600; margin-bottom: 8px; }
-    .venue { color: #008080; font-weight: bold; margin-bottom: 12px; }
-    .nt-box { background: #f0f7f7; padding: 10px; border-radius: 8px; border-left: 4px solid #008080; margin-bottom: 10px; font-size: 0.9rem; }
-    .btn-row { display: flex; gap: 10px; margin-top: 15px; }
-    .btn { background: #800000; color: white !important; padding: 8px 15px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; font-weight: bold; }
-    </style>"""
+    .title { color: #800000 !important; font-weight: bold !important; font-size: 1.2rem !important; margin-bottom: 5px !important; }
+    .date { color: #555 !important; font-weight: 600 !important; margin-bottom: 8px !important; }
+    .venue { color: #008080 !important; font-weight: bold !important; margin-bottom: 12px !important; }
+    .nt-box { background: #f0f7f7 !important; padding: 12px !important; border-radius: 8px !important; border-left: 4px solid #008080 !important; margin-bottom: 10px !important; font-size: 0.9rem !important; color: #333 !important; }
+    .btn-row { display: flex !important; gap: 10px !important; margin-top: 15px !important; flex-wrap: wrap !important; }
+    .btn { background: #800000 !important; color: white !important; padding: 10px 16px !important; border-radius: 8px !important; text-decoration: none !important; font-size: 0.85rem !important; font-weight: bold !important; display: inline-block !important; }
+    </style>
+    """
 
     for i in res:
         r = i["r"]
@@ -127,6 +126,6 @@ if not df.empty:
         """
     
     import streamlit.components.v1 as components
-    components.html(f"<div style='padding:10px;'>{h}</div>", height=3000, scrolling=True)
+    components.html(f"<html><body>{h}</body></html>", height=3000, scrolling=True)
 
-st.markdown("<center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
+st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
