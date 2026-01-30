@@ -5,11 +5,10 @@ import requests, io
 # 1. Stel bladsy wydte en titel in
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
-# 2. Skool-spesifieke CSS (Die "Look & Feel")
+# 2. Skool-spesifieke CSS
 st.markdown("""
     <style>
     .stApp { background-color: #f4f4f4; }
-    /* Die Rooi Banner */
     .header-banner {
         background: linear-gradient(135deg, #800000 0%, #a00000 100%);
         color: white;
@@ -19,7 +18,6 @@ st.markdown("""
         margin-top: -60px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
-    /* Die Event Kaartjies */
     .event-card {
         background: white;
         padding: 20px;
@@ -27,6 +25,7 @@ st.markdown("""
         border-left: 10px solid #800000;
         margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        font-family: sans-serif;
     }
     .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; margin-bottom: 5px; }
     .event-date { color: #008080; font-weight: bold; font-size: 1.1rem; }
@@ -37,34 +36,37 @@ st.markdown("""
 # --- BANNER ---
 st.markdown("""
     <div class="header-banner">
-        <h1 style='margin:0; font-size:1.8rem;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
-        <p style='margin:0; opacity:0.9;'>Digital Event Hub</p>
+        <h1 style='margin:0; font-size:1.8rem; font-family: sans-serif;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
+        <p style='margin:0; opacity:0.9; font-family: sans-serif;'>Digital Event Hub</p>
     </div>
     """, unsafe_allow_html=True)
 
-# 3. DATA KONNEKSIE
+# 3. DATA KONNEKSIE (Sonder Cache wat kan vries)
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
-@st.cache_data(ttl=60)
-def load_data():
+def load_data_direct():
     try:
-        r = requests.get(URL, timeout=10)
-        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-        return df
+        # Ons dwing Google om vars data te gee met 'n random nommer
+        import time
+        t = int(time.time())
+        r = requests.get(f"{URL}&refresh={t}", timeout=10)
+        if r.status_code == 200:
+            df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+            return df
     except:
-        return pd.DataFrame()
+        return None
+    return None
 
-df = load_data()
+df = load_data_direct()
 
-st.write("") # Spasie
+st.write("") 
 
-if not df.empty:
-    # --- FILTERS (KNOPPIES EN SOEK) ---
+if df is not None and not df.empty:
     search = st.text_input("🔍 Soek vir sport of aktiwiteit...", "")
     
     st.markdown("### Opkomende Events")
     
-    found = False
+    found_any = False
     for i in range(len(df)):
         try:
             row = df.iloc[i]
@@ -72,36 +74,28 @@ if not df.empty:
             date = str(row.iloc[5]).strip() # Date
             ven = str(row.iloc[6]).strip()  # Venue
             
-            # Filter leë rye en opskrifte
             if len(act) < 2 or "activity" in act.lower():
                 continue
             
-            # Pas soek-filter toe
-            if search.lower() not in act.lower() and search.lower() not in ven.lower():
-                continue
-
-            found = True
-            
-            # Vertoon die "Card"
-            st.markdown(f"""
-                <div class="event-card">
-                    <div class="event-title">{act}</div>
-                    <div class="event-date">📅 {date}</div>
-                    <div class="event-venue">📍 {ven.upper()}</div>
-                </div>
-                """, unsafe_allow_html=True)
+            if search.lower() in act.lower() or search.lower() in ven.lower():
+                found_any = True
+                st.markdown(f"""
+                    <div class="event-card">
+                        <div class="event-title">{act}</div>
+                        <div class="event-date">📅 {date}</div>
+                        <div class="event-venue">📍 {ven.upper()}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
         except:
             continue
 
-    if not found:
+    if not found_any:
         st.info("Geen aktiwiteite gevind nie.")
 else:
-    st.error("Kon nie die inligting laai nie. Verfris asseblief die bladsy.")
+    # As die data weg is, wys ons 'n help-knoppie
+    st.warning("Google se konneksie is tans traag. Klik op die knoppie hieronder om te herlaai.")
+    if st.button("🔄 Herlaai Data"):
+        st.rerun()
 
-# --- HERLAAI KNOPPIE ---
 st.markdown("---")
-if st.button("🔄 Verfris Data"):
-    st.cache_data.clear()
-    st.rerun()
-
 st.caption("© 2026 Midstream College Primary Hub")
