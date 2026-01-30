@@ -1,32 +1,35 @@
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz
+import requests
+import io
+import re
+import pytz
 from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
-# ---------------- PAGE ----------------
+# ================= PAGE =================
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r")
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+DATA_URL = (
+    "https://docs.google.com/spreadsheets/d/e/"
+    "2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/"
+    "pub?gid=37057995&single=true&output=csv"
+)
 
-# ---------------- HELPERS ----------------
+# ================= HELPERS =================
 def cl(v):
     return str(v).replace(".0", "").replace("nan", "").strip()
 
-def tr(t, a):
-    t = str(t)
-    a = str(a)
+def tr(text, activity):
+    text = str(text)
+    activity = str(activity).lower()
 
-    if re.search(r'(?i)\b(EAT|HT|Hooftaal|Eerste)\b', a):
-        return "Afrikaans " + (
-            "Eerste Addisionele Taal"
-            if "eat" in a.lower() or "eerste" in a.lower()
-            else "Hooftaal"
-        )
+    if any(x in activity for x in ["eat", "ht", "hooftaal", "eerste"]):
+        return "Afrikaans Eerste Addisionele Taal" if "eat" in activity else "Afrikaans Hooftaal"
 
-    replacements = {
+    repl = {
         "Saal": "Hall",
         "Veld": "Field",
         "Atletiek": "Athletics",
@@ -35,13 +38,13 @@ def tr(t, a):
         " G": " Girls"
     }
 
-    for k, v in replacements.items():
-        t = re.sub(rf"\b{k}\b", v, t, flags=re.IGNORECASE)
+    for k, v in repl.items():
+        text = re.sub(rf"\b{k}\b", v, text, flags=re.IGNORECASE)
 
-    return t
+    return text
 
-def c_a(n):
-    n = str(n).lower()
+def c_a(name):
+    name = str(name).lower()
 
     sports = [
         "athletics", "atletiek",
@@ -52,21 +55,31 @@ def c_a(n):
     ]
 
     for s in sports:
-        if s in n:
+        if s in name:
             return s.capitalize().replace("Netbal", "Netball").replace("Atletiek", "Athletics")
 
-    if any(x in n for x in ["eat", "ht", "hooftaal", "eerste"]):
-        return "Afrikaans " + (
-            "Eerste Addisionele Taal"
-            if "eat" in n or "eerste" in n
-            else "Hooftaal"
-        )
+    if any(x in name for x in ["eat", "ht", "hooftaal", "eerste"]):
+        return "Afrikaans EAT" if "eat" in name else "Afrikaans HT"
 
-    return n.capitalize()
+    return name.capitalize()
 
-# ---------------- DATA ----------------
-@st.cache_data(ttl=10)
-def ld():
+# ================= DATA LOAD =================
+@st.cache_data(ttl=15)
+def load_data():
     try:
-        r = requests.get(f"{U}&cb={datetime.now().timestamp()}", timeout=5)
-        return pd.read_csv(io.StringIO(r.content.decode("utf-8")), dtype=str).fillna("")
+        response = requests.get(DATA_URL, timeout=8)
+        csv_text = response.content.decode("utf-8")
+        df = pd.read_csv(io.StringIO(csv_text), dtype=str)
+        return df.fillna("")
+    except Exception:
+        return pd.DataFrame()
+
+df = load_data()
+
+# ================= UI =================
+if df.empty:
+    st.error("Data could not be loaded.")
+    st.stop()
+
+st.markdown(
+    "<div style='ba
