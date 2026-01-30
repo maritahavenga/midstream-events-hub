@@ -1,8 +1,3 @@
-Ek het die skakel getoets—hy werk! Hy laai nou die lêer met jou data (Hokkie, Rugby, Netbal, ens.) dadelik af. Die "404" is amptelik weg.
-
-Hier is die finale, skoon kode wat presies belyn is met daardie skakel en jou kolomme. Plak dit nou in jou app.py op GitHub en ons is uiteindelik "live".
-
-Python
 import streamlit as st
 import pandas as pd
 import requests, io
@@ -24,7 +19,7 @@ st.markdown("""
 
 st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>PRIMARY EVENT HUB</p></div>', unsafe_allow_html=True)
 
-# JOU VARS WERKENDE SKAKEL
+# DIE WERKSAAMHEID SKAKEL
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 @st.cache_data(ttl=5)
@@ -32,7 +27,6 @@ def load_data():
     try:
         r = requests.get(f"{URL}&cb={pd.Timestamp.now().timestamp()}", timeout=15)
         if r.status_code == 200:
-            # Ons lees die CSV en maak seker kolom-posisies is reg
             df = pd.read_csv(io.StringIO(r.content.decode('utf-8'))).fillna("")
             return df
         return None
@@ -42,15 +36,12 @@ def load_data():
 df = load_data()
 
 if df is not None and not df.empty:
-    # 1. Filters (Gebruik kolom-indekse)
     all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
     sel_cats = st.multiselect("Select Category:", all_cats)
     
-    # 2. Display Loop
     count = 0
     for i in range(len(df)):
         row = df.iloc[i]
-        # Mapping: A=0(Cat), B=1(Act), C=2(Team), D=3(Date), E=4(Ven), F=5(Lnk), I=8(Info), J=9(Age)
         cat, act, team, date, ven, lnk, info, age = str(row.iloc[0]), str(row.iloc[1]), str(row.iloc[2]), str(row.iloc[3]), str(row.iloc[4]), str(row.iloc[5]), str(row.iloc[8]), str(row.iloc[9])
         
         if not sel_cats or cat in sel_cats:
@@ -71,7 +62,7 @@ if df is not None and not df.empty:
     if count == 0:
         st.info("Kies 'n kategorie om events te sien.")
 else:
-    st.warning("🔄 Verbind tans met Google Sheets... Maak seker die data is sigbaar op die 'Upcoming' tab.")
+    st.warning("🔄 Verbind tans met Google... Maak seker daar is data in jou 'Upcoming' tab.")
 
 if st.button("Refresh Hub"):
     st.cache_data.clear()
