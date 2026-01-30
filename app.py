@@ -36,13 +36,12 @@ if not df.empty:
    lo=o.lower()
    if "athletics" in lo:clo.add("Athletics")
    elif "hockey" in lo:clo.add("Hockey")
-   elif "eat" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
-   elif "ht" in lo:clo.add("Afrikaans Hooftaal")
+   elif "eat" in lo or "eerste addisionele" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
+   elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
    else:clo.add(o)
   sa=st.multiselect("Activity",sorted(list(clo)))
  with c3:
-  al=["U7","U8","U9","U10","U11","U12","U13"] if sc==["Sport"] else ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7"]
-  if not sc or len(sc)>1:al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+  al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
   sg=st.multiselect("Age Group",al)
  sq=st.text_input("Search")
  if st.button("REFRESH HUB"):st.cache_data.clear();st.rerun()
@@ -56,8 +55,8 @@ if not df.empty:
  for _,r in df.iterrows():
   n,cat=str(r.iloc[3]),str(r.iloc[2]).lower()
   dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
-  if "eat" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
-  elif "ht" in n.lower():dn="Afrikaans Hooftaal"
+  if "eat" in n.lower() or "eerste addisionele" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
+  elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
   cm=True
   if sc:cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)
   if not cm or (sa and dn not in sa):continue
@@ -81,7 +80,7 @@ if not df.empty:
   t_s=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]),act)}".strip()
   if sq and sq.lower() not in t_s.lower():continue
   vv,vh=cl(r.iloc[6]),""
-  if vv:vh=f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/{vv.replace(' ','+')}+Midstream' target='_blank' class='v-link'>{tr(vv,act).upper()}</a></div>"
+  if vv:vh=f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={vv.replace(' ','+')}+Midstream' target='_blank' class='venue-link' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.85rem;'>{tr(vv,act).upper()}</a></div>"
   h+=f"<div class='card'><div class='title'>{t_s}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}<div>{btns}</div></div>"
  v1.html(h,height=3000,scrolling=True)
 st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
