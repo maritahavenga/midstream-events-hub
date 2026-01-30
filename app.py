@@ -2,61 +2,106 @@ import streamlit as st
 import pandas as pd
 import requests, io
 
-st.set_page_config(page_title="LMCP Hub", layout="centered")
+# Stel die bladsy styl in
+st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
-# --- BANNER ---
-st.markdown("<h1 style='text-align:center;color:#800000;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;color:#008080;font-weight:bold;text-align:center;'>Digital Event Hub</p>", unsafe_allow_html=True)
+# --- CUSTOM CSS VIR DIE LOOK & FEEL ---
+st.markdown("""
+    <style>
+    .main { background-color: #f5f5f5; }
+    .event-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 15px;
+        border-left: 10px solid #800000;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .event-card:hover { transform: scale(1.02); }
+    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; margin-bottom: 5px; }
+    .event-info { color: #008080; font-weight: 600; font-size: 1rem; }
+    .event-detail { color: #555; font-size: 0.9rem; margin-top: 5px; }
+    .header-style {
+        text-align: center;
+        background: linear-gradient(135deg, #800000 0%, #a00000 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 0 0 30px 30px;
+        margin-top: -60px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# JOU NUWE KORREKTE SKAKEL
-URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+# --- HEADER ---
+st.markdown("""
+    <div class="header-style">
+        <h1 style='margin:0; font-size:1.8rem;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
+        <p style='margin:0; opacity:0.9; font-weight:300;'>PRIMARY EVENT HUB</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=1)
+# --- DATA LAAI ---
+URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+
+@st.cache_data(ttl=60) # Verfris elke minuut
 def load_data():
     try:
         r = requests.get(URL, timeout=10)
-        if r.status_code == 200:
-            # Ons lees die data en ignoreer leë rye
-            df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-            return df
-        return pd.DataFrame()
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        return df
     except:
         return pd.DataFrame()
 
 df = load_data()
 
-st.markdown("---")
-
+# --- DISPLAY ---
 if not df.empty:
-    found_any = False
-    for index, row in df.iterrows():
+    # Opsie om te soek
+    search = st.text_input("🔍 Soek vir 'n sport of aktiwiteit...", "").lower()
+    
+    st.markdown("### Opkomende Aktiwiteite")
+    
+    found_count = 0
+    for _, row in df.iterrows():
         try:
-            # Gebruik kolom-nommers gebaseer op jou sheet
-            # Kolom D (index 3) is Activity, F (index 5) is Date, G (index 6) is Venue
+            # Kolom D=3 (Activity), F=5 (Date), G=6 (Venue), L=11 (Age)
             act = str(row.iloc[3]).strip()
             date = str(row.iloc[5]).strip()
             ven = str(row.iloc[6]).strip()
-            
-            # Slaan rye oor wat nie regte data bevat nie
-            if len(act) < 2 or act.lower() == "nan" or "activity" in act.lower():
-                continue
+            age = str(row.iloc[11]).replace(".0", "").strip()
+            info = str(row.iloc[10]).strip() # Kolom K vir ekstra inligting
 
-            found_any = True
+            # Filter uit leë rye
+            if len(act) < 2 or "activity" in act.lower(): continue
+            
+            # Soek funksie
+            if search and search not in act.lower() and search not in ven.lower(): continue
+
+            found_count += 1
+            
+            # Die "Card" ontwerp
             st.markdown(f"""
-            <div style="background:white; padding:20px; border-radius:12px; border-left:10px solid #800000; margin-bottom:15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-family:sans-serif;">
-                <b style="color:#800000; font-size:1.2rem;">{act}</b><br>
-                <span style="color:#555;">📅 {date}</span><br>
-                <b style="color:#008080;">📍 {ven.upper()}</b>
-            </div>
-            """, unsafe_allow_html=True)
+                <div class="event-card">
+                    <div class="event-title">{act} {f'(U/{age})' if age else ''}</div>
+                    <div class="event-info">📅 {date} &nbsp;&nbsp; | &nbsp;&nbsp; 📍 {ven.upper()}</div>
+                    {f'<div class="event-detail">ℹ️ {info}</div>' if info else ''}
+                </div>
+                """, unsafe_allow_html=True)
         except:
             continue
-    
-    if not found_any:
-        st.info("Die konneksie werk! Vul asseblief jou 'Upcoming' tab in die Google Sheet in om events te sien.")
+            
+    if found_count == 0:
+        st.info("Geen aktiwiteite gevind vir jou soektog nie.")
 else:
-    st.error("Wag tans vir Google om die data-stroom te begin...")
+    st.warning("Data word tans vanaf Google gelaai...")
 
-if st.button("Verfris Data"):
+# --- FOOTER ---
+st.markdown("---")
+if st.button("🔄 Verfris Inligting"):
     st.cache_data.clear()
     st.rerun()
+
+st.caption("© 2026 Laerskool Midstream College Primary | Digital Communication Hub")
