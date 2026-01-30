@@ -1,69 +1,50 @@
+
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz
-from datetime import datetime
+import requests, io, datetime
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 
 # --- BANNER ---
-st.markdown("""
-<div style='text-align:center; padding: 10px;'>
-    <h1 style='color:#800000; font-family:sans-serif; margin-bottom:0;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
-    <p style='color:#008080; font-size:1.2rem; margin-top:5px; font-weight:bold;'>Digital Event Hub</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;color:#800000;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:#008080;font-weight:bold;'>Digital Event Hub</p>", unsafe_allow_html=True)
 
-# DIE NUWE SKAKEL VANAF JOU FOTO
+# JOU SKAKEL VANAF DIE FOTO
 U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
-
-def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 @st.cache_data(ttl=1)
 def ld():
     try:
-        r = requests.get(f"{U}&v={datetime.now().timestamp()}", timeout=15)
-        if r.status_code == 200:
-            return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
-        return pd.DataFrame()
+        r = requests.get(f"{U}&v={datetime.datetime.now().timestamp()}", timeout=15)
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        return df
     except: return pd.DataFrame()
 
 df = ld()
 
-if not df.empty:
-    try:
-        # Ons gebruik die name van jou foto
-        C_ACT = "Activity/Subject Name"
-        C_DATE = "Date / Due Date"
-        C_AGE = "Age Group (9,10) / Grade (1,2,3)"
-        C_VEN = "Venue"
-
-        st.markdown("<div style='background-color:#f9f9f9; padding:20px; border-radius:15px; margin-bottom:20px;'>", unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1: sa = st.multiselect("Filter Activity", sorted(df[C_ACT].unique()))
-        with c2: sg = st.multiselect("Filter Grade/Age", sorted(df[C_AGE].unique()))
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        for _, r in df.iterrows():
-            act = str(r[C_ACT]).replace("nan", "").strip()
-            age = cl(r[C_AGE])
+if not df.empty and len(df.columns) > 5:
+    # ONS GEBRUIK KOLOM-NOMMERS (0 is Timestamp, 3 is Activity, 5 is Date, 6 is Venue, 11 is Age)
+    st.write("### Aktiewe Events")
+    
+    for _, r in df.iterrows():
+        try:
+            act = str(r.iloc[3])  # Activity/Subject Name
+            date = str(r.iloc[5]) # Date / Due Date
+            ven = str(r.iloc[6])  # Venue
+            age = str(r.iloc[11]).replace(".0", "") # Age/Grade
             
-            if sa and act not in sa: continue
-            if sg and age not in sg: continue
-            
+            # As daar nie 'n aktiwiteit is nie, slaan die ry oor
+            if not act or act == "nan": continue
+
             st.markdown(f"""
-            <div style="background:white; padding:20px; border-radius:12px; border-left:10px solid #800000; margin-bottom:20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                <b style="color:#800000; font-size:1.2rem;">{act} (Gr/U{age})</b><br>
-                <span style="color:#555;">📅 {r[C_DATE]}</span><br>
-                <b style="color:#008080;">📍 {str(r[C_VEN]).upper()}</b>
+            <div style="background:white; padding:15px; border-radius:10px; border-left:8px solid #800000; margin-bottom:15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                <b style="color:#800000; font-size:1.1rem;">{act} (Gr/U{age})</b><br>
+                📅 {date} | 📍 {ven}
             </div>
             """, unsafe_allow_html=True)
-
-    except Exception as e:
-        st.error("Wagt op Google om die kolomme korrek te stuur...")
+        except: continue
 else:
-    st.info("🔄 Data word gelaai... Verfris die bladsy oor 30 sekondes.")
-    if st.button("Force Refresh"):
+    st.info("🔄 Besig om data vanaf Google te trek... Maak seker die eerste ry in jou sheet het data.")
+    if st.button("Herlaai Nou"):
         st.cache_data.clear()
         st.rerun()
-
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
