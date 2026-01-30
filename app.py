@@ -160,3 +160,12 @@ if not df_raw.empty:
             note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
         
         h += f"""<div class='card'>
+            <div class='card-title'>{full_title.strip()}</div>
+            <div class='info-row'>📅 {d_str}</div>
+            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</span></div>
+            {note_html}<div class='btn-box'>{btns}</div>
+        </div>"""
+
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
