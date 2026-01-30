@@ -43,7 +43,7 @@ if not df.empty:
  tn=set()
  for s in sg:
   v=int(re.findall(r'\d+',s)[0])
-  tn.update([v, v+6 if v<=7 else v-6])
+  tn.update([v,v+6 if v<=7 else v-6])
  res=[]
  for _,r in df.iterrows():
   n,cat,av=str(r.iloc[3]),str(r.iloc[2]).lower(),cl(r.iloc[11])
@@ -58,10 +58,16 @@ if not df.empty:
  res.sort(key=lambda x:(not x['ft'],x['dt']))
  h="<style>.card{background:white;padding:10px;border-radius:10px;border-left:8px solid #800000;margin-bottom:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);font-family:sans-serif;}.btn{background:#800000;color:white!important;padding:4px 8px;border-radius:5px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:4px 4px 0 0;}.nt{background:#f0f7f7;padding:5px;margin-top:5px;border-radius:5px;font-size:0.7rem;}</style>"
  for i in res:
-  r,f,ds=i['r'],i['ft'],i['dd']
+  r,f,ds,v=i['r'],i['ft'],i['dd'],cl(i['r'].iloc[6])
   cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
   ia,ic="afrikaans" in act.lower() or "eat" in act.lower(),"academic" in cv or any(x in act.lower() for x in ["math","science"])
   b1,b2="Dokumente" if ia else ("Document" if ic else "Programme"),"Assessment" if ic or ia else "Team List"
   btns="".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else 'Information')}</a>" for j in [7,8,10] if "http" in cl(r.iloc[j]).lower()])
   nt=f"<div class='nt'>{cl(r.iloc[10])}</div>" if cl(r.iloc[10]) and "http" not in cl(r.iloc[10]).lower() else ""
-  ts=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl
+  lbl="U" if "sport" in cv else "Gr "
+  ts=tr(act,act)+" "+(lbl+age if age else "")+" "+tr(cl(r.iloc[4]),act)
+  if sq and sq.lower() not in ts.lower():continue
+  vh=f"<div style='margin-top:4px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={v.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.8rem;'>{tr(v,act).upper()}</a></div>" if v else ""
+  h+=f"<div class='card'><div style='color:#800000;font-weight:bold;'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}{nt}<div>{btns}</div></div>"
+ v1.html(h,height=3000,scrolling=True)
+st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
