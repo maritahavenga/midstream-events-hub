@@ -4,14 +4,11 @@ import requests, io
 
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
-# --- CSS & ANIMASIE ---
+# --- UI STYLING ---
 st.markdown("""
     <style>
     @keyframes blinker { 50% { opacity: 0; } }
-    .new-update {
-        color: #ff0000; font-weight: bold; font-size: 0.85rem;
-        animation: blinker 1s linear infinite; margin-bottom: 5px; display: block;
-    }
+    .new-update { color: #ff0000; font-weight: bold; font-size: 0.85rem; animation: blinker 1s linear infinite; margin-bottom: 5px; display: block; }
     .stApp { background-color: #f8f9fa; }
     .nav-bar { background: linear-gradient(135deg, #800000 0%, #a00000 100%); color: white; padding: 25px; text-align: center; border-radius: 0 0 20px 20px; margin-top: -60px; }
     .card { background: white; padding: 20px; border-radius: 15px; border-left: 10px solid #800000; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -31,7 +28,10 @@ URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SE
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={pd.Timestamp.now().timestamp()}", timeout=15)
+        # Ons lees die data rou in
         df = pd.read_csv(io.StringIO(r.content.decode('utf-8'))).fillna("")
+        # Verwyder leë rye aan die begin as daar is
+        df = df[df.iloc[:, 0].astype(str).str.len() > 1]
         return df
     except:
         return None
@@ -39,21 +39,18 @@ def load_data():
 df = load_data()
 
 if df is not None and not df.empty:
-    # FILTERS
-    all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
+    # Filter vir Kategorie (Kolom 0)
+    all_cats = sorted(df.iloc[:, 0].unique().astype(str))
     sel_cats = st.multiselect("Kies Kategorie:", all_cats)
     
-    all_grades = sorted([str(x) for x in df.iloc[:, 9].unique() if str(x).strip()])
-    sel_grades = st.multiselect("Filter op Graad / Ouderdom:", all_grades)
-
-    # Sorteer dat "Whole Term" items heel bo staan
-    df['is_whole'] = df.iloc[:, 10].apply(lambda x: 1 if "whole term" in str(x).lower() else 0)
-    df = df.sort_values(by=['is_whole'], ascending=False)
+    # Filter vir Graad (Kolom 9 / J)
+    all_grades = sorted(df.iloc[:, 9].unique().astype(str))
+    sel_grades = st.multiselect("Filter op Graad:", all_grades)
 
     for i in range(len(df)):
         row = df.iloc[i]
         
-        # FINALE mapping volgens jou lys
+        # Gebruik presiese indekse volgens jou lys
         cat   = str(row.iloc[0])  # A
         subj  = str(row.iloc[1])  # B
         asses = str(row.iloc[2])  # C
@@ -61,15 +58,13 @@ if df is not None and not df.empty:
         ven   = str(row.iloc[4])  # E
         lnk   = str(row.iloc[5])  # F
         team  = str(row.iloc[6])  # G
-        info  = str(row.iloc[7])  # H: Information (nuut belyn)
+        info  = str(row.iloc[7])  # H: Information
         grade = str(row.iloc[9])  # J
         dur   = str(row.iloc[10]) # K
 
-        # Titels: Prioriteit is Team, dan Assessment, dan Activity
         display_title = team if len(team) > 1 else (asses if len(asses) > 1 else subj)
-        
-        is_whole = "whole term" in dur.lower() or "whole term" in date.lower()
-        is_new = "NEW" in display_title.upper() or "NEW" in info.upper()
+        is_whole = "whole term" in str(dur).lower() or "whole term" in str(date).lower()
+        is_new = "NEW" in display_title.upper() or "NEW" in str(info).upper()
 
         if (not sel_cats or cat in sel_cats) and (not sel_grades or grade in sel_grades):
             card_class = "card whole-term-card" if is_whole else "card"
@@ -83,11 +78,11 @@ if df is not None and not df.empty:
                         <b>Target: {grade}</b> | 📅 {date} | 📍 {ven}
                     </div>
                     {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 2 else ''}
-                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT / PROGRAM</a>' if 'http' in lnk else ''}
+                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT</a>' if 'http' in str(lnk) else ''}
                 </div>
             """, unsafe_allow_html=True)
 else:
-    st.info("Koppel tans aan Google Sheets... Maak seker die data is reg.")
+    st.info("Besig om data te verwerk... As dit lank vat, maak seker daar is ten minste een ry data in die 'Upcoming' tab.")
 
 if st.button("Herlaai Hub"):
     st.cache_data.clear()
