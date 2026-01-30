@@ -83,4 +83,81 @@ if not df_raw.empty:
     for _, r in df_raw.iterrows():
         dt_val = pd.to_datetime(str(r.iloc[5]), errors='coerce')
         if pd.isnull(dt_val):
-            dt_val = pd.to_datetime(str(r.iloc
+            dt_val = pd.to_datetime(str(r.iloc[5]), dayfirst=True, errors='coerce')
+        
+        if pd.notnull(dt_val) and dt_val.date() < today: continue
+        if sel_cat and not any(s.lower() in str(r.iloc[2]).lower() or (s=="Academics" and "academic" in str(r.iloc[2]).lower()) for s in sel_cat): continue
+        if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
+        if expanded_sel_age and clean_val(r.iloc[11]) not in expanded_sel_age: continue
+        
+        is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
+        
+        g_raw = clean_val(r.iloc[11])
+        match = re.search(r'\d+', g_raw)
+        g_num = int(match.group()) if match else 99
+        if "U" in g_raw.upper() and g_num >= 7: g_num = g_num - 6
+
+        df_filtered.append({
+            'data': r, 'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None),
+            'subject': str(r.iloc[3]).lower(), 'grade_val': g_num, 'is_ft': is_ft
+        })
+
+    # SORTERING: Full Term -> Datum -> Subject -> Numeriese Graad
+    df_filtered.sort(key=lambda x: (not x['is_ft'], x['date'], x['subject'], x['grade_val']))
+
+    h = """<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background: transparent; }
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; line-height:1.2; }
+        .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
+        .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
+        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
+        .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
+        .btn { background:#800000; color:white !important; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
+    </style>"""
+
+    for item in df_filtered:
+        r = item['data']
+        act_name = str(r.iloc[3])
+        is_acad_related = "academic" in str(r.iloc[2]).lower() or "afrikaans" in act_name.lower()
+        
+        # LOGIKA VIR SWIMMING / ATHLETICS
+        is_whole_school = any(ws in act_name.lower() for ws in ["swimming", "athletics"])
+        row_age = clean_val(r.iloc[11])
+        
+        if is_whole_school and not row_age:
+            age_display = ""
+        else:
+            prefix = "Gr " if is_acad_related else "U"
+            age_display = f"{prefix}{row_age} " if row_age else ""
+            
+        t_act = translate_term(act_name, act_name)
+        t_detail = translate_term(clean_val(r.iloc[4]), act_name)
+        full_title = f"{t_act} {age_display}{t_detail}".strip()
+        
+        if search_q and search_q.lower() not in full_title.lower(): continue
+        
+        d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if item['date'] != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
+        
+        btns = ""
+        prog_btn_name = "Document" if is_acad_related else "Programme"
+        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{prog_btn_name}</a>"
+        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
+        
+        note_raw = clean_val(r.iloc[10]).replace("$", "")
+        if "http" in note_raw.lower():
+            btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
+            note_html = ""
+        else:
+            note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
+        
+        h += f"""<div class='card'>
+            <div class='card-title'>{full_title}</div>
+            <div class='info-row'>📅 {d_str}</div>
+            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_name).upper()}</span></div>
+            {note_html}<div class='btn-box'>{btns}</div>
+        </div>"""
+
+    components.html(h, height=2500, scrolling=True)
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
