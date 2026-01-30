@@ -50,4 +50,97 @@ df_raw = load_data(EVENTS_URL)
 
 if not df_raw.empty:
     with st.container():
-        st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1
+        st.markdown("<div style='background:white; padding:20px; border-radius:12px; border:1px solid #eee; box-shadow:0 4px 12px rgba(0,0,0,0.05); margin-bottom:20px;'>", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sel_cat = st.multiselect("Category", ["Sport", "Culture", "Academics"], key="f_cat")
+        with c2:
+            act_list = sorted(list(set([str(a).strip() for a in df_raw.iloc[:, 3] if a])))
+            sel_act = st.multiselect("Activity / Subject", act_list, key="f_act")
+        with c3:
+            age_options = ["Gr 1", "Gr 2", "Gr 3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", "U7", "U8", "U9", "U10", "U11", "U12", "U13"]
+            sel_age = st.multiselect("Gr / Age Group", age_options, key="f_age")
+        
+        search_q = st.text_input("Search", placeholder="Search Subject, Grade or Detail...")
+        if st.button("REFRESH HUB", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    SA_TIME = pytz.timezone('Africa/Johannesburg')
+    today = datetime.now(SA_TIME).date()
+    
+    # Trek slegs die syfers uit die seleksie vir vergelyking
+    target_numbers = set()
+    for s in sel_age:
+        nums = re.findall(r'\d+', s)
+        if nums:
+            n = int(nums[0])
+            target_numbers.add(n)
+            # Koppel U10 (10) aan Gr 4 (4)
+            if n >= 7: target_numbers.add(n - 6) # U10 -> 4
+            if n <= 7: target_numbers.add(n + 6) # 4 -> U10
+
+    df_filtered = []
+    for _, r in df_raw.iterrows():
+        dt_val = pd.to_datetime(str(r.iloc[5]), errors='coerce')
+        if pd.isnull(dt_val): dt_val = pd.to_datetime(str(r.iloc[5]), dayfirst=True, errors='coerce')
+        
+        if pd.notnull(dt_val) and dt_val.date() < today: continue
+        if sel_cat and not any(s.lower() in str(r.iloc[2]).lower() or (s=="Academics" and "academic" in str(r.iloc[2]).lower()) for s in sel_cat): continue
+        if sel_act and str(r.iloc[3]).strip() not in sel_act: continue
+        
+        # SLIM FILTER LOGIKA
+        if target_numbers:
+            row_age_val = clean_val(r.iloc[11])
+            row_nums = re.findall(r'\d+', row_age_val)
+            if not row_nums or int(row_nums[0]) not in target_numbers:
+                continue
+        
+        is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
+        g_num = int(re.search(r'\d+', clean_val(r.iloc[11])).group()) if re.search(r'\d+', clean_val(r.iloc[11])) else 99
+        if "U" in str(r.iloc[11]).upper() and g_num >= 7: g_num = g_num - 6
+
+        df_filtered.append({'data': r, 'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None), 'subject': str(r.iloc[3]).lower(), 'grade_val': g_num, 'is_ft': is_ft})
+
+    df_filtered.sort(key=lambda x: (not x['is_ft'], x['date'], x['subject'], x['grade_val']))
+
+    h = """<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background: transparent; }
+        .card { background:white; padding:20px; border-radius:15px; border-left:10px solid #800000; margin-bottom:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .card-title { color:#800000; font-size:1.15rem; font-weight:800; margin-bottom:10px; line-height:1.2; }
+        .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
+        .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
+        .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
+        .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
+        .btn { background:#800000; color:white !important; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
+    </style>"""
+
+    for item in df_filtered:
+        r = item['data']
+        act_name = str(r.iloc[3])
+        is_acad_related = "academic" in str(r.iloc[2]).lower() or "afrikaans" in act_name.lower()
+        row_age = clean_val(r.iloc[11])
+        prefix = "Gr " if is_acad_related else "U"
+        age_display = f"{prefix}{row_age} " if row_age else ""
+        t_act = translate_term(act_name, act_name)
+        t_detail = translate_term(clean_val(r.iloc[4]), act_name)
+        full_title = f"{t_act} {age_display}{t_detail}".strip()
+        
+        if search_q and search_q.lower() not in full_title.lower(): continue
+        d_str = "FULL TERM" if item['is_ft'] else (item['date'].strftime('%d %B %Y') if item['date'] != datetime.max.replace(tzinfo=None) else str(r.iloc[5]))
+        
+        btns = ""
+        prog_btn_name = "Document" if is_acad_related else "Programme"
+        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{prog_btn_name}</a>"
+        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
+        note_raw = clean_val(r.iloc[10]).replace("$", "")
+        if "http" in note_raw.lower(): btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
+        else: note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
+        
+        h += f"""<div class='card'><div class='card-title'>{full_title}</div><div class='info-row'>📅 {d_str}</div><div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_name).upper()}</span></div>{note_html if 'note_html' in locals() else ''}<div class='btn-box'>{btns}</div></div>"""
+        note_html = ""
+
+    components.html(h, height=2500, scrolling=True)
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
