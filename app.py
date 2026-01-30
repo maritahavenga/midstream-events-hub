@@ -9,7 +9,7 @@ from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="LMCP Hub",layout="centered")
 st_autorefresh(interval=120000,key="r")
-U="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigpadding=20px;q=csv"
+U="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v):return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
@@ -22,7 +22,7 @@ def tr(t,a):
 @st.cache_data(ttl=10)
 def ld():
  try:
-  r=requests.get(f"https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv&cb={datetime.now().timestamp()}",timeout=5)
+  r=requests.get(f"{U}&cb={datetime.now().timestamp()}",timeout=5)
   return pd.read_csv(io.StringIO(r.content.decode('utf-8')),dtype=str).fillna("")
  except:return pd.DataFrame()
 
@@ -40,14 +40,19 @@ if not df.empty:
    lo=o.lower()
    if "athletics" in lo:clo.add("Athletics")
    elif "hockey" in lo:clo.add("Hockey")
-   elif "tennis" in lo:clo.add("Tennis")
    elif "eat" in lo or "eerste" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
    elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
    else:clo.add(o)
   sa=st.multiselect("Activity",sorted(list(clo)))
+ 
  with c3:
-  # ONS HOU DIE LYS STABIEL SODAT DIT NIE RESET NIE
-  sg=st.multiselect("Age Group",["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
+  # DINAMIESE OPSIES WAT STICK:
+  ao=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+  if sc==["Sport"]:do=[o for o in ao if "U" in o]
+  elif sc and "Sport" not in str(sc):do=[o for o in ao if "Gr" in o]
+  else:do=ao
+  sg=st.multiselect("Age Group",options=do,key="sticky_age_final")
+
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
 
@@ -85,6 +90,4 @@ if not df.empty:
   if sq and sq.lower() not in ts.lower():continue
   vv,vh=cl(r.iloc[6]),""
   if vv:vh=f"<div style='margin-top:4px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={vv.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.8rem;'>{tr(vv,act).upper()}</a></div>"
-  h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}{nt}<div>{btns}</div></div>"
- v1.html(h,height=3000,scrolling=True)
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
+  h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds
