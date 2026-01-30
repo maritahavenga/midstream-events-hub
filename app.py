@@ -8,8 +8,8 @@ from datetime import datetime
 
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 
-# --- BANNER (SUIWER STREAMLIT VIR STABILITEIT) ---
-st.image("https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png", width=160)
+# --- STABIELE BANNER ---
+st.markdown("<center><img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='160'></center>", unsafe_allow_html=True)
 st.title("LAERSKOOL MIDSTREAM COLLEGE PRIMARY")
 st.subheader("Digital Event Hub")
 st.markdown("---")
@@ -64,7 +64,7 @@ if not df.empty:
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
         dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
         
-        # Wys slegs vandag en toekoms
+        # Wys alles van vandag af vorentoe
         if pd.notnull(dt) and dt.date() < today: continue
         
         # Pas filters toe
@@ -77,7 +77,7 @@ if not df.empty:
     res.sort(key=lambda x: x['dt'])
 
     if not res:
-        st.info("No upcoming events found. Please check your filters.")
+        st.info("No upcoming events found. Please adjust your filters or search.")
     else:
         for i in res:
             r, ds = i['r'], i['ds']
@@ -90,35 +90,36 @@ if not df.empty:
             
             if sq and sq.lower() not in title.lower(): continue
 
-            # --- DIE KAART (Skoon Python-Uitleg) ---
-            with st.container():
-                st.subheader(title)
-                st.write(f"📅 **{tr(ds, act)}**")
-                
-                if ven:
-                    map_url = f"http://google.com/maps/search/{ven.replace(' ','+')}+Midstream"
-                    st.markdown(f"📍 [**{tr(ven, act).upper()}**]({map_url})")
+            # --- SKOON PYTHON VERTREK ---
+            st.markdown(f"### <span style='color:#800000;'>{title}</span>", unsafe_allow_html=True)
+            st.write(f"📅 **{tr(ds, act)}**")
+            
+            if ven:
+                map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
+                st.markdown(f"📍 [**{tr(ven, act).upper()}**]({map_url})")
 
-                # Notas & Spanne (In Teal-gevoel boksies)
-                if (t_l and "http" not in t_l.lower()) or (i_r and "http" not in i_r.lower()):
-                    if "Hockey" in act and t_l:
-                        st.warning(f"TEAMS: {t_l}") # Dotted boksie alternatief
-                    elif t_l:
-                        st.info(f"TEAMS: {t_l}")
-                    
-                    if i_r:
-                        st.info(f"NOTE: {i_r}")
+            # Notas en Spanne (Teal-gevoel boksies)
+            if (t_l and "http" not in t_l.lower()) or (i_r and "http" not in i_r.lower()):
+                if t_l and "http" not in t_l.lower():
+                    if "Hockey" in act:
+                        st.warning(f"**TEAMS:** {t_l}") # Spesiale boksie vir Hockey
+                    else:
+                        st.info(f"**TEAMS:** {t_l}")
+                
+                if i_r and "http" not in i_r.lower():
+                    st.info(f"**NOTE:** {i_r}")
 
-                # Knoppies
-                is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
-                b1, b2, b3 = ("Documents", "Team List", "Information")
-                if is_afr: b1, b2, b3 = ("Dokumente", "Assessering", "Inligting")
-                
-                cb1, cb2, cb3 = st.columns(3)
-                if "http" in cl(r.iloc[7]).lower(): cb1.link_button(b1, cl(r.iloc[7]), use_container_width=True)
-                if "http" in t_l.lower(): cb2.link_button(b2, t_l, use_container_width=True)
-                if "http" in i_r.lower(): cb3.link_button(b3, i_r, use_container_width=True)
-                
-                st.markdown("---")
+            # Knoppies
+            is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
+            b1, b2, b3 = ("Documents", "Team List", "Information")
+            if is_afr: b1, b2, b3 = ("Dokumente", "Assessering", "Inligting")
+            elif "academic" in str(r.iloc[2]).lower(): b2 = "Assessment"
+            
+            cb1, cb2, cb3 = st.columns(3)
+            if "http" in cl(r.iloc[7]).lower(): cb1.link_button(b1, cl(r.iloc[7]), use_container_width=True)
+            if "http" in t_l.lower(): cb2.link_button(b2, t_l, use_container_width=True)
+            if "http" in i_r.lower(): cb3.link_button(b3, i_r, use_container_width=True)
+            
+            st.markdown("---")
 
 st.markdown("<br><center style='color:gray; font-size:0.8rem;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
