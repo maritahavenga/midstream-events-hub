@@ -6,24 +6,16 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# --- BANNER MET JOU LOGO ---
+# --- BANNER MET LOGO ---
 st.markdown("""
-    <div style='text-align: center; margin-bottom: 10px;'>
+    <div style='text-align: center; margin-bottom: 20px;'>
         <img src='https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png' width='180'>
         <h1 style='color: #800000; font-family: sans-serif; margin-bottom: 0;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY</h1>
         <p style='color: #008080; font-size: 1.2rem; margin-top: 5px;'>Digital Hub</p>
     </div>
 """, unsafe_allow_html=True)
 
-# --- NAV BAR ---
-st.markdown("""
-    <div style='background-color: #800000; padding: 10px; border-radius: 10px; text-align: center; margin-bottom: 25px;'>
-        <a href='#' style='color: white; text-decoration: none; margin: 0 15px; font-weight: bold;'>HOME</a>
-        <a href='https://www.midstream-college.co.za/' target='_blank' style='color: white; text-decoration: none; margin: 0 15px; font-weight: bold;'>SCHOOL WEBSITE</a>
-    </div>
-""", unsafe_allow_html=True)
-
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
@@ -69,10 +61,20 @@ if not df.empty:
     for _, r in df.iterrows():
         cat, act, age, rd = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[5])
         dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
+        
         if pd.notnull(dt) and dt.date() < now: continue
-        if sc and not any(x.lower() in cat for x in sc): continue
+        
+        # RELAXED FILTER: Maak seker Academics wys data
+        if sc:
+            cat_match = any(x.lower() in cat for x in sc)
+            # Spesiale kyk vir Academics as dit in aktiwiteitnaam staan maar nie in kategorie nie
+            if "academics" in [x.lower() for x in sc] and ("academic" in cat or "afrikaans" in act.lower()):
+                cat_match = True
+            if not cat_match: continue
+            
         if sa and c_a(act) not in sa: continue
         if sg and not any(v.replace("Gr ","").replace("U","") in age for v in sg): continue
+        
         res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
     
     res.sort(key=lambda x: x['dt'])
@@ -89,10 +91,12 @@ if not df.empty:
         cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
         
-        # --- DINAMIESE OUDERDOM LOGIKA ---
+        # --- ROBUUSTE U / GR LOGIKA ---
+        # Kyk na kategorie EN aktiwiteit naam
         is_sp = "sport" in cv or any(x in act.lower() for x in ["hockey", "rugby", "netball", "swimming", "athletics", "tennis"])
-        is_ac = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde"])
+        is_ac = "academic" in cv or any(x in act.lower() for x in ["afrikaans", "hooftaal", "eerste", "wiskunde", "atp"])
         
+        # Prioritiseer Sport (U) bo alles as dit sport is
         prefix = "U" if is_sp else ("Gr " if is_ac else "")
         age_lbl = (prefix + age) if age else ""
         
@@ -101,7 +105,7 @@ if not df.empty:
 
         is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
         b1, b_info = ("Dokumente", "Inligting") if is_afr else ("Documents", "Information")
-        b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
+        b2 = "Team List" if not (is_ac or is_afr) else ("Assessment" if not is_afr else "Assessering")
         
         btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
         t_txt = f"<b>Teams:</b><br>{t_l}<br><br>" if t_l and "http" not in t_l.lower() else ""
