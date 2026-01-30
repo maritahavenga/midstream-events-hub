@@ -14,6 +14,7 @@ U="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrU
 def cl(v):return str(v).replace(".0","").replace("nan","").strip()
 def tr(t,a):
     s=str(a).strip()
+    t=t.replace(" G "," Girls ").replace(" G"," Girls")
     if re.search(r'(?i)\b(EAT|Afrikaans EAT)\b',s):t=t.replace(a,"Afrikaans Eerste Addisionele Taal")
     elif re.search(r'(?i)\b(HT|Afrikaans HT)\b',s):t=t.replace(a,"Afrikaans Hooftaal")
     if any(k in s.lower() for k in ["afrikaans","eat","ht"]):return t
@@ -42,6 +43,7 @@ if not df.empty:
             lo=o.lower()
             if "athletics" in lo:clo.add("Athletics")
             elif "hockey" in lo:clo.add("Hockey")
+            elif "tennis" in lo:clo.add("Tennis")
             elif "eat" in lo or "eerste addisionele" in lo:clo.add("Afrikaans Eerste Addisionele Taal")
             elif "ht" in lo or "hooftaal" in lo:clo.add("Afrikaans Hooftaal")
             else:clo.add(o)
@@ -64,7 +66,7 @@ if not df.empty:
     res=[]
     for _,r in df.iterrows():
         n,cat=str(r.iloc[3]),str(r.iloc[2]).lower()
-        dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else n)
+        dn="Athletics" if "athletics" in n.lower() else ("Hockey" if "hockey" in n.lower() else ("Tennis" if "tennis" in n.lower() else n))
         if "eat" in n.lower() or "eerste addisionele" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
         elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
         cm=True
@@ -78,18 +80,24 @@ if not df.empty:
         res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
 
     res.sort(key=lambda x:(not x['ft'],x['dt'],x['n']))
-    h="<style>body{font-family:sans-serif;}.card{background:white;padding:15px;border-radius:12px;border-left:8px solid #800000;margin-bottom:12px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}.title{color:#800000;font-size:1.1rem;font-weight:bold;}.btn{background:#800000;color:white!important;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}</style>"
+    h="<style>body{font-family:sans-serif;}.card{background:white;padding:15px;border-radius:12px;border-left:8px solid #800000;margin-bottom:12px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}.title{color:#800000;font-size:1.1rem;font-weight:bold;}.btn{background:#800000;color:white!important;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:0.7rem;display:inline-block;margin:5px 5px 0 0;}.nt{background:#f0f7f7;padding:8px;margin-top:8px;border-radius:6px;font-size:0.75rem;}</style>"
     for i in res:
         r,f,ds=i['r'],i['ft'],i['dd']
         cv,act,age=str(r.iloc[2]).lower(),str(r.iloc[3]),cl(r.iloc[11])
         ia,ic="afrikaans" in act.lower(),("academic" in cv or any(x in act.lower() for x in ["math","science","wiskunde"]))
         b1="Dokumente" if ia else ("Document" if ic else "Programme")
         b2="Assessment" if ic or ia else "Team List"
-        btns="".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else b2}</a>" for j in [7,8] if "http" in cl(r.iloc[j]).lower()])
+        btns=""
+        for j,txt in [(7,b1),(8,b2),(10,"Info")]:
+            val=cl(r.iloc[j])
+            if "http" in val.lower():btns+=f"<a href='{val}' target='_blank' class='btn'>{txt}</a>"
+        note=""
+        nv=cl(r.iloc[10])
+        if nv and "http" not in nv.lower():note=f"<div class='nt'>{nv}</div>"
         ts=f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age+' ' if age else ''}{tr(cl(r.iloc[4]),act)}".strip()
         if sq and sq.lower() not in ts.lower():continue
         vv,vh=cl(r.iloc[6]),""
         if vv:vh=f"<div style='margin-top:5px;'>📍 <a href='https://www.google.com/maps/search/?api=1&query={vv.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;font-weight:bold;font-size:0.85rem;'>{tr(vv,act).upper()}</a></div>"
-        h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}<div>{btns}</div></div>"
+        h+=f"<div class='card'><div class='title'>{ts}</div><div>📅 {'FULL TERM' if f else ds}</div>{vh}{note}<div>{btns}</div></div>"
     v1.html(h,height=3000,scrolling=True)
 st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>",unsafe_allow_html=True)
