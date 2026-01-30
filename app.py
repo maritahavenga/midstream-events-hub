@@ -46,21 +46,22 @@ if not df.empty:
    else:clo.add(o)
   sa=st.multiselect("Activity",sorted(list(clo)))
  with c3:
-  al=["U7","U8","U9","U10","U11","U12","U13"] if sc==["Sport"] else (["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7"] if sc and "Sport" not in str(sc) else ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
+  # ONS HOU HIERDIE LYS STABIEL SODAT DIT NIE RESET NIE
+  al=["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
   sg=st.multiselect("Age Group",al)
  sq=st.text_input("Search")
  st.markdown("</div>",unsafe_allow_html=True)
 
  today=datetime.now(pytz.timezone('Africa/Johannesburg')).date()
- # --- SLIM FILTER LOGIKA ---
+ # --- SMART MAPPING LOGIKA ---
  target_nums = set()
  for s in sg:
   nums = re.findall(r'\d+', s)
   if nums:
    n = int(nums[0])
    target_nums.add(n)
-   if n <= 7: target_nums.add(n + 6) # Gr 4 -> soek ook 10
-   if n >= 7: target_nums.add(n - 6) # U10 -> soek ook 4
+   if n <= 7: target_nums.add(n + 6) # As Gr 4 gekies is, voeg 10 by
+   if n >= 7: target_nums.add(n - 6) # As U10 gekies is, voeg 4 by
 
  res=[]
  for _,r in df.iterrows():
@@ -69,19 +70,16 @@ if not df.empty:
   if "eat" in n.lower() or "eerste" in n.lower():dn="Afrikaans Eerste Addisionele Taal"
   elif "ht" in n.lower() or "hooftaal" in n.lower():dn="Afrikaans Hooftaal"
   
-  # 1. Kategorie filter
   cm=any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat) if sc else True
   if not cm or (sa and dn not in sa):continue
   
-  # 2. Ouderdom filter (SLIM MAPPING)
   if target_nums:
    row_nums = re.findall(r'\d+', av)
-   if not row_nums: # As daar nie 'n ouderdom in die ry is nie (soos Athletics)
+   if not row_nums:
     if not any(x in n.lower() for x in ["athletics","swimming"]): continue
    else:
     if not any(int(rn) in target_nums for rn in row_nums): continue
 
-  # 3. Datum filter
   rd=cl(r.iloc[5]);dt=pd.to_datetime(rd,dayfirst=True,errors='coerce');ft="full term" in str(r.iloc[12]).lower()
   if not ft and pd.notnull(dt) and dt.date()<today:continue
   res.append({'r':r,'dt':dt if pd.notnull(dt) else datetime.max.replace(tzinfo=None),'n':n.lower(),'ft':ft,'dd':dt.strftime('%d %B %Y') if pd.notnull(dt) else rd})
