@@ -43,36 +43,5 @@ if not df.empty:
         opts = [o for o in ao if "U" in o] if sc==["Sport"] else ([o for o in ao if "Gr" in o] if sc and "Sport" not in str(sc) else ao)
         sg = st.multiselect("Age Group", options=opts, key="stk_val")
     sq = st.text_input("Search Events...")
-    st.markdown("</div>", unsafe_allow_html=True)tn = set()
-    for s in sg:
-        v_m = re.findall(r'\d+', s)
-        if v_m: 
-            v = int(v_m[0])
-            tn.update([v, v+6 if v<=7 else v-6])
-
-    res = []
-    for _, r in df.iterrows():
-        n, cat, av, rd = str(r.iloc[3]), str(r.iloc[2]).lower(), cl(r.iloc[11]), cl(r.iloc[5])
-        dt = pd.to_datetime(rd, dayfirst=True, errors='coerce')
-        f_c = (any(x.lower() in cat for x in sc) or ("Academics" in sc and "academic" in cat)) if sc else True
-        if not f_c or (sa and c_a(n) not in sa): continue
-        v_m = re.findall(r'\d+', av); v_n = int(v_m[0]) if v_m else -1
-        if tn and v_n not in tn: continue
-        res.append({'r': r, 'dt': dt if pd.notnull(dt) else datetime(2099, 1, 1), 'ds': rd})
-
-    res.sort(key=lambda x: x['dt'])
-    h = "<style>.card{background:white;padding:18px;border-radius:12px;border-left:10px solid #800000;margin-bottom:12px;box-shadow:0 4px 10px rgba(0,0,0,0.08);font-family:sans-serif;}.title{color:#800000;font-weight:bold;font-size:1.1rem;}.btn{background:#800000;color:white!important;padding:7px 12px;border-radius:6px;text-decoration:none;font-size:0.8rem;margin:5px 5px 0 0;display:inline-block;}.nt{background:#f8fcfc;padding:10px;margin-top:10px;border-radius:8px;font-size:0.85rem;border-left:3px solid #008080;}</style>"
-    for i in res:
-        r, ds = i['r'], i['ds']
-        cv, act, age, ven = str(r.iloc[2]).lower(), str(r.iloc[3]), cl(r.iloc[11]), cl(r.iloc[6])
-        ia, ic = "afrikaans" in act.lower() or "eat" in act.lower(), "academic" in cv or any(x in act.lower() for x in ["math", "science"])
-        b1, b2 = ("Dokumente" if ia else "Document") if (ia or ic) else "Programme", "Assessment" if (ic or ia) else "Team List"
-        btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else 'Information')}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
-        nt = f"<div class='nt'>{cl(r.iloc[10])}</div>" if cl(r.iloc[10]) and "http" not in cl(r.iloc[10]).lower() else ""
-        ts = f"{tr(act,act)} {('U' if 'sport' in cv else 'Gr ')+age if age else ''} {tr(cl(r.iloc[4]),act)}".strip()
-        if sq and sq.lower() not in ts.lower(): continue
-        vh = f"<div style='color:#008080;font-weight:bold;margin-top:8px;'>📍 <a href='http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream' target='_blank' style='color:#008080;text-decoration:none;'>{tr(ven, act).upper()}</a></div>" if ven else ""
-        h += f"<div class='card'><div class='title'>{ts}</div><div style='color:#555;'>📅 {ds}</div>{vh}{nt}<div style='margin-top:12px;'>{btns}</div></div>"
-    v1.html(h, height=3500, scrolling=True)
-
-st.markdown("<center style='font-size:0.7rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
