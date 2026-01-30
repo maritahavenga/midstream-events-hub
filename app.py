@@ -93,4 +93,45 @@ if not df_raw.empty:
         .info-row { font-size:0.9rem; color:#444; margin: 5px 0; font-weight: 500; }
         .venue-bold { color:#008080; font-weight:800; text-transform: uppercase; }
         .note-box { background:#e7f3f3; border-radius:8px; padding:12px; margin-top:10px; border-left:4px solid #008080; font-size:0.85rem; color:#004d4d; font-weight:600; }
-        .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size:
+        .team-frame { border: 2px dotted #800000; border-radius: 8px; padding: 6px 10px; margin-top: 8px; display: inline-block; font-size: 0.85rem; color: #800000; font-weight: 700; background: #fff9f9; }
+        .btn-box { display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }
+        .btn { background:#800000; color:white !important; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:0.75rem; font-weight:700; text-transform:uppercase; display:inline-block; }
+    </style>"""
+
+    for r, dt in df_filtered:
+        cat = str(r.iloc[2]).lower()
+        act_raw = str(r.iloc[3])
+        is_acad = "academic" in cat
+        prefix = "Gr " if is_acad else "U"
+        age = clean_val(r.iloc[11]) if len(r)>11 else ""
+        age_str = f"{prefix}{age}" if age else ""
+        team_detail = clean_val(r.iloc[4])
+        
+        full_title = f"{translate_term(act_raw, act_raw)} {age_str} {translate_term(team_detail, act_raw)}".strip()
+        if search_q and search_q.lower() not in full_title.lower(): continue
+
+        d_str = "FULL TERM" if (len(r) > 12 and "full term" in str(r.iloc[12]).lower()) else (dt.strftime('%d %B %Y') if pd.notnull(dt) else str(r.iloc[5]))
+        
+        btns = ""
+        if "http" in str(r.iloc[7]).lower(): btns += f"<a href='{r.iloc[7]}' target='_blank' class='btn'>{'Document' if is_acad else 'Programme'}</a>"
+        if "http" in str(r.iloc[8]).lower(): btns += f"<a href='{r.iloc[8]}' target='_blank' class='btn'>Assessment Details</a>"
+        elif clean_val(r.iloc[8]): btns += f"<div class='team-frame'>INFO: {r.iloc[8]}</div>"
+        
+        note_raw = clean_val(r.iloc[10]).replace("$", "")
+        if "http" in note_raw.lower():
+            btns += f"<a href='{note_raw}' target='_blank' class='btn'>Info</a>"
+            note_html = ""
+        else:
+            note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
+        
+        h += f"""<div class='card'>
+            <div class='card-title'>{full_title}</div>
+            <div class='info-row'>📅 {d_str}</div>
+            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), act_raw).upper()}</span></div>
+            {note_html}
+            <div class='btn-box'>{btns}</div>
+        </div>"""
+
+    components.html(h, height=2500, scrolling=True)
+
+st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
