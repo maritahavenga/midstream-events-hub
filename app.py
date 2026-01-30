@@ -19,15 +19,16 @@ def clean_val(val):
     return "" if v.lower() in ["n/a", "none", ""] else v
 
 def translate_term(text, activity_name=""):
-    # Spesifieke transformasies vir Afrikaanse vakname
-    act_lower = str(activity_name).lower()
-    if "afrikaans eat" in act_lower:
-        return text.replace(activity_name, "Afrikaans Eerste Addisionele Taal")
-    if "afrikaans ht" in act_lower:
-        return text.replace(activity_name, "Afrikaans Hooftaal")
+    act_str = str(activity_name).strip()
+    
+    # 1. Formele Afrikaanse Name
+    if re.search(r'(?i)\bafrikaans eat\b', act_str):
+        text = text.replace(activity_name, "Afrikaans Eerste Addisionele Taal")
+    elif re.search(r'(?i)\bafrikaans ht\b', act_str):
+        text = text.replace(activity_name, "Afrikaans Hooftaal")
         
-    afrikaans_variants = ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]
-    if any(variant in act_lower for variant in afrikaans_variants):
+    afrikaans_keywords = ["afrikaans", "eat", "eerste addisionele taal", "hooftaal", "ht"]
+    if any(k in act_str.lower() for k in afrikaans_keywords):
         return text
 
     translations = {
@@ -75,16 +76,7 @@ if not df_raw.empty:
     SA_TIME = pytz.timezone('Africa/Johannesburg')
     today = datetime.now(SA_TIME).date()
     
-    mapping = {
-        "Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"],
-        "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"],
-        "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"],
-        "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"],
-        "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"],
-        "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"],
-        "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]
-    }
-    
+    mapping = {"Gr 1":["1","U7","Gr 1"], "U7":["1","U7","Gr 1"], "Gr 2":["2","U8","Gr 2"], "U8":["2","U8","Gr 2"], "Gr 3":["3","U9","Gr 3"], "U9":["3","U9","Gr 3"], "Gr 4":["4","U10","Gr 4"], "U10":["4","U10","Gr 4"], "Gr 5":["5","U11","Gr 5"], "U11":["5","U11","Gr 5"], "Gr 6":["6","U12","Gr 6"], "U12":["6","U12","Gr 6"], "Gr 7":["7","U13","Gr 7"], "U13":["7","U13","Gr 7"]}
     expanded_sel_age = set(sel_age)
     for s in sel_age:
         if s in mapping: expanded_sel_age.update(mapping[s])
@@ -106,21 +98,26 @@ if not df_raw.empty:
         
         is_ft = len(r) > 12 and "full term" in str(r.iloc[12]).lower()
         
+        grade_raw = clean_val(r.iloc[11])
+        grade_num = int(re.search(r'\d+', grade_raw).group()) if re.search(r'\d+', grade_raw) else 99
+        if "U" in grade_raw.upper() and grade_num >= 7:
+            grade_num = grade_num - 6
+
         df_filtered.append({
             'data': r,
             'date': dt_val if pd.notnull(dt_val) else datetime.max.replace(tzinfo=None),
             'subject': str(r.iloc[3]).lower(),
-            'grade': str(r.iloc[11]).lower(),
+            'grade_sort': grade_num,
             'team': str(r.iloc[4]).lower(),
             'is_ft': is_ft
         })
 
-    # SORTERING: Full Term -> Datum -> Subject -> Grade -> Team
+    # SORTERING: is_ft (Full Term) altyd eerste vir ALLE kategorieë
     df_filtered.sort(key=lambda x: (
         not x['is_ft'], 
         x['date'], 
         x['subject'], 
-        x['grade'], 
+        x['grade_sort'], 
         x['team']
     ))
 
@@ -143,7 +140,9 @@ if not df_raw.empty:
         prefix = "Gr " if is_acad else "U"
         age_display = f"{prefix}{row_age}" if row_age else ""
         
-        full_title = f"{translate_term(str(r.iloc[3]), str(r.iloc[3]))} {age_display} {translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))}"
+        translated_act = translate_term(str(r.iloc[3]), str(r.iloc[3]))
+        translated_detail = translate_term(clean_val(r.iloc[4]), str(r.iloc[3]))
+        full_title = f"{translated_act} {age_display} {translated_detail}"
         
         if search_q and search_q.lower() not in full_title.lower(): continue
 
@@ -161,12 +160,3 @@ if not df_raw.empty:
             note_html = f"<div class='note-box'>NOTE: {note_raw}</div>" if note_raw else ""
         
         h += f"""<div class='card'>
-            <div class='card-title'>{full_title.strip()}</div>
-            <div class='info-row'>📅 {d_str}</div>
-            <div class='info-row'>📍 <span class='venue-bold'>{translate_term(str(r.iloc[6]), str(r.iloc[3])).upper()}</span></div>
-            {note_html}<div class='btn-box'>{btns}</div>
-        </div>"""
-
-    components.html(h, height=2500, scrolling=True)
-
-st.markdown("<center style='color:#999;font-size:0.7rem;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
