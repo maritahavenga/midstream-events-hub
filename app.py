@@ -19,15 +19,15 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVr
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def fix_text(t):
-    # 1. Tennis Spasie Fix (U13 C -> U13C)
+    # Tennis Spasie Fix (U13 C -> U13C)
     t = re.sub(r'(U\d+)\s+([A-D])', r'\1\2', t)
-    # 2. Afrikaans Vak Vertalings
-    if any(x in t for x in ["Afrikaans", "FAL", "HT", "Eerste", "Hooftaal"]):
+    # Afrikaans name skoonmaak
+    if any(x in t for x in ["Afrikaans", "FAL", "HT", "Eerste"]):
         t = t.replace("Afrikaans Afrikaans FAL", "Afrikaans Eerste Addisionele Taal")
         t = t.replace("Eerste Addissionele Taal (Afrikaans FAL)", "Afrikaans Eerste Addisionele Taal")
         t = t.replace("Afrikaans FAL", "Afrikaans Eerste Addisionele Taal")
         t = t.replace("HT", "Hooftaal")
-    # 3. Girls Vertaling (G, g, dogters, meisies)
+    # G / g / dogters -> Girls
     t = re.sub(rf'\b(g|G|dogters|meisies|Dogters|Meisies)\b', 'Girls', t)
     return t
 
@@ -35,101 +35,92 @@ def fix_text(t):
 def ld():
     try:
         r = requests.get(f"{U}&ts={datetime.now().timestamp()}", timeout=15)
-        return pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), dtype=str).fillna("")
+        return df
     except: return pd.DataFrame()
 
 df = ld()
 
 if not df.empty:
+    # --- KOLOM INDEKSE GEBASEER OP JOU LYS ---
+    # 0:Timestamp, 1:Email, 2:Category, 3:Activity/Subject, 4:Team/Assessment (Desc)
+    # 5:Date, 6:Venue, 7:Programme Link, 8:TeamConfirm (Link?), 10:Information, 11:Age/Grade
+    C_CAT, C_ACT, C_DESC, C_DATE, C_VEN, C_DOC, C_TEAM, C_INFO, C_AGE = 2, 3, 4, 5, 6, 7, 8, 10, 11
+
     st.markdown("<div style='background-color:#f9f9f9; padding:20px; border-radius:15px; border:1px solid #eee; margin-bottom:20px;'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
     with c2: 
-        act_list = sorted(list(df.iloc[:, 3].unique()))
+        act_list = sorted(list(df.iloc[:, C_ACT].unique()))
         sa = st.multiselect("Activity", act_list)
     with c3: 
         sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
-    sq = st.text_input("🔍 Search Events", placeholder="Type event name...")
+    sq = st.text_input("🔍 Search Events", placeholder="Type to search...")
     st.markdown("</div>", unsafe_allow_html=True)
+
     now = datetime.now(pytz.timezone("Africa/Johannesburg")).date()
     res = []
 
     for _, r in df.iterrows():
         try:
-            cat, act, desc, date_str, ven, age = str(r.iloc[2]), str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6]), cl(r.iloc[11])
+            r_cat, r_act, r_desc, r_date, r_ven, r_age = str(r.iloc[C_CAT]), str(r.iloc[C_ACT]), str(r.iloc[C_DESC]), str(r.iloc[C_DATE]), str(r.iloc[C_VEN]), cl(r.iloc[C_AGE])
             
-            # --- GOOGLE FORM KALENDER FIX ---
-            # Dit hanteer YYYY-MM-DD (Form) en DD/MM/YYYY (Manual)
-            dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
+            # SLIM DATUM LESER (Hanteer Google Form Kalender YYYY-MM-DD en DD/MM/YYYY)
+            dt = pd.to_datetime(r_date, dayfirst=True, errors="coerce")
             
             if pd.notnull(dt) and dt.date() < now: continue
             
-            # Formateer vir vertoon: 11 February 2026
-            pretty_date = dt.strftime("%-d %B %Y") if pd.notnull(dt) else date_str
-            res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": desc})
+            pretty_date = dt.strftime("%#d %B %Y") if pd.notnull(dt) else r_date
+            res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": r_desc})
         except: continue
 
     res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
-    h = """
-    <style>
-    .card { background: white !important; padding: 20px !important; border-radius: 12px !important; border-left: 10px solid #800000 !important; margin-bottom: 20px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; font-family: sans-serif !important; }
-    .title { color: #800000 !important; font-weight: bold !important; font-size: 1.2rem !important; margin-bottom: 5px !important; }
-    .date { color: #555 !important; font-weight: 600 !important; margin-bottom: 8px !important; }
-    .venue { color: #008080 !important; font-weight: bold !important; margin-bottom: 12px !important; }
-    .nt-box { background: #f0f7f7 !important; padding: 12px !important; border-radius: 8px !important; border-left: 4px solid #008080 !important; margin-bottom: 8px !important; font-size: 0.9rem !important; color: #333 !important; }
-    .btn-row { display: flex !important; gap: 10px !important; margin-top: 15px !important; flex-wrap: wrap !important; }
-    .btn { background: #800000 !important; color: white !important; padding: 10px 16px !important; border-radius: 8px !important; text-decoration: none !important; font-size: 0.85rem !important; font-weight: bold !important; display: inline-block !important; }
-    </style>
-    """
+    h = """<style>
+    .card { background: white; padding: 20px; border-radius: 12px; border-left: 10px solid #800000; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); font-family: sans-serif; }
+    .title { color: #800000; font-weight: bold; font-size: 1.2rem; margin-bottom: 5px; }
+    .date { color: #555; font-weight: 600; margin-bottom: 8px; }
+    .venue { color: #008080; font-weight: bold; margin-bottom: 12px; }
+    .nt-box { background: #f0f7f7; padding: 12px; border-radius: 8px; border-left: 4px solid #008080; margin-bottom: 8px; font-size: 0.9rem; color: #333; }
+    .btn { background: #800000; color: white !important; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; font-weight: bold; display: inline-block; margin-right: 10px; margin-top: 10px; }
+    </style>"""
 
     if not res:
         st.info("Geen opkomende events gevind nie.")
     else:
         for i in res:
             r = i["r"]
-            act_raw, age, ven = str(r.iloc[3]), cl(r.iloc[11]), str(r.iloc[6])
-            t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
-            
-            act = fix_text(act_raw)
-            desc_clean = fix_text(i['desc'])
-            
+            act = fix_text(str(r.iloc[C_ACT]))
+            desc = fix_text(i['desc'])
+            ven = str(r.iloc[C_VEN])
+            age = cl(r.iloc[C_AGE])
+            t_l, i_r = cl(r.iloc[C_TEAM]), cl(r.iloc[C_INFO])
+
             is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
-            prefix = "U" if is_sp else "Gr "
-            age_lbl = f"{prefix}{age}" if age else ""
+            age_lbl = f"{('U' if is_sp else 'Gr ')}{age}" if age else ""
+            full_title = f"{act} {age_lbl} {desc}".strip()
             
-            full_title = f"{act} {age_lbl} {desc_clean}".strip()
             if sq and sq.lower() not in full_title.lower(): continue
 
-            # Notas in aparte boksies
+            # Notas boksies (Verdeel)
             nt_html = ""
-            if t_l and "http" not in t_l.lower():
-                nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
-            if i_r and "http" not in i_r.lower():
-                nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
+            if t_l and "http" not in t_l.lower(): nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
+            if i_r and "http" not in i_r.lower(): nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
 
             # Knoppies
-            is_afr = any(x in full_title.lower() for x in ["afrikaans", "eerste", "hooftaal"])
+            is_afr = any(x in full_title.lower() for x in ["afrikaans", "eerste", "hooftaal", "assessering"])
             b1, b2, b3 = ("Documents", "Team List", "Information") if not is_afr else ("Dokumente", "Spanlys", "Inligting")
             
             btns = ""
-            if "http" in cl(r.iloc[7]): btns += f"<a class='btn' href='{cl(r.iloc[7])}' target='_blank'>{b1}</a>"
+            if "http" in cl(r.iloc[C_DOC]): btns += f"<a class='btn' href='{cl(r.iloc[C_DOC])}' target='_blank'>{b1}</a>"
             if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
             if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>{b3}</a>"
 
-            # Universele Google Maps skakel
-            map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}"
+            map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}"
             vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{ven.upper()}</a></div>" if ven and ven != "nan" else ""
 
-            h += f"""
-            <div class='card'>
-                <div class='title'>{full_title}</div>
-                <div class='date'>📅 {i['ds']}</div>
-                {vh}
-                {nt_html}
-                <div class='btn-row'>{btns}</div>
-            </div>
-            """
+            h += f"""<div class='card'><div class='title'>{full_title}</div><div class='date'>📅 {i['ds']}</div>{vh}{nt_html}<div class='btn-row'>{btns}</div></div>"""
+        
         import streamlit.components.v1 as components
         components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
 
