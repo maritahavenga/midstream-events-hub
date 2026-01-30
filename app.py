@@ -14,18 +14,17 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
-# Korrekte Datum Formaat: 5 February 2026
-def fmt_dt(dt_str):
-    try:
-        d_obj = pd.to_datetime(dt_str, dayfirst=True)
-        # Gebruik %e vir dag sonder voorste nul
-        return d_obj.strftime("%e %B %Y").strip()
-    except:
-        return dt_str
+# --- SLIM VERTALER VIR STAFF INPUT ---
+def fix_text(t):
+    # Vertaal G, g, Dogters, Meisies na Girls
+    t = re.sub(rf'\b(g|G|dogters|meisies|Dogters|Meisies)\b', 'Girls', t)
+    # Vertaal EAT en HT
+    t = t.replace("EAT", "Afrikaans FAL").replace("HT", "Afrikaans HL")
+    return t
 
 @st.cache_data(ttl=1)
 def ld():
@@ -53,31 +52,27 @@ if not df.empty:
     for _, r in df.iterrows():
         try:
             cat, act, desc, date_str, ven, age = str(r.iloc[2]), str(r.iloc[3]), str(r.iloc[4]), str(r.iloc[5]), str(r.iloc[6]), cl(r.iloc[11])
-            dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
+            
+            # KRITIES: Forceer DD/MM/YYYY formaat vir SA datums
+            dt = pd.to_datetime(date_str, format='%d/%m/%Y', errors="coerce")
+            if pd.isnull(dt): # Probeer alternatief as staff dit anders insleutel
+                dt = pd.to_datetime(date_str, dayfirst=True, errors="coerce")
+                
             if pd.notnull(dt) and dt.date() < now: continue
             
-            pretty_date = fmt_dt(date_str)
+            pretty_date = dt.strftime("%#d %B %Y") if pd.notnull(dt) else date_str
             res.append({"r": r, "dt": dt, "ds": pretty_date, "desc": desc})
         except: continue
 
     res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
-    # --- KRITIES: DIE STYL MOET BINNE DIE HTML BLOK WEES ---
     h = """
     <style>
-    .card {
-        background: white !important;
-        padding: 20px !important;
-        border-radius: 12px !important;
-        border-left: 10px solid #800000 !important;
-        margin-bottom: 20px !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
-        font-family: sans-serif !important;
-    }
+    .card { background: white !important; padding: 20px !important; border-radius: 12px !important; border-left: 10px solid #800000 !important; margin-bottom: 20px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; font-family: sans-serif !important; }
     .title { color: #800000 !important; font-weight: bold !important; font-size: 1.2rem !important; margin-bottom: 5px !important; }
     .date { color: #555 !important; font-weight: 600 !important; margin-bottom: 8px !important; }
     .venue { color: #008080 !important; font-weight: bold !important; margin-bottom: 12px !important; }
-    .nt-box { background: #f0f7f7 !important; padding: 12px !important; border-radius: 8px !important; border-left: 4px solid #008080 !important; margin-bottom: 10px !important; font-size: 0.9rem !important; color: #333 !important; }
+    .nt-box { background: #f0f7f7 !important; padding: 12px !important; border-radius: 8px !important; border-left: 4px solid #008080 !important; margin-bottom: 8px !important; font-size: 0.9rem !important; color: #333 !important; }
     .btn-row { display: flex !important; gap: 10px !important; margin-top: 15px !important; flex-wrap: wrap !important; }
     .btn { background: #800000 !important; color: white !important; padding: 10px 16px !important; border-radius: 8px !important; text-decoration: none !important; font-size: 0.85rem !important; font-weight: bold !important; display: inline-block !important; }
     </style>
@@ -85,26 +80,26 @@ if not df.empty:
 
     for i in res:
         r = i["r"]
-        act, age, ven = str(r.iloc[3]), cl(r.iloc[11]), str(r.iloc[6])
+        act, age, ven = fix_text(str(r.iloc[3])), cl(r.iloc[11]), str(r.iloc[6])
         t_l, i_r = cl(r.iloc[8]), cl(r.iloc[10])
         
+        desc_clean = fix_text(i['desc'])
         is_sp = any(x.lower() in act.lower() for x in ["hockey","rugby","netball","swimming","athletics","tennis"])
         prefix = "U" if is_sp else "Gr "
         age_lbl = f"{prefix}{age}" if age else ""
         
-        full_title = f"{act} {age_lbl} {i['desc']}".strip()
+        full_title = f"{act} {age_lbl} {desc_clean}".strip()
         if sq and sq.lower() not in full_title.lower(): continue
 
-        # Notas
+        # Verdeelde Notas
         nt_html = ""
-        if (t_l and "http" not in t_l.lower()) or (i_r and "http" not in i_r.lower()):
-            nt_html = f"<div class='nt-box'>"
-            if t_l and "http" not in t_l.lower(): nt_html += f"<b>Teams:</b> {t_l}<br>"
-            if i_r and "http" not in i_r.lower(): nt_html += f"<b>Note:</b> {i_r}"
-            nt_html += "</div>"
+        if t_l and "http" not in t_l.lower():
+            nt_html += f"<div class='nt-box'><b>Teams:</b><br>{t_l}</div>"
+        if i_r and "http" not in i_r.lower():
+            nt_html += f"<div class='nt-box'><b>Note:</b><br>{i_r}</div>"
 
-        # Knoppies
-        is_afr = any(x in act.lower() for x in ["afrikaans", "eerste", "hooftaal"])
+        # Knoppies Vertaling
+        is_afr = any(x in full_title.lower() for x in ["afrikaans", "fal", "hl", "eerste", "hooftaal"])
         b1, b2, b3 = ("Documents", "Team List", "Information") if not is_afr else ("Dokumente", "Spanlys", "Inligting")
         
         btns = ""
@@ -112,7 +107,12 @@ if not df.empty:
         if "http" in t_l: btns += f"<a class='btn' href='{t_l}' target='_blank'>{b2}</a>"
         if "http" in i_r: btns += f"<a class='btn' href='{i_r}' target='_blank'>{b3}</a>"
 
-        map_url = f"http://googleusercontent.com/maps.google.com/search?q={ven.replace(' ','+')}+Midstream"
+        # --- UNIVERSELE VENUE FIX ---
+        v_search = ven
+        if "menlopark" in ven.lower(): v_search = "Hoërskool Menlopark"
+        # Voeg Midstream by soektog vir akkuraatheid behalwe as dit 'n ander skool is
+        map_url = f"https://www.google.com/maps/search/?api=1&query={v_search.replace(' ','+')}"
+        
         vh = f"<div class='venue'>📍 <a href='{map_url}' target='_blank' style='color:#008080;text-decoration:none;'>{ven.upper()}</a></div>" if ven and ven != "nan" else ""
 
         h += f"""
@@ -126,6 +126,6 @@ if not df.empty:
         """
     
     import streamlit.components.v1 as components
-    components.html(f"<html><body>{h}</body></html>", height=3000, scrolling=True)
+    components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
 
 st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>", unsafe_allow_html=True)
