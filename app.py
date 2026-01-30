@@ -3,18 +3,19 @@ from datetime import datetime
 import streamlit.components.v1 as v1
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="LMCP Hub", layout="centered")
+st.set_page_config(page_title="Midstream College LMCP Hub", layout="centered")
 st_autorefresh(interval=120000, key="r_token")
 
-# Skoon Wit Banner vir Logo
+# Nuwe Banner met Volledige Skoolnaam
 st.markdown("""
-    <div style='background-color: white; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px; border: 1px solid #eee;'>
-        <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='180'>
-        <h2 style='color: #800000; font-family: sans-serif; margin-top: 10px;'>LMCP Digital Hub</h2>
+    <div style='background-color: white; padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 20px; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.05);'>
+        <img src='https://www.midstream-college.co.za/wp-content/uploads/2021/04/Midstream-College-Logo.png' width='160' style='margin-bottom:10px;'>
+        <h1 style='color: #800000; font-family: sans-serif; margin: 0; font-size: 1.8rem;'>MIDSTREAM COLLEGE</h1>
+        <h3 style='color: #555; font-family: sans-serif; margin: 5px 0 0 0; font-weight: normal;'>LMCP Digital Event Hub</h3>
     </div>
 """, unsafe_allow_html=True)
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig+2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
@@ -55,7 +56,7 @@ if not df.empty:
         is_ac = "Academics" in sc or any("Afrikaans" in x for x in sa)
         opts = [o for o in ao if "U" in o] if (is_sp and not is_ac) else ([o for o in ao if "Gr" in o] if (is_ac and not is_sp) else ao)
         sg = st.multiselect("Age Group", options=opts, key="stk_v")
-    sq = st.text_input("Search Events...")
+    sq = st.text_input("Search Events...", placeholder="Type to filter results...")
     if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
     now = datetime.now(pytz.timezone('Africa/Johannesburg')).date()
@@ -95,14 +96,12 @@ if not df.empty:
         b2 = "Team List" if not ("academic" in cv or is_afr) else ("Assessment" if not is_afr else "Assessering")
         
         btns = "".join([f"<a href='{cl(r.iloc[j])}' target='_blank' class='btn'>{b1 if j==7 else (b2 if j==8 else b_info)}</a>" for j in [7, 8, 10] if "http" in cl(r.iloc[j]).lower()])
-        
         team_html = f"<div class='team-box'><b>Teams:</b><br>{t_l}</div>" if t_l and "http" not in t_l.lower() else ""
         note_html = f"<div class='note-box'><b>Note:</b><br>{i_r}</div>" if i_r and "http" not in i_r.lower() else ""
         
-        clean_act = c_a(act)
-        is_sp_card = "sport" in cv or any(x in clean_act for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])
+        is_sp_card = "sport" in cv or any(x in c_a(act) for x in ["Tennis","Rugby","Hockey","Netball","Athletics"])
         age_lbl = (("U" if is_sp_card else "Gr ") + age) if age else ""
-        ts = f"{clean_act} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
+        ts = f"{c_a(act)} {age_lbl} {tr(cl(r.iloc[4]), act)}".strip()
         
         if sq and sq.lower() not in ts.lower(): continue
         map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
@@ -112,4 +111,4 @@ if not df.empty:
     
     v1.html(h, height=3500, scrolling=True)
 
-st.markdown("<br><center style='font-size:0.8rem;color:#999;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
+st.markdown("<br><center style='font-size:0.8rem;color:#999;'>MIDSTREAM COLLEGE Digital Hub 2026</center>", unsafe_allow_html=True)
