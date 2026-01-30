@@ -20,40 +20,37 @@ U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVr
 def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
 
 def fix_text(t):
+    # Tennis Spasie (U13 C -> U13C)
     t = re.sub(r'(U\d+)\s+([A-D])', r'\1\2', t)
+    # Afrikaans Name Fix
     if any(x in t for x in ["Afrikaans", "FAL", "HT", "Eerste"]):
-        t = t.replace("Afrikaans Afrikaans FAL", "Afrikaans Eerste Addisionele Taal")
-        t = t.replace("Afrikaans FAL", "Afrikaans Eerste Addisionele Taal")
-        t = t.replace("HT", "Hooftaal")
+        t = t.replace("Afrikaans FAL", "Afrikaans Eerste Addisionele Taal").replace("HT", "Hooftaal")
+    # Girls/Dogters Fix
     t = re.sub(rf'\b(g|G|dogters|meisies|Dogters|Meisies)\b', 'Girls', t)
     return t
 
 @st.cache_data(ttl=1)
 def ld():
     try:
-        # Die nocache sorg dat ons nie ou, leë data sien nie
+        # Cache buster dwing vars data vanaf Google
         r = requests.get(f"{U}&nocache={datetime.now().timestamp()}", timeout=15)
-        data = r.content.decode('utf-8')
-        df = pd.read_csv(io.StringIO(data), dtype=str).fillna("")
+        # Slaan die eerste ry oor as dit die QUERY formule bevat
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), skiprows=0, dtype=str).fillna("")
         return df
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 df = ld()
 
-# AS DIE DATA NOU DEURKOM
 if not df.empty:
-    # Ons gebruik kolom-nommers gebaseer op die standaard LMCP vorm
+    # --- KOLOMME VOLGENS JOU FOTO ---
+    # 2:Category, 3:Activity/Subject, 4:Team / Assessm, 5:Date, 6:Venue, 7:Doc, 8:TeamLink, 10:Info, 11:Age
     C_CAT, C_ACT, C_DESC, C_DATE, C_VEN, C_DOC, C_TEAM, C_INFO, C_AGE = 2, 3, 4, 5, 6, 7, 8, 10, 11
 
     st.markdown("<div style='background-color:#f9f9f9; padding:20px; border-radius:15px; border:1px solid #eee; margin-bottom:20px;'>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
-    with c1: sc = st.multiselect("Category", ["Sport", "Culture", "Academics"])
-    with c2: 
-        act_list = sorted(list(df.iloc[:, C_ACT].unique()))
-        sa = st.multiselect("Activity", act_list)
-    with c3: 
-        sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
+    with c1: sc = st.multiselect("Category", sorted(df.iloc[:, C_CAT].unique()))
+    with c2: sa = st.multiselect("Activity", sorted(df.iloc[:, C_ACT].unique()))
+    with c3: sg = st.multiselect("Age Group", ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"])
     sq = st.text_input("🔍 Search Events", placeholder="Type to search...")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -75,12 +72,12 @@ if not df.empty:
     res.sort(key=lambda x: x['dt'] if pd.notnull(x['dt']) else datetime(2099,1,1))
 
     h = """<style>
-    .card { background: white; padding: 20px; border-radius: 12px; border-left: 10px solid #800000; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); font-family: sans-serif; }
-    .title { color: #800000; font-weight: bold; font-size: 1.2rem; }
-    .date { color: #555; font-weight: 600; margin-bottom: 8px; }
-    .venue { color: #008080; font-weight: bold; margin-bottom: 12px; }
-    .nt-box { background: #f0f7f7; padding: 10px; border-radius: 8px; border-left: 4px solid #008080; margin-bottom: 8px; font-size: 0.9rem; color: #333; }
-    .btn { background: #800000; color: white !important; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; font-weight: bold; display: inline-block; margin-right: 10px; margin-top: 10px; }
+    .card { background: white !important; padding: 20px !important; border-radius: 12px !important; border-left: 10px solid #800000 !important; margin-bottom: 20px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; font-family: sans-serif !important; }
+    .title { color: #800000 !important; font-weight: bold !important; font-size: 1.2rem !important; margin-bottom: 5px !important; }
+    .date { color: #555 !important; font-weight: 600 !important; margin-bottom: 8px !important; }
+    .venue { color: #008080 !important; font-weight: bold !important; margin-bottom: 12px !important; }
+    .nt-box { background: #f0f7f7 !important; padding: 10px !important; border-radius: 8px !important; border-left: 4px solid #008080 !important; margin-bottom: 8px !important; font-size: 0.9rem !important; color: #333 !important; }
+    .btn { background: #800000 !important; color: white !important; padding: 10px 16px !important; border-radius: 8px !important; text-decoration: none !important; font-size: 0.85rem !important; font-weight: bold !important; display: inline-block !important; margin-right: 10px; margin-top: 10px; }
     </style>"""
 
     if not res:
@@ -121,7 +118,6 @@ if not df.empty:
         components.html(f"<html><body>{h}</body></html>", height=3500, scrolling=True)
 
 else:
-    # AS DIT NOU STEEDS BLANK IS, WYS ONS DIE ROU DATA VIR DEBUGGING
     st.warning("🔄 Data word gelaai... As dit blank bly, verfris die bladsy.")
     if st.button("Force Refresh"):
         st.cache_data.clear()
