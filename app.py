@@ -1,39 +1,4 @@
-import streamlit as st
-import pandas as pd
-
-# Bladsy instellings
-st.set_page_config(page_title="LMCP Event Hub", layout="centered")
-
-# --- DIE MOOI ONTWERP (CSS) ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #f4f4f4; }
-    .header-banner {
-        background: linear-gradient(135deg, #800000 0%, #a00000 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 0 0 25px 25px;
-        text-align: center;
-        margin-top: -60px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        font-family: sans-serif;
-    }
-    .event-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        border-left: 10px solid #800000;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        font-family: sans-serif;
-    }
-    .event-title { color: #800000; font-size: 1.3rem; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- BANNER ---
-st.markdown("""
-    <div class="header-banner">
+<div class="header-banner">
         <h1 style='margin:0;'>LAERSKOOL MIDSTREAM COLLEGE</h1>
         <p style='margin:0; opacity:0.9;'>Primary Event Hub</p>
     </div>
@@ -97,4 +62,3 @@ else:
 if st.button("🔄 Herlaai Nou"):
     st.cache_data.clear()
     st.rerun()
-Hoekom hierdie een gaan werk:
