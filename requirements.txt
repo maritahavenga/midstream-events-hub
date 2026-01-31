@@ -1,6 +1,7 @@
-pandas
 streamlit==1.41.1
+pandas
 altair==5.5.0
 streamlit-autorefresh
 requests
 pytz
+python-dateutil
