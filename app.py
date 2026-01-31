@@ -10,12 +10,11 @@ st.set_page_config(page_title="LMCP Event Hub", layout="wide")
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 # =============================
-# MODERN STYLING
+# STYLING (Modern)
 # =============================
 st.markdown("""
 <style>
     .stApp { background: #f6f7fb; }
-
     .topbar {
         background: linear-gradient(90deg, #800000, #a00000);
         color: white;
@@ -35,7 +34,6 @@ st.markdown("""
         margin-bottom: 12px;
         border: 1px solid rgba(0,0,0,0.04);
     }
-
     .label {
         font-size: 12px;
         font-weight: 800;
@@ -44,25 +42,13 @@ st.markdown("""
         margin-bottom: 6px;
         display: block;
     }
-
-    .card {
+    .cardbox {
         background: white;
         border-radius: 20px;
-        padding: 16px 16px 14px;
-        border: 1px solid rgba(0,0,0,0.05);
+        padding: 14px 14px;
+        border: 1px solid rgba(0,0,0,0.06);
         box-shadow: 0 10px 18px rgba(0,0,0,0.08);
         margin-bottom: 12px;
-    }
-    .title { font-size: 18px; font-weight: 900; margin: 0; }
-    .sub { font-size: 13px; color: #177; font-weight: 800; margin-top: 6px; }
-    .meta { color: #555; font-size: 14px; margin-top: 8px; line-height: 1.55; }
-    .info {
-        background: #f1f3f6;
-        padding: 10px 12px;
-        border-radius: 12px;
-        margin-top: 10px;
-        border-left: 4px solid #177;
-        font-size: 14px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -107,11 +93,9 @@ def normalize_category(cat: str) -> str:
 def normalize_afrikaans_subject(text: str) -> str:
     t = safe_str(text)
 
-    # Afrikaans EAT -> Afrikaans Eerste Addisionele Taal
     if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\beat\b", t, flags=re.I):
         t = re.sub(r"Afrikaans\s*EAT", "Afrikaans Eerste Addisionele Taal", t, flags=re.I)
 
-    # Afrikaans HT -> Afrikaans Hooftaal (spelling exactly as you asked)
     if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\bht\b", t, flags=re.I):
         t = re.sub(r"Afrikaans\s*HT", "Afrikaans Hooftaal", t, flags=re.I)
 
@@ -128,7 +112,6 @@ def parse_under(value: str) -> str:
     m = re.search(r"\bU\s*(\d{1,2})\b", v, flags=re.I)
     if m:
         return f"U{int(m.group(1))}"
-    # if numeric age 7..13
     m2 = re.search(r"\b(\d{1,2})\b", v)
     if m2:
         age = int(m2.group(1))
@@ -176,48 +159,45 @@ try:
     df = pd.read_csv(URL)
     df.columns = df.columns.str.strip()
     df = df.fillna("")
-
-    if df.empty:
-        st.info("Waiting for data from the sheet…")
-        st.stop()
-
-    # Columns (from your CSV)
-    COL_CAT      = "Category"
-    COL_SUBJ     = "Activity/Subject Name"
-    COL_TEAM     = "Team"
-    COL_DATE     = "Date / Due Date"
-    COL_VEN      = "Venue"
-    COL_INFO     = "Information"
-    COL_LINK     = "Programme / Document Link"
-    COL_DURATION = "Display Duration"
-    COL_AGEGRADE = "Age Group (9,10) / Grade (1,2,3)"
-
-    # Normalize fields
-    df["_type"] = df[COL_CAT].apply(normalize_category)
-    df["_subject"] = df[COL_SUBJ].apply(normalize_afrikaans_subject)
-
-    # Date parsing for sorting + expiry
-    df["_event_dt"] = pd.to_datetime(df[COL_DATE], errors="coerce", dayfirst=True)
-    df["_dur_days"] = df[COL_DURATION].apply(safe_int)
-
-    today = pd.Timestamp.now(tz="Africa/Johannesburg").normalize().tz_localize(None)
-    df = df[~df.apply(lambda r: is_expired(r, today), axis=1)].copy()
-
-    # Under/Grade parsing
-    df["_under"] = df[COL_AGEGRADE].apply(parse_under)
-    df["_grade"] = df[COL_AGEGRADE].apply(parse_grade)
-
-    # Sort by date (nearest first, unknown dates last)
-    df["_sort_dt"] = df["_event_dt"].fillna(pd.Timestamp.max)
-    df = df.sort_values("_sort_dt", ascending=True)
-
 except Exception as e:
     st.error("Could not load data from Google Sheets.")
     st.code(str(e))
     st.stop()
 
+if df.empty:
+    st.info("Waiting for data from the sheet…")
+    st.stop()
+
+# Columns from your CSV
+COL_CAT      = "Category"
+COL_SUBJ     = "Activity/Subject Name"
+COL_TEAM     = "Team"
+COL_DATE     = "Date / Due Date"
+COL_VEN      = "Venue"
+COL_INFO     = "Information"
+COL_LINK     = "Programme / Document Link"
+COL_DURATION = "Display Duration"
+COL_AGEGRADE = "Age Group (9,10) / Grade (1,2,3)"
+
+# Prepare fields
+df["_type"] = df[COL_CAT].apply(normalize_category)
+df["_subject"] = df[COL_SUBJ].apply(normalize_afrikaans_subject)
+
+df["_event_dt"] = pd.to_datetime(df[COL_DATE], errors="coerce", dayfirst=True)
+df["_dur_days"] = df[COL_DURATION].apply(safe_int)
+
+today = pd.Timestamp.now(tz="Africa/Johannesburg").normalize().tz_localize(None)
+df = df[~df.apply(lambda r: is_expired(r, today), axis=1)].copy()
+
+df["_under"] = df[COL_AGEGRADE].apply(parse_under)
+df["_grade"] = df[COL_AGEGRADE].apply(parse_grade)
+
+# Sort by date (nearest first)
+df["_sort_dt"] = df["_event_dt"].fillna(pd.Timestamp.max)
+df = df.sort_values("_sort_dt", ascending=True)
+
 # =============================
-# SESSION STATE (so U10 stays when you add Academics)
+# SESSION STATE
 # =============================
 if "sel_categories" not in st.session_state:
     st.session_state.sel_categories = ["Sport"]
@@ -227,7 +207,7 @@ if "sel_grade" not in st.session_state:
     st.session_state.sel_grade = ""
 
 # =============================
-# NAV BARS (3)
+# FILTER PANEL
 # =============================
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 
@@ -243,12 +223,11 @@ st.session_state.sel_categories = st.multiselect(
 if not st.session_state.sel_categories:
     st.session_state.sel_categories = ["Sport"]
 
-# 2) Activity (filtered by chosen categories)
-df_cat = df[df["_type"].isin(st.session_state.sel_categories)].copy()
-activity_options = sorted([a for a in df_cat["_subject"].unique() if str(a).strip()])
-
+# 2) Activity
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<span class="label">Activity</span>', unsafe_allow_html=True)
+df_cat = df[df["_type"].isin(st.session_state.sel_categories)].copy()
+activity_options = sorted([a for a in df_cat["_subject"].unique() if str(a).strip()])
 sel_acts = st.multiselect(
     "Activity",
     options=activity_options,
@@ -257,12 +236,12 @@ sel_acts = st.multiselect(
     placeholder="All activities",
 )
 
-# 3) Age Group (Under for Sport/Culture, Grade for Academics)
-want_under = any(c in st.session_state.sel_categories for c in ["Sport", "Culture"])
-want_grade = "Academics" in st.session_state.sel_categories
-
+# 3) Age Group
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<span class="label">Age Group</span>', unsafe_allow_html=True)
+
+want_under = any(c in st.session_state.sel_categories for c in ["Sport", "Culture"])
+want_grade = "Academics" in st.session_state.sel_categories
 
 colL, colR = st.columns(2)
 
@@ -275,7 +254,6 @@ with colL:
             index=under_options.index(st.session_state.sel_under) if st.session_state.sel_under in under_options else 0,
             label_visibility="collapsed",
         )
-        # If user chose Under and later adds Academics, keep Grade in sync
         if st.session_state.sel_under and not st.session_state.sel_grade:
             st.session_state.sel_grade = U_TO_GR.get(st.session_state.sel_under, "")
     else:
@@ -290,7 +268,6 @@ with colR:
             index=grade_options.index(st.session_state.sel_grade) if st.session_state.sel_grade in grade_options else 0,
             label_visibility="collapsed",
         )
-        # If user chose Grade and Sport/Culture also selected, sync Under
         if st.session_state.sel_grade and not st.session_state.sel_under and want_under:
             st.session_state.sel_under = GR_TO_U.get(st.session_state.sel_grade, "")
     else:
@@ -299,21 +276,19 @@ with colR:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================
-# FILTER LOGIC (soft, so you don't end up with only 1 card)
+# APPLY FILTERS (SAFE)
 # =============================
 filtered = df[df["_type"].isin(st.session_state.sel_categories)].copy()
 
-# Activity filter
 if sel_acts:
     filtered = filtered[filtered["_subject"].isin(sel_acts)]
 
-# Under filter only for Sport/Culture rows (keep rows that have blank under to avoid over-filtering)
 u = st.session_state.sel_under
 if u and want_under:
     mask_sc = filtered["_type"].isin(["Sport", "Culture"])
+    # keep blank unders to avoid over-filtering
     filtered = filtered[~mask_sc | (filtered["_under"].eq(u) | filtered["_under"].eq(""))].copy()
 
-# Grade filter for Academics rows (grade chosen OR inferred from Under; keep blanks to avoid over-filtering)
 grade_for_acad = st.session_state.sel_grade
 if (not grade_for_acad) and u:
     grade_for_acad = U_TO_GR.get(u, "")
@@ -329,7 +304,7 @@ if filtered.empty:
     st.stop()
 
 # =============================
-# RENDER CARDS
+# RENDER (NO HTML TEXT LEAKING)
 # =============================
 for _, row in filtered.iterrows():
     category = safe_str(row["_type"])
@@ -340,13 +315,9 @@ for _, row in filtered.iterrows():
     info     = safe_str(row[COL_INFO])
     link     = safe_str(row[COL_LINK])
 
-    # Single title only (no duplicates)
     title = team if team else subject
 
-    # Button language rule
-    btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
-
-    # Context line: Under (sport/culture) or Grade (academics)
+    # Context line
     under = safe_str(row["_under"])
     grade = safe_str(row["_grade"])
     context_bits = []
@@ -356,20 +327,26 @@ for _, row in filtered.iterrows():
         context_bits.append(grade)
     context = " • ".join(context_bits)
 
-    st.markdown(f"""
-    <div class="card">
-        <p class="title">{title}</p>
-        <div class="sub">{subject}</div>
+    # Button language rule
+    btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
 
-        <div class="meta">
-            {f"{context}<br>" if context else ""}
-            📅 {date_s}<br>
-            📍 {venue}
-        </div>
+    # Card container (HTML just for box)
+    st.markdown('<div class="cardbox">', unsafe_allow_html=True)
 
-        {f'<div class="info">{info}</div>' if info else ''}
-    </div>
-    """, unsafe_allow_html=True)
+    # Real content rendered by Streamlit (so NO <div> appears as text)
+    st.markdown(f"### {title}")
+    st.markdown(f"**{subject}**")
+
+    if context:
+        st.caption(context)
+
+    st.write(f"📅 {date_s}")
+    st.write(f"📍 {venue}")
+
+    if info:
+        st.info(info)
 
     if link.startswith("http"):
         st.link_button(btn_text, link)
+
+    st.markdown('</div>', unsafe_allow_html=True)
