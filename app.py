@@ -81,29 +81,47 @@ def safe_str(x) -> str:
     return "" if pd.isna(x) else str(x).strip()
 
 def normalize_category(cat: str) -> str:
-    c = safe_str(cat).lower()
-    if "sport" in c:
+    c = safe_str(cat).strip().lower()
+
+    # strict matching
+    if re.search(r"\bsport(s)?\b", c):
         return "Sport"
-    if "cultur" in c or "culture" in c:
+    if re.search(r"\bcultur(e|al)?\b", c):
         return "Culture"
-    if "academ" in c:
+    if re.search(r"\bacadem(ic|ics)?\b", c):
         return "Academics"
-    return "Academics"
+
+    return "Unknown"
 
 def normalize_afrikaans_subject(text: str) -> str:
     t = safe_str(text)
+    low = t.lower()
 
-    if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\beat\b", t, flags=re.I):
-        t = re.sub(r"Afrikaans\s*EAT", "Afrikaans Eerste Addisionele Taal", t, flags=re.I)
+    # Only do replacements when the subject includes "afrikaans"
+    if "afrikaans" in low:
+        # Any EAT variation -> full phrase
+        if re.search(r"\beat\b", low):
+            # Replace standalone EAT token or Afrikaans ... EAT variations
+            t = re.sub(r"\bEAT\b", "Eerste Addisionele Taal", t, flags=re.I)
+            # If it says "Afrikaans Eerste Addisionele Taal" without spacing, ensure good format:
+            t = re.sub(r"Afrikaans\s*Eerste\s*Addisionele\s*Taal", "Afrikaans Eerste Addisionele Taal", t, flags=re.I)
 
-    if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\bht\b", t, flags=re.I):
-        t = re.sub(r"Afrikaans\s*HT", "Afrikaans Hooftaal", t, flags=re.I)
+        # Any HT variation -> full phrase (spelling as requested)
+        if re.search(r"\bht\b", low):
+            t = re.sub(r"\bHT\b", "Hooftaal", t, flags=re.I)
+            t = re.sub(r"Afrikaans\s*Hooftaal", "Afrikaans Hooftaal", t, flags=re.I)
 
     return t
 
 def is_afrikaans_activity(text: str) -> bool:
     t = safe_str(text)
-    return ("Afrikaans" in t) and (re.search(r"\b(EAT|HT)\b", t, flags=re.I) is not None)
+    if "Afrikaans" not in t:
+        return False
+    return (
+        "Eerste Addisionele Taal" in t
+        or "Hooftaal" in t
+        or re.search(r"\b(EAT|HT)\b", t, flags=re.I) is not None
+    )
 
 def parse_under(value: str) -> str:
     v = safe_str(value)
@@ -180,7 +198,6 @@ COL_LINK     = "Programme / Document Link"
 COL_DURATION = "Display Duration"
 COL_AGEGRADE = "Age Group (9,10) / Grade (1,2,3)"
 
-# Prepare fields
 df["_type"] = df[COL_CAT].apply(normalize_category)
 df["_subject"] = df[COL_SUBJ].apply(normalize_afrikaans_subject)
 
@@ -193,7 +210,6 @@ df = df[~df.apply(lambda r: is_expired(r, today), axis=1)].copy()
 df["_under"] = df[COL_AGEGRADE].apply(parse_under)
 df["_grade"] = df[COL_AGEGRADE].apply(parse_grade)
 
-# Sort by date (nearest first)
 df["_sort_dt"] = df["_event_dt"].fillna(pd.Timestamp.max)
 df = df.sort_values("_sort_dt", ascending=True)
 
@@ -201,7 +217,6 @@ df = df.sort_values("_sort_dt", ascending=True)
 # SESSION STATE
 # =============================
 if "sel_categories" not in st.session_state:
-    # Show everything by default
     st.session_state.sel_categories = ["Sport", "Culture", "Academics"]
 if "sel_under" not in st.session_state:
     st.session_state.sel_under = ""
@@ -213,19 +228,20 @@ if "sel_grade" not in st.session_state:
 # =============================
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 
-# 1) Category
+# 1) Category (explicit key fixes the “Sport still shows academics” issue)
 st.markdown('<span class="label">Category</span>', unsafe_allow_html=True)
 all_cats = ["Sport", "Culture", "Academics"]
 st.session_state.sel_categories = st.multiselect(
     "Category",
     options=all_cats,
     default=st.session_state.sel_categories,
+    key="category_select",
     label_visibility="collapsed",
 )
 if not st.session_state.sel_categories:
     st.session_state.sel_categories = ["Sport", "Culture", "Academics"]
 
-# 2) Activity
+# 2) Activity (filtered by chosen categories)
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<span class="label">Activity</span>', unsafe_allow_html=True)
 df_cat = df[df["_type"].isin(st.session_state.sel_categories)].copy()
@@ -234,6 +250,7 @@ sel_acts = st.multiselect(
     "Activity",
     options=activity_options,
     default=[],
+    key="activity_select",
     label_visibility="collapsed",
     placeholder="All activities",
 )
@@ -255,6 +272,7 @@ with colL:
             "Under",
             options=under_options,
             index=under_options.index(st.session_state.sel_under) if st.session_state.sel_under in under_options else 0,
+            key="under_select",
             label_visibility="collapsed",
         )
         if st.session_state.sel_under and not st.session_state.sel_grade:
@@ -269,6 +287,7 @@ with colR:
             "Grade",
             options=grade_options,
             index=grade_options.index(st.session_state.sel_grade) if st.session_state.sel_grade in grade_options else 0,
+            key="grade_select",
             label_visibility="collapsed",
         )
         if st.session_state.sel_grade and not st.session_state.sel_under and want_under:
@@ -279,26 +298,27 @@ with colR:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================
-# APPLY FILTERS (SAFE)
+# APPLY FILTERS
 # =============================
 filtered = df[df["_type"].isin(st.session_state.sel_categories)].copy()
 
+# Activity filter
 if sel_acts:
     filtered = filtered[filtered["_subject"].isin(sel_acts)]
 
+# Under filter for sport/culture only (keep blanks so you don't lose rows)
 u = st.session_state.sel_under
 if u and want_under:
     mask_sc = filtered["_type"].isin(["Sport", "Culture"])
-    # keep blank unders to avoid hiding lots of sport rows
     filtered = filtered[~mask_sc | (filtered["_under"].eq(u) | filtered["_under"].eq(""))].copy()
 
+# Grade filter for academics (grade selected OR inferred from under; keep blanks)
 grade_for_acad = st.session_state.sel_grade
 if (not grade_for_acad) and u:
     grade_for_acad = U_TO_GR.get(u, "")
 
 if grade_for_acad and want_grade:
     mask_ac = filtered["_type"].eq("Academics")
-    # keep blank grades to avoid hiding lots of academics rows
     filtered = filtered[~mask_ac | (filtered["_grade"].eq(grade_for_acad) | filtered["_grade"].eq(""))].copy()
 
 st.caption(f"Showing {len(filtered)} item(s).")
@@ -308,7 +328,7 @@ if filtered.empty:
     st.stop()
 
 # =============================
-# RENDER (NO HTML TEXT LEAKING)
+# RENDER
 # =============================
 for _, row in filtered.iterrows():
     category = safe_str(row["_type"])
@@ -322,22 +342,10 @@ for _, row in filtered.iterrows():
     title = team if team else subject
     btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
 
-    under = safe_str(row["_under"])
-    grade = safe_str(row["_grade"])
-    context_bits = []
-    if category in ["Sport", "Culture"] and under:
-        context_bits.append(under)
-    if category == "Academics" and grade:
-        context_bits.append(grade)
-    context = " • ".join(context_bits)
-
     st.markdown('<div class="cardbox">', unsafe_allow_html=True)
 
     st.markdown(f"### {title}")
     st.markdown(f"**{subject}**")
-    if context:
-        st.caption(context)
-
     st.write(f"📅 {date_s}")
     st.write(f"📍 {venue}")
 
