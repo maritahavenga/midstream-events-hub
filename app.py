@@ -1,109 +1,124 @@
+import re
 import streamlit as st
 import pandas as pd
 
-# 1. Basiese Opset
-st.set_page_config(page_title="LMCP Event Hub", layout="centered")
+# =============================
+# CONFIG
+# =============================
+st.set_page_config(page_title="LMCP Event Hub", layout="wide")
 
-# 2. Styl (Midstream Rooi)
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8f9fa; }
-    .nav-bar { background-color: #800000; color: white; padding: 20px; text-align: center; border-radius: 10px; margin-bottom: 20px; }
-    .card { background: white; padding: 20px; border-radius: 12px; border-left: 10px solid #800000; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .info { background: #f1f3f5; padding: 10px; border-radius: 5px; margin-top: 10px; border-left: 3px solid #008080; font-size: 14px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>PRIMARY EVENT HUB</p></div>', unsafe_allow_html=True)
-
-# 3. Die Skakel (Upcoming tab)
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-# Helper: maak Display Duration veilig na int
-def safe_int(x):
-    try:
-        x = str(x).strip()
-        if x == "":
-            return None
-        return int(float(x))
-    except:
-        return None
+# =============================
+# STYLING (modern, less “robot”)
+# =============================
+st.markdown("""
+<style>
+    .stApp { background: #f6f7fb; }
+    .topbar {
+        background: linear-gradient(90deg, #800000, #a00000);
+        color: white;
+        padding: 18px 22px;
+        border-radius: 16px;
+        margin-bottom: 14px;
+        box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+    }
+    .topbar h1 { margin: 0; font-size: 22px; letter-spacing: 0.5px; }
+    .topbar p { margin: 2px 0 0; opacity: 0.95; }
 
-try:
-    df = pd.read_csv(URL)
-    df.columns = df.columns.str.strip()
-    df = df.fillna("")
+    .panel {
+        background: white;
+        border-radius: 16px;
+        padding: 14px 16px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        margin-bottom: 12px;
+        border: 1px solid rgba(0,0,0,0.04);
+    }
+    .pill {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: rgba(128,0,0,0.08);
+        color: #800000;
+        margin-right: 8px;
+    }
+    .card {
+        background: white;
+        border-radius: 18px;
+        padding: 16px 16px 14px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+        margin-bottom: 12px;
+    }
+    .title { font-size: 18px; font-weight: 800; margin: 0; }
+    .sub { font-size: 13px; color: #177; font-weight: 700; margin-top: 6px; }
+    .meta { color: #555; font-size: 14px; margin-top: 8px; line-height: 1.4; }
+    .info {
+        background: #f1f3f6;
+        padding: 10px 12px;
+        border-radius: 12px;
+        margin-top: 10px;
+        border-left: 4px solid #177;
+        font-size: 14px;
+    }
+    .smallnote { font-size: 12px; color: #777; margin-top: 8px; }
+</style>
+""", unsafe_allow_html=True)
 
-    # --- Kolomme uit jou CSV ---
-    COL_CAT      = "Category"
-    COL_SUBJ     = "Activity/Subject Name"
-    COL_TEAM     = "Team"
-    COL_DATE     = "Date / Due Date"
-    COL_VEN      = "Venue"
-    COL_INFO     = "Information"
-    COL_LINK     = "Programme / Document Link"
-    COL_DURATION = "Display Duration"
+st.markdown("""
+<div class="topbar">
+  <h1>MIDSTREAM COLLEGE</h1>
+  <p>Primary Event Hub</p>
+</div>
+""", unsafe_allow_html=True)
 
-    if not df.empty:
+# =============================
+# HELPERS
+# =============================
+U_TO_GR = {
+    "U7": "Gr 1",
+    "U8": "Gr 2",
+    "U9": "Gr 3",
+    "U10": "Gr 4",
+    "U11": "Gr 5",
+    "U12": "Gr 6",
+    "U13": "Gr 7",
+}
+GR_TO_U = {v: k for k, v in U_TO_GR.items()}
 
-        # --- parse datum ---
-        df["_event_dt"] = pd.to_datetime(df[COL_DATE], errors="coerce", dayfirst=True)
-        df["_dur_days"] = df[COL_DURATION].apply(safe_int)
+def safe_str(x) -> str:
+    return "" if pd.isna(x) else str(x).strip()
 
-        today = pd.Timestamp.now(tz="Africa/Johannesburg").normalize().tz_localize(None)
+def normalize_category(cat: str) -> str:
+    c = safe_str(cat).lower()
+    if "sport" in c:
+        return "Sport"
+    if "cultur" in c or "culture" in c:
+        return "Culture"
+    if "academ" in c:
+        return "Academics"
+    # fallback: guess academics if not explicitly sport/culture
+    return "Academics"
 
-        # --- expiry filter (wys vir X dae ná datum) ---
-        def expired(row):
-            dt = row["_event_dt"]
-            dur = row["_dur_days"]
-            if pd.isna(dt) or dur is None:
-                return False  # as ons nie kan bereken nie, wys dit eerder
-            expiry_date = dt.normalize() + pd.Timedelta(days=dur)
-            return today > expiry_date
+def normalize_afrikaans_subject(text: str) -> str:
+    t = safe_str(text)
 
-        df = df[~df.apply(expired, axis=1)].copy()
+    # Afrikaans EAT -> Afrikaans Eerste Addisionele Taal
+    if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\beat\b", t, flags=re.I):
+        # keep other text but ensure the Afrikaans part is correct
+        t = re.sub(r"Afrikaans\s*EAT", "Afrikaans Eerste Addisionele Taal", t, flags=re.I)
 
-        # --- sort volgens datum (naaste eerste) ---
-        df["_sort_dt"] = df["_event_dt"].fillna(pd.Timestamp.max)
-        df = df.sort_values("_sort_dt", ascending=True)
+    # Afrikaans HT -> Afrikaans Hooftaal (as per your required spelling)
+    if re.search(r"\bafrikaans\b", t, flags=re.I) and re.search(r"\bht\b", t, flags=re.I):
+        t = re.sub(r"Afrikaans\s*HT", "Afrikaans Hooftaal", t, flags=re.I)
 
-        # Kategorie Filter (jy kan dit hou, al wys ons nie Category op kaart nie)
-        cats = sorted([c for c in df[COL_CAT].unique() if str(c).strip()])
-        sel_cat = st.multiselect("Kies Kategorie:", cats)
+    return t
 
-        for _, row in df.iterrows():
-            c_cat  = str(row[COL_CAT]).strip()
-            if sel_cat and c_cat not in sel_cat:
-                continue
+def is_afrikaans_activity(text: str) -> bool:
+    t = safe_str(text)
+    return ("Afrikaans" in t) and (re.search(r"\b(EAT|HT)\b", t, flags=re.I) is not None)
 
-            c_subj = str(row[COL_SUBJ]).strip()
-            c_team = str(row[COL_TEAM]).strip()
-            c_date = str(row[COL_DATE]).strip()
-            c_ven  = str(row[COL_VEN]).strip()
-            c_info = str(row[COL_INFO]).strip()
-            c_link = str(row[COL_LINK]).strip()
-
-            # 1) Moenie dubbel wys nie: kies 'n enkel titel
-            title = c_team if c_team else c_subj
-
-            st.markdown(f"""
-            <div class="card">
-                <div style="font-size:1.2rem; font-weight:bold;">{title}</div>
-                <div style="color:#555; font-size:14px; margin-top:6px;">📅 {c_date}</div>
-                <div style="color:#555; font-size:14px;">📍 {c_ven}</div>
-                {f'<div class="info">{c_info}</div>' if c_info.strip() else ''}
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Link knoppie buite card (soos jou vorige uitleg)
-            if c_link.startswith("http"):
-                st.link_button("📂 OOP DOKUMENT", c_link)
-
-    else:
-        st.info("Wagtend op data vanaf die 'Upcoming' tab...")
-
-except Exception as e:
-    st.error("Kon nie tans met Google Sheets koppel nie.")
-    st.code(str(e))
-    if st.button("Probeer weer"):
-        st.rerun()
+def parse_under(value: str) -> str:
+    """Convert age
