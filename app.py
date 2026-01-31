@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import requests, io, re, pytz, hashlib
+from requests.exceptions import RequestException, Timeout
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
@@ -240,13 +241,6 @@ def normalize_venue(v: str) -> str:
     return s
 
 def expand_group_range(raw: str, kind: str):
-    """
-    Expands:
-      - "Gr 4 - Gr7", "Gr4-Gr7", "4-7" => Gr 4..Gr 7
-      - "U8-U13", "8-13" => U8..U13
-      - "1,2,3" / "9,10" => Gr 1,2,3 OR U9,U10
-      - "Gr 7" / "U9" / "7" / "9" => single
-    """
     s = str(raw or "").strip()
     if not s:
         return []
@@ -303,20 +297,40 @@ def build_title(cat_val: str, b_val: str, c_val: str, grade_val: str) -> str:
         return f"{b_txt} {grp}{c_txt}".strip()
     return f"{b_txt} {grp} {c_txt}".strip()
 
-@st.cache_data(ttl=120)
+# ------------------ ANTI-CRASH CSV LOADER ------------------
+@st.cache_data(ttl=120, show_spinner=False)
 def load_csv(url: str):
-    r = requests.get(url, timeout=25, headers={"User-Agent":"Mozilla/5.0"}, allow_redirects=True)
-    r.encoding = "utf-8"
-    txt = r.text or ""
-    if r.status_code != 200 or len(txt) < 20 or "<html" in txt.lower():
-        return pd.DataFrame(), txt
-    df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
-    df.columns = [str(c).strip() for c in df.columns]  # IMPORTANT
-    return df, txt
+    try:
+        r = requests.get(
+            url,
+            timeout=(5, 25),  # connect timeout, read timeout
+            headers={"User-Agent": "Mozilla/5.0"},
+            allow_redirects=True
+        )
+        r.encoding = "utf-8"
+        txt = r.text or ""
+
+        # If Google returns HTML or a bad response, don't crash
+        if r.status_code != 200 or len(txt) < 20 or "<html" in txt.lower():
+            return pd.DataFrame(), txt
+
+        df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
+        df.columns = [str(c).strip() for c in df.columns]  # IMPORTANT
+        return df, txt
+
+    except (Timeout, RequestException) as e:
+        return pd.DataFrame(), f"REQUEST_ERROR: {type(e).__name__}: {e}"
+    except Exception as e:
+        return pd.DataFrame(), f"LOAD_ERROR: {type(e).__name__}: {e}"
 
 df, raw_txt = load_csv(CSV_URL)
 if df.empty:
-    st.error("Geen data is gelaai nie. Wag 1–2 minute na republish en refresh.")
+    st.error("Geen data is gelaai nie. Google Sheets kan dalk stadig wees of publish het verander.")
+    with st.expander("Technical details"):
+        st.code(raw_txt[:1200] if raw_txt else "No response text.")
+    if st.button("Retry"):
+        st.cache_data.clear()
+        st.rerun()
     st.stop()
 
 # ---- Exact header mapping (your current headers) ----
@@ -346,6 +360,7 @@ conf_s  = s(COL_CONFIRM)
 info_s  = s(COL_INFO)
 grade_s = s(COL_GRADE)
 term_s  = s(COL_TERM)
+
 # ------------------ VIEW TOGGLES ------------------
 view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
 
@@ -478,7 +493,6 @@ else:
     for item in res_sorted:
         i = item["i"]
         cn = normalize_category(cat_s.iloc[i])
-        act_norm = normalize_activity(act_s.iloc[i])
         afr = is_afrikaans_subject(act_s.iloc[i])
 
         title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
@@ -492,7 +506,7 @@ else:
         confirm_link = first_url(conf_s.iloc[i])
 
         info_raw = str(info_s.iloc[i]).strip().replace("_"," ")
-        info_link = first_url(info_raw)  # IMPORTANT: extract even if text + link
+        info_link = first_url(info_raw)  # extract even if text + link
         info_text = info_raw
         if info_link:
             info_text = info_text.replace(info_link, "").strip(" -|")
