@@ -155,17 +155,10 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"\bmeisies\b", "Girls", s, flags=re.I)
     s = re.sub(r"\bseuns\b", "Boys", s, flags=re.I)
 
-    has_boys = re.search(r"\bboys\b", s, flags=re.I) is not None
-    has_girls = re.search(r"\bgirls\b", s, flags=re.I) is not None
-
     s = re.sub(r"\bgirls\b", "Girls", s, flags=re.I)
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
 
-    if not has_boys:
-        s = re.sub(r"\bB\b", "Boys", s)
-    if not has_girls:
-        s = re.sub(r"\bG\b", "Girls", s)
-
+    # avoid duplicates
     s = re.sub(r"(Boys)\s*(Boys)\b", r"\1", s)
     s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
     return re.sub(r"\s+"," ", s).strip()
@@ -191,7 +184,7 @@ def parse_date_sa(s):
     raw = str(s).strip()
     if raw == "" or raw.lower() in ["nan","none"]: return None
 
-    # numeric dates (Excel serial)
+    # numeric excel-ish dates
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
             n = float(raw)
@@ -216,6 +209,7 @@ def parse_date_sa(s):
     cleaned = raw.replace(".", "/").replace("-", "/")
     cleaned = re.sub(r"\s+"," ", cleaned)
 
+    # SA first (dayfirst=True)
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
     if not pd.isnull(d1): return d1.to_pydatetime()
 
@@ -262,6 +256,7 @@ def expand_group_range(raw: str, kind: str):
       - 'Gr 4, 5, 6, 7'
       - 'U10, 11, 12, 13'
       - '10,11,12,13'
+    Returns list like ['U10','U11',...] or ['Gr 4','Gr 5',...]
     """
     s = str(raw or "").strip()
     if not s:
@@ -275,50 +270,68 @@ def expand_group_range(raw: str, kind: str):
     if not nums:
         return []
 
+    # range
     if "-" in s and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
+    # list
     if "," in s and "-" not in s:
         lo, hi = min(nums), max(nums)
+        # if it looks contiguous, treat as range
         if len(nums) >= 3 and (hi - lo) <= 6:
             nums = list(range(lo, hi + 1))
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
+    # single
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def group_from_cat_and_grade(cat_norm: str, act_norm: str, grade_raw: str):
+    """
+    IMPORTANT:
+    - Athletics default U7-U13 is REMOVED.
+    - We ALWAYS trust column C (grade_raw) if present.
+    """
     g = str(grade_raw or "").strip()
+
     if cat_norm == "sport":
         if g:
             m = expand_group_range(g, "U")
-            if len(m) >= 2: return f"{m[0]}-{m[-1]}", m
+            if len(m) >= 2:
+                return f"{m[0]}-{m[-1]}", m
             return m[0] if m else "", m
+
+        # only fallback allowed (optional) when column C empty:
         if act_norm.lower() == "swimming":
             m = [f"U{i}" for i in range(8, 14)]
             return "U8-U13", m
-        if act_norm.lower() == "athletics":
-            m = [f"U{i}" for i in range(7, 14)]
-            return "U7-U13", m
+
         return "", []
-    else:
-        if g:
-            m = expand_group_range(g, "Gr")
-            if len(m) >= 2: return f"{m[0]}–{m[-1]}", m
-            return m[0] if m else "", m
-        return "", []
+
+    # Culture / Academics
+    if g:
+        m = expand_group_range(g, "Gr")
+        if len(m) >= 2:
+            return f"{m[0]}–{m[-1]}", m
+        return m[0] if m else "", m
+
+    return "", []
 
 # ---------- TEXT CLEANUP ----------
 def fix_boys_girls_combo(s: str) -> str:
+    """
+    Converts:
+      'Boys & Girls' / 'Boys and Girls' -> 'B Girls'
+    because you want: Tennis U13B Girls
+    """
     t = str(s or "").strip().replace("&amp;", "&")
     t = re.sub(r"\s*&\s*", " & ", t)
-    if re.search(r"\bBoys\s*&\s*Girls\b", t, flags=re.I):
-        t = re.sub(r"\bBoys\s*&\s*Girls\b", "B Girls", t, flags=re.I)
     t = re.sub(r"\bBoys\s+and\s+Girls\b", "B Girls", t, flags=re.I)
+    t = re.sub(r"\bBoys\s*&\s*Girls\b", "B Girls", t, flags=re.I)
     return re.sub(r"\s{2,}", " ", t).strip()
 
 def tidy_team_text(s: str) -> str:
@@ -327,28 +340,21 @@ def tidy_team_text(s: str) -> str:
     # U 13 -> U13
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
 
-    # Remove Athletics duplicate tail like "U7-U13U10--U13"
-    t = re.sub(
-        r"(U\d{1,2}\s*[-–]\s*U\d{1,2})\s*U\d{1,2}\s*[-–]{1,2}\s*U\d{1,2}",
-        r"\1",
-        t,
-        flags=re.I,
-    )
-
-    # Only make double-dash nicer
+    # Remove duplicate athletics tail like "U7-U13 U10--U13"
     t = t.replace("--", "–")
+    t = re.sub(r"(U\d{1,2}\s*[-–]\s*U\d{1,2})\s*U\d{1,2}\s*[-–]\s*U\d{1,2}", r"\1", t, flags=re.I)
 
     # Boys & Girls -> B Girls
     t = fix_boys_girls_combo(t)
 
-    # U13Girls -> U13 Girls
+    # U13Girls -> U13 Girls (only for Girls/Boys words)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
 
     # TennisU11B -> Tennis U11B
     t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
 
-    # Python 3.13 safe: U11Boys -> U11 Boys (NO look-behind)
-    t = re.sub(r"\b(U\d{1,2})([A-Za-z])", r"\1 \2", t)
+    # IMPORTANT: DO NOT split U13B into U13 B
+    # (So we intentionally DO NOT add generic spacing after U##.)
 
     return re.sub(r"\s{2,}", " ", t).strip()
 
@@ -356,6 +362,7 @@ def build_title(cat_val: str, b_val: str, c_val: str, grade_val: str) -> str:
     cn = normalize_category(cat_val)
     act_norm = normalize_activity(b_val)
     b_txt = norm_gender_words(act_norm)
+
     c_txt = tidy_team_text(norm_gender_words(c_val)).strip()
 
     grp_disp, _ = group_from_cat_and_grade(cn, act_norm, grade_val)
@@ -387,7 +394,7 @@ def load_csv(url: str):
 
 df, raw_txt = load_csv(CSV_URL)
 if df.empty:
-    st.error("No data loaded from Google Sheets yet. Republish the sheet and refresh.")
+    st.error("Geen data is gelaai nie. Maak seker die sheet is gepublish en refresh.")
     if st.button("Retry"):
         st.cache_data.clear()
         st.rerun()
@@ -455,13 +462,13 @@ selected_act = st.sidebar.multiselect("Activity/Subject", act_opts, default=[])
 
 selected_u = st.sidebar.multiselect(
     "Age Groups (Sport)",
-    [f"U{i}" for i in range(7,14)],
+    [f"U{i}" for i in range(7, 14)],
     default=[]
 ) if (not wanted or "sport" in wanted) else []
 
 selected_gr = st.sidebar.multiselect(
     "Grades (Culture/Academics)",
-    [f"Gr {i}" for i in range(1,8)],
+    [f"Gr {i}" for i in range(1, 8)],
     default=[]
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
@@ -535,7 +542,7 @@ for i in range(len(df)):
         if not grp_matches:
             continue
 
-    # Culture/Academics grades
+    # Culture/Academics grades (range friendly: Gr 4 sees Gr 4-7)
     if cn in ["culture", "academics"] and selected_gr_set:
         if grp_matches and not any(x in selected_gr_set for x in grp_matches):
             continue
@@ -586,7 +593,7 @@ st.markdown("## 📅 Events")
 pin = "&#128205;"
 
 if not res_sorted:
-    st.info("No items match your filters.")
+    st.info("Niks pas by jou filters nie.")
 else:
     for item in res_sorted:
         i = item["i"]
@@ -629,7 +636,7 @@ else:
             if info_link and is_http(info_link):
                 buttons.append(("Information", info_link))
 
-            # Confirm only if it's a Google Form (used mainly Sport/Culture)
+            # Confirm only if it's a Google Form
             if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
                 buttons.append(("Confirm", confirm_link))
 
@@ -651,9 +658,6 @@ else:
         # Notes
         if info_text:
             notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
-
-        if "revue" in (title.lower() + " " + info_raw.lower()):
-            notes_parts.append("<b>Note:</b><br>Revue")
 
         notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
 
