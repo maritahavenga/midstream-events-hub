@@ -10,50 +10,78 @@ st.set_page_config(page_title="LMCP Event Hub", layout="wide")
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 # =============================
-# STYLING (Modern)
+# BRAND COLORS (Maroon + Teal)
 # =============================
-st.markdown("""
+MAROON = "#6b0019"
+TEAL   = "#0f5b66"
+BG     = "#f6f7fb"
+
+# =============================
+# STYLING
+# =============================
+st.markdown(f"""
 <style>
-    .stApp { background: #f6f7fb; }
-    .topbar {
-        background: linear-gradient(90deg, #800000, #a00000);
+    .stApp {{ background: {BG}; }}
+
+    .topbar {{
+        background: linear-gradient(90deg, {MAROON}, {TEAL});
         color: white;
         padding: 18px 22px;
         border-radius: 18px;
         margin-bottom: 14px;
+        border: 3px solid rgba(255,255,255,0.35); /* banner border */
         box-shadow: 0 10px 18px rgba(0,0,0,0.10);
-    }
-    .topbar h1 { margin: 0; font-size: 22px; letter-spacing: 0.4px; }
-    .topbar p { margin: 2px 0 0; opacity: 0.95; }
+    }}
+    .topbar h1 {{ margin: 0; font-size: 22px; letter-spacing: 0.4px; }}
+    .topbar p {{ margin: 2px 0 0; opacity: 0.95; }}
 
-    .panel {
+    .panel {{
         background: white;
         border-radius: 18px;
         padding: 14px 16px;
         box-shadow: 0 6px 16px rgba(0,0,0,0.08);
         margin-bottom: 12px;
         border: 1px solid rgba(0,0,0,0.04);
-    }
-    .label {
+    }}
+
+    .label {{
         font-size: 12px;
         font-weight: 800;
         letter-spacing: 0.2px;
         color: #2c2c2c;
         margin-bottom: 6px;
         display: block;
-    }
-    .cardbox {
+    }}
+
+    .cardbox {{
         background: white;
         border-radius: 20px;
         padding: 14px 14px;
         border: 1px solid rgba(0,0,0,0.06);
         box-shadow: 0 10px 18px rgba(0,0,0,0.08);
         margin-bottom: 12px;
-    }
+    }}
+    .title {{
+        font-size: 18px;
+        font-weight: 900;
+        margin: 0;
+    }}
+    .subtitle {{
+        font-size: 14px;
+        font-weight: 800;
+        color: {TEAL};
+        margin-top: 6px;
+    }}
+    .meta {{
+        color: #555;
+        font-size: 14px;
+        margin-top: 10px;
+        line-height: 1.6;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
+st.markdown(f"""
 <div class="topbar">
   <h1>MIDSTREAM COLLEGE</h1>
   <p>Primary Event Hub</p>
@@ -61,7 +89,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================
-# MAPPINGS
+# MAPPINGS (U -> Grade)
 # =============================
 U_TO_GR = {
     "U7": "Gr 1",
@@ -81,47 +109,21 @@ def safe_str(x) -> str:
     return "" if pd.isna(x) else str(x).strip()
 
 def normalize_category(cat: str) -> str:
-    c = safe_str(cat).strip().lower()
-
-    # strict matching
+    c = safe_str(cat).lower()
     if re.search(r"\bsport(s)?\b", c):
         return "Sport"
     if re.search(r"\bcultur(e|al)?\b", c):
         return "Culture"
     if re.search(r"\bacadem(ic|ics)?\b", c):
         return "Academics"
-
     return "Unknown"
 
-def normalize_afrikaans_subject(text: str) -> str:
-    t = safe_str(text)
-    low = t.lower()
-
-    # Only do replacements when the subject includes "afrikaans"
-    if "afrikaans" in low:
-        # Any EAT variation -> full phrase
-        if re.search(r"\beat\b", low):
-            # Replace standalone EAT token or Afrikaans ... EAT variations
-            t = re.sub(r"\bEAT\b", "Eerste Addisionele Taal", t, flags=re.I)
-            # If it says "Afrikaans Eerste Addisionele Taal" without spacing, ensure good format:
-            t = re.sub(r"Afrikaans\s*Eerste\s*Addisionele\s*Taal", "Afrikaans Eerste Addisionele Taal", t, flags=re.I)
-
-        # Any HT variation -> full phrase (spelling as requested)
-        if re.search(r"\bht\b", low):
-            t = re.sub(r"\bHT\b", "Hooftaal", t, flags=re.I)
-            t = re.sub(r"Afrikaans\s*Hooftaal", "Afrikaans Hooftaal", t, flags=re.I)
-
-    return t
-
-def is_afrikaans_activity(text: str) -> bool:
-    t = safe_str(text)
-    if "Afrikaans" not in t:
-        return False
-    return (
-        "Eerste Addisionele Taal" in t
-        or "Hooftaal" in t
-        or re.search(r"\b(EAT|HT)\b", t, flags=re.I) is not None
-    )
+def sa_long_date(dt: pd.Timestamp, raw_text: str) -> str:
+    """Return '11 February 2026'. If dt invalid, return raw."""
+    if pd.isna(dt):
+        return raw_text.strip()
+    month = dt.strftime("%B")
+    return f"{dt.day} {month} {dt.year}"
 
 def parse_under(value: str) -> str:
     v = safe_str(value)
@@ -162,14 +164,56 @@ def safe_int(x):
     except:
         return None
 
-# Safer expiry: only expire if duration > 0 AND date is valid
 def is_expired(row, today):
+    """Expire only if duration > 0 and date is valid."""
     dt = row["_event_dt"]
     dur = row["_dur_days"]
     if pd.isna(dt) or dur is None or dur <= 0:
         return False
     expiry_date = dt.normalize() + pd.Timedelta(days=dur)
     return today > expiry_date
+
+# ---- Afrikaans formatting rules ----
+def classify_afrikaans(subject: str):
+    """
+    Returns (main_title, second_line_activity, is_afrikaans_row)
+    - main_title: Afrikaans Eerste Addisionele Taal / Afrikaans Hooftaal
+    - second line: rest of the activity text (no duplication)
+    """
+    s = safe_str(subject)
+    low = s.lower()
+
+    if "afrikaans" not in low:
+        return "", s, False
+
+    # Detect EAT/HT even if written with spaces/dashes/brackets
+    eat = re.search(r"\beat\b", low) is not None
+    ht  = re.search(r"\bht\b", low) is not None
+
+    if eat:
+        main = "Afrikaans Eerste Addisionele Taal"
+        # remove "afrikaans" + any eat tokens from the remainder
+        remainder = re.sub(r"afrikaans", "", s, flags=re.I)
+        remainder = re.sub(r"\beat\b", "", remainder, flags=re.I)
+        remainder = re.sub(r"[\-\(\)\[\]:]+", " ", remainder)
+        remainder = re.sub(r"\s+", " ", remainder).strip(" -")
+        return main, (remainder if remainder else "Activity"), True
+
+    if ht:
+        main = "Afrikaans Hooftaal"
+        remainder = re.sub(r"afrikaans", "", s, flags=re.I)
+        remainder = re.sub(r"\bht\b", "", remainder, flags=re.I)
+        remainder = re.sub(r"[\-\(\)\[\]:]+", " ", remainder)
+        remainder = re.sub(r"\s+", " ", remainder).strip(" -")
+        return main, (remainder if remainder else "Activity"), True
+
+    # Afrikaans but no HT/EAT token – keep as normal
+    return "", s, False
+
+def button_text_for_row(subject: str) -> str:
+    # If Afrikaans row (EAT/HT) -> Afrikaans button
+    main, _, is_af = classify_afrikaans(subject)
+    return "Dokument" if is_af else "Document"
 
 # =============================
 # LOAD DATA
@@ -198,18 +242,21 @@ COL_LINK     = "Programme / Document Link"
 COL_DURATION = "Display Duration"
 COL_AGEGRADE = "Age Group (9,10) / Grade (1,2,3)"
 
+# Normalize fields
 df["_type"] = df[COL_CAT].apply(normalize_category)
-df["_subject"] = df[COL_SUBJ].apply(normalize_afrikaans_subject)
 
+# Parse date for sorting + expiry + formatting
 df["_event_dt"] = pd.to_datetime(df[COL_DATE], errors="coerce", dayfirst=True)
 df["_dur_days"] = df[COL_DURATION].apply(safe_int)
 
 today = pd.Timestamp.now(tz="Africa/Johannesburg").normalize().tz_localize(None)
 df = df[~df.apply(lambda r: is_expired(r, today), axis=1)].copy()
 
+# Under / grade
 df["_under"] = df[COL_AGEGRADE].apply(parse_under)
 df["_grade"] = df[COL_AGEGRADE].apply(parse_grade)
 
+# Sort by date (nearest first; unknown last)
 df["_sort_dt"] = df["_event_dt"].fillna(pd.Timestamp.max)
 df = df.sort_values("_sort_dt", ascending=True)
 
@@ -228,7 +275,7 @@ if "sel_grade" not in st.session_state:
 # =============================
 st.markdown('<div class="panel">', unsafe_allow_html=True)
 
-# 1) Category (explicit key fixes the “Sport still shows academics” issue)
+# Category
 st.markdown('<span class="label">Category</span>', unsafe_allow_html=True)
 all_cats = ["Sport", "Culture", "Academics"]
 st.session_state.sel_categories = st.multiselect(
@@ -241,11 +288,12 @@ st.session_state.sel_categories = st.multiselect(
 if not st.session_state.sel_categories:
     st.session_state.sel_categories = ["Sport", "Culture", "Academics"]
 
-# 2) Activity (filtered by chosen categories)
+# Activity (changes per category)
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<span class="label">Activity</span>', unsafe_allow_html=True)
+
 df_cat = df[df["_type"].isin(st.session_state.sel_categories)].copy()
-activity_options = sorted([a for a in df_cat["_subject"].unique() if str(a).strip()])
+activity_options = sorted([safe_str(a) for a in df_cat[COL_SUBJ].unique() if safe_str(a)])
 sel_acts = st.multiselect(
     "Activity",
     options=activity_options,
@@ -254,9 +302,8 @@ sel_acts = st.multiselect(
     label_visibility="collapsed",
     placeholder="All activities",
 )
-st.caption("Tip: Clear Activity to show all.")
 
-# 3) Age Group
+# Age Group
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<span class="label">Age Group</span>', unsafe_allow_html=True)
 
@@ -264,7 +311,6 @@ want_under = any(c in st.session_state.sel_categories for c in ["Sport", "Cultur
 want_grade = "Academics" in st.session_state.sel_categories
 
 colL, colR = st.columns(2)
-
 with colL:
     if want_under:
         under_options = [""] + list(U_TO_GR.keys())
@@ -275,6 +321,7 @@ with colL:
             key="under_select",
             label_visibility="collapsed",
         )
+        # keep grade in sync when adding academics later
         if st.session_state.sel_under and not st.session_state.sel_grade:
             st.session_state.sel_grade = U_TO_GR.get(st.session_state.sel_under, "")
     else:
@@ -290,6 +337,7 @@ with colR:
             key="grade_select",
             label_visibility="collapsed",
         )
+        # keep under in sync if sport/culture also selected
         if st.session_state.sel_grade and not st.session_state.sel_under and want_under:
             st.session_state.sel_under = GR_TO_U.get(st.session_state.sel_grade, "")
     else:
@@ -304,15 +352,15 @@ filtered = df[df["_type"].isin(st.session_state.sel_categories)].copy()
 
 # Activity filter
 if sel_acts:
-    filtered = filtered[filtered["_subject"].isin(sel_acts)]
+    filtered = filtered[filtered[COL_SUBJ].isin(sel_acts)]
 
-# Under filter for sport/culture only (keep blanks so you don't lose rows)
+# Under filter for sport/culture rows
 u = st.session_state.sel_under
 if u and want_under:
     mask_sc = filtered["_type"].isin(["Sport", "Culture"])
     filtered = filtered[~mask_sc | (filtered["_under"].eq(u) | filtered["_under"].eq(""))].copy()
 
-# Grade filter for academics (grade selected OR inferred from under; keep blanks)
+# Grade filter for academics rows (grade or inferred from under)
 grade_for_acad = st.session_state.sel_grade
 if (not grade_for_acad) and u:
     grade_for_acad = U_TO_GR.get(u, "")
@@ -328,26 +376,45 @@ if filtered.empty:
     st.stop()
 
 # =============================
-# RENDER
+# RENDER CARDS
 # =============================
 for _, row in filtered.iterrows():
-    category = safe_str(row["_type"])
-    subject  = safe_str(row["_subject"])
-    team     = safe_str(row[COL_TEAM])
-    date_s   = safe_str(row[COL_DATE])
-    venue    = safe_str(row[COL_VEN])
-    info     = safe_str(row[COL_INFO])
-    link     = safe_str(row[COL_LINK])
+    raw_subject = safe_str(row[COL_SUBJ])
+    team        = safe_str(row[COL_TEAM])
+    venue       = safe_str(row[COL_VEN])
+    info        = safe_str(row[COL_INFO])
+    link        = safe_str(row[COL_LINK])
 
-    title = team if team else subject
-    btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
+    # SA long date
+    dt = row["_event_dt"]
+    date_text = sa_long_date(dt, safe_str(row[COL_DATE]))
+
+    # Afrikaans title/second-line rule
+    af_title, second_line, is_af = classify_afrikaans(raw_subject)
+
+    # Title rule (no duplication)
+    if is_af:
+        title = af_title
+        subtitle = second_line  # required: second line must be activity
+    else:
+        # normal: title uses team if present, else subject; subtitle is subject if title came from team
+        title = team if team else raw_subject
+        subtitle = raw_subject if team else ""
+
+    btn_text = button_text_for_row(raw_subject)
 
     st.markdown('<div class="cardbox">', unsafe_allow_html=True)
 
-    st.markdown(f"### {title}")
-    st.markdown(f"**{subject}**")
-    st.write(f"📅 {date_s}")
-    st.write(f"📍 {venue}")
+    st.markdown(f'<div class="title">{title}</div>', unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f'<div class="subtitle">{subtitle}</div>', unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="meta">
+        📅 {date_text}<br>
+        📍 {venue}
+    </div>
+    """, unsafe_allow_html=True)
 
     if info:
         st.info(info)
