@@ -363,7 +363,16 @@ def s(colname):
 
 cat_s   = s(COL_CATEGORY)
 act_s   = s(COL_ACTIVITY)
-team_s  = s(COL_TE# ------------------ VIEW TOGGLES ------------------
+team_s  = s(COL_TEAM)
+date_s  = s(COL_DATE)
+ven_s   = s(COL_VENUE)
+prog_s  = s(COL_PROGRAMME)
+teamlnk_s = s(COL_TEAMS_LNK)
+conf_s  = s(COL_CONFIRM)
+info_s  = s(COL_INFO)
+term_s  = s(COL_TERM)
+grade_s = s(COL_GRADE)
+# ------------------ VIEW TOGGLES ------------------
 view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
 
 # ------------------ FILTERS ------------------
@@ -589,12 +598,3 @@ st.markdown(
     "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
     unsafe_allow_html=True
 )
-AM)
-date_s  = s(COL_DATE)
-ven_s   = s(COL_VENUE)
-prog_s  = s(COL_PROGRAMME)
-teamlnk_s = s(COL_TEAMS_LNK)
-conf_s  = s(COL_CONFIRM)
-info_s  = s(COL_INFO)
-term_s  = s(COL_TERM)
-grade_s = s(COL_GRADE)
