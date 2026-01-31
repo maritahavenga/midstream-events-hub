@@ -1,9 +1,14 @@
 import streamlit as st
 import pandas as pd
-import re
 
+# =============================
+# 1. Basiese opset
+# =============================
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
+# =============================
+# 2. Styl (Midstream rooi)
+# =============================
 st.markdown("""
 <style>
 .stApp { background-color: #f8f9fa; }
@@ -19,104 +24,49 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# =============================
+# 3. Google Sheets CSV (Upcoming)
+# =============================
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-
-def norm(s: str) -> str:
-    """Normaliseer kolomname sodat klein verskille nie breek nie."""
-    s = str(s).strip().lower()
-    s = s.replace("\ufeff", "")  # verwyder BOM indien daar is
-    s = s.replace("…", "...")    # maak ellipsis uniform
-    s = re.sub(r"\s+", "", s)    # verwyder spasies
-    s = re.sub(r"[^\w]+", "", s) # verwyder / ( ) ens.
-    return s
-
-
-def read_sheet_safely(url: str) -> pd.DataFrame:
-    """Probeer verskillende header-rye (0,1,2) tot die kolomme sin maak."""
-    last = None
-    for hdr in (0, 1, 2):
-        try:
-            df0 = pd.read_csv(url, header=hdr).fillna("")
-            df0.columns = [str(c).strip() for c in df0.columns]
-            # Basiese sanity check: moet minstens 'Category' êrens hê
-            cols_norm = {norm(c) for c in df0.columns}
-            if "category" in cols_norm:
-                return df0
-            last = df0
-        except Exception as e:
-            last = e
-    # As ons hier uitkom, return die laaste poging (of raise)
-    if isinstance(last, Exception):
-        raise last
-    return last
-
-
-def pick_col(df: pd.DataFrame, *candidates: str) -> str:
-    """
-    Kry die werklike kolomnaam in df wat ooreenstem met een van candidates.
-    Candidates kan klein verskille hê.
-    """
-    lookup = {norm(c): c for c in df.columns}  # norm -> actual
-    for cand in candidates:
-        key = norm(cand)
-        if key in lookup:
-            return lookup[key]
-    return ""
-
-
+# =============================
+# 4. Data laai & wys
+# =============================
 try:
-    df = read_sheet_safely(URL)
-
-    # --- MATCH kolomme robust ---
-    col_category = pick_col(df, "Category")
-    col_subject  = pick_col(df, "Activity/Subject", "Activity Subject", "Activity", "Subject")
-    col_team     = pick_col(df, "Team")
-    col_date     = pick_col(df, "Date / Due Date", "Date", "Due Date")
-    col_venue    = pick_col(df, "Venue")
-    col_info     = pick_col(df, "Information", "Info")
-    col_link     = pick_col(df, "Programme / Doc", "Programme/Doc", "Programme Doc", "Document", "Doc")
-    col_grade    = pick_col(df, "Age Group (9,10…)", "Age Group (9,10...)", "Age Group", "AgeGroup")
-
-    required = {
-        "Category": col_category,
-        "Activity/Subject": col_subject,
-        "Team": col_team,
-        "Date / Due Date": col_date,
-        "Venue": col_venue,
-        "Information": col_info,
-        "Programme / Doc": col_link,
-    }
-
-    missing = [k for k, v in required.items() if not v]
-    if missing:
-        st.error("Ek kan nie jou kolomme match nie. Hierdie velde ontbreek:")
-        st.write(missing)
-        st.write("Kolomme wat ek wel sien in die CSV:")
-        st.write(list(df.columns))
-        st.stop()
+    df = pd.read_csv(URL)
+    df.columns = df.columns.str.strip()
+    df = df.fillna("")
 
     if df.empty:
-        st.info("Geen data beskikbaar nie.")
+        st.info("Wagtend op data vanaf die 'Upcoming' tab...")
         st.stop()
 
-    # Kategorie filter
-    categories = sorted([c for c in df[col_category].unique() if str(c).strip()])
-    selected = st.multiselect("Kies Kategorie:", categories)
+    # --- Presiese kolomname uit jou CSV ---
+    COL_CAT   = "Category"
+    COL_SUBJ  = "Activity/Subject Name"
+    COL_TEAM  = "Team"
+    COL_DATE  = "Date / Due Date"
+    COL_VEN   = "Venue"
+    COL_INFO  = "Information"
+    COL_GRADE = "Age Group (9,10) / Grade (1,2,3)"
+    COL_LINK  = "Programme / Document Link"
 
-    # Events wys
+    # Kategorie filter
+    cats = sorted([c for c in df[COL_CAT].unique() if str(c).strip()])
+    sel_cat = st.multiselect("Kies Kategorie:", cats)
+
     for _, row in df.iterrows():
-        c_cat  = str(row[col_category]).strip()
-        if selected and c_cat not in selected:
+        c_cat   = str(row[COL_CAT]).strip()
+        if sel_cat and c_cat not in sel_cat:
             continue
 
-        c_subj = str(row[col_subject]).strip()
-        c_team = str(row[col_team]).strip() if col_team else ""
-        c_date = str(row[col_date]).strip()
-        c_ven  = str(row[col_venue]).strip()
-        c_info = str(row[col_info]).strip()
-        c_link = str(row[col_link]).strip()
-        c_grade = str(row[col_grade]).strip() if col_grade else ""
+        c_subj  = str(row[COL_SUBJ]).strip()
+        c_team  = str(row[COL_TEAM]).strip()
+        c_date  = str(row[COL_DATE]).strip()
+        c_ven   = str(row[COL_VEN]).strip()
+        c_info  = str(row[COL_INFO]).strip()
+        c_grade = str(row[COL_GRADE]).strip()
+        c_link  = str(row[COL_LINK]).strip()
 
         title = c_team if c_team else c_subj
 
