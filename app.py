@@ -1,567 +1,196 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz, hashlib
-from datetime import datetime, timedelta
+import requests, io, re, pytz
+from datetime import datetime
 
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
-LOGO_URL = "https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg"
+# ✅ UPCOMING TAB (gid=37057995)
+U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-TZ = pytz.timezone("Africa/Johannesburg")
-now_dt = datetime.now(TZ)
-today = now_dt.date()
-
-# ------------------ STYLE ------------------
+# ---------- STYLE ----------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
-html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
-:root{
-  --maroon:#800000; --teal:#008080; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06);
-}
-.block-container{padding-top:1.35rem;}
-
-.topBanner{
-  margin-top:14px;
-  border-radius:22px;
-  padding:18px 18px 16px 18px;
-  margin-bottom:22px;
-  background:#008080;
-  box-shadow:var(--shadow);
-  color:#fff;
-}
-.topBannerInner{display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center;}
-.longLogo{
-  width:min(900px, 100%);
-  border-radius:16px;
-  background:#fff;
-  padding:10px 12px;
-  border:2px solid rgba(255,255,255,0.35);
-}
-.longLogo img{width:100%;height:auto;display:block;}
-.hubText{font-weight:900;font-size:1.45rem;letter-spacing:.3px;}
-
-.card{
+:root{--maroon:#800000;--teal:#008080;--line:#e9edf3;}
+.block-container{padding-top:1.0rem;}
+.banner{
+  display:flex;gap:16px;align-items:center;
+  background:linear-gradient(135deg,#ffffff, #f7fbfb);
   border:1px solid var(--line);
-  background:#fff;
-  box-shadow:var(--shadow);
-  border-radius:18px;
-  padding:14px 14px 12px 14px;
-  margin-bottom:14px;
+  border-radius:18px;padding:16px 18px;margin-bottom:14px;
+}
+.card{
+  background:white;border:1px solid var(--line);
   border-left:10px solid var(--maroon);
-  position:relative;
+  border-radius:16px;padding:14px 14px 12px 14px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.05);
+  margin-bottom:12px;
 }
-.card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
-.meta{color:#64748b;margin-top:8px;font-size:.95rem;}
-.noteBlock{
-  margin-top:12px;padding:12px;border-radius:14px;
-  background:rgba(0,128,128,0.08);
-  border:1px solid rgba(0,128,128,0.25);
-  color:#0f172a;font-size:.95rem;line-height:1.35;
+.title{font-size:1.12rem;font-weight:900;color:var(--maroon);line-height:1.2;}
+.meta{color:#4b5563;margin-top:6px;font-size:0.95rem;}
+.pills{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;}
+.pill{
+  display:inline-block;padding:4px 10px;border-radius:999px;
+  background:rgba(0,128,128,0.10);color:var(--teal);
+  font-weight:800;font-size:0.82rem;
 }
-.btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-.btn{
-  display:inline-block;background:var(--teal);color:white !important;
-  padding:9px 12px;border-radius:12px;font-weight:900;
-  text-decoration:none;font-size:.90rem;
-}
-.btn:hover{opacity:.92;}
-
-.ribbon{
-  position:absolute; top:12px; right:12px;
-  background:#FFD400;
-  color:#B00000;
-  font-weight:1000;
-  font-size:.78rem;
-  padding:6px 10px;
-  border-radius:999px;
-  border:1px solid rgba(176,0,0,0.25);
-  box-shadow:0 8px 16px rgba(0,0,0,0.10);
-  display:flex;align-items:center;gap:8px;
-}
-.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
-@keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="topBanner">
-  <div class="topBannerInner">
-    <div class="longLogo"><img src="{LOGO_URL}"></div>
-    <div class="hubText">Digital Hub</div>
+# ---------- BANNER ----------
+st.markdown("""
+<div class="banner">
+  <img src="https://raw.githubusercontent.com/LMCPEventsHub/midstream-events-hub/main/LMCP_RGB%20(1).png"
+       style="width:76px;height:auto;border-radius:12px;">
+  <div>
+    <div style="font-weight:950;color:#800000;font-size:1.35rem;line-height:1.1;">
+      LAERSKOOL MIDSTREAM COLLEGE PRIMARY
+    </div>
+    <div style="color:#008080;font-size:1.05rem;font-weight:800;margin-top:4px;">
+      Digital Hub
+    </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ------------------ HELPERS ------------------
-def safe_txt(x) -> str:
-    s = str(x or "")
-    return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").strip()
+# ---------- HELPERS ----------
+def cl(v):
+    return str(v).replace(".0", "").replace("nan", "").strip()
 
-def is_http(u: str) -> bool:
-    s = str(u or "").strip().lower()
-    return s.startswith("http://") or s.startswith("https://")
+def tr(t):
+    t = str(t).replace("-", " ").replace("/", " ").strip()
+    d = {"Saal":"Hall","Veld":"Field","Atletiek":"Athletics","Wiskunde":"Math","Netbal":"Netball"}
+    for k, v in d.items():
+        t = re.sub(rf"\\b{k}\\b", v, t, flags=re.I)
+    return t
 
-def first_url(v: str) -> str:
-    s = str(v or "").replace("\n"," ").strip()
-    m = re.search(r"https?://\S+", s)
-    return m.group(0) if m else ""
+def c_a(n):
+    n = str(n).lower()
+    for x in ["hockey","rugby","netball","swimming","athletics","tennis"]:
+        if x in n:
+            return x.capitalize()
+    if "eerste" in n:
+        return "Afrikaans EAT"
+    if "hooftaal" in n:
+        return "Afrikaans HT"
+    if "afrikaans" in n:
+        return "Afrikaans"
+    return n.capitalize()
 
-def normalize_category(v: str) -> str:
-    s = str(v or "").strip().lower()
-    if "sport" in s: return "sport"
-    if "culture" in s or "kultuur" in s: return "culture"
-    if "academic" in s or "academics" in s or "akadem" in s: return "academics"
-    return s
+def looks_like_html(txt: str) -> bool:
+    s = (txt or "").lower()
+    return ("<!doctype" in s) or ("<html" in s)
 
-def normalize_activity(v: str) -> str:
-    s = str(v or "").strip().lower()
-    s = re.sub(r"\s+"," ", s)
-    if s in ["ht","afrikaans ht"] or "hooftaal" in s:
-        return "Afrikaans Hooftaal"
-    if s in ["eat","afrikaans eat"] or "eerste addisionele" in s or s == "eat":
-        return "Afrikaans Eerste Addisionele Taal"
-    if "wiskunde" in s: return "Math"
-    if "atletiek" in s or "athletics" in s: return "Athletics"
-    if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
-    if "tennis" in s: return "Tennis"
-    if "rugby" in s: return "Rugby"
-    if "hockey" in s: return "Hockey"
-    if "netbal" in s or "netball" in s: return "Netball"
-    if "koor" in s or "choir" in s: return "Choir"
-    if "revue" in s: return "Revue"
-    return s.title()
-
-def is_afrikaans_subject(b_raw: str) -> bool:
-    s = str(b_raw or "").strip().lower()
-    return ("afrikaans" in s) or (s in ["ht","eat"]) or ("hooftaal" in s) or ("eerste addisionele" in s)
-
-def norm_gender_words(text: str) -> str:
-    s = str(text or "").strip().replace("_", " ")
-    s = re.sub(r"\s+"," ", s).strip()
-    s = re.sub(r"\bmeisies\b", "Girls", s, flags=re.I)
-    s = re.sub(r"\bseuns\b", "Boys", s, flags=re.I)
-
-    has_boys = re.search(r"\bboys\b", s, flags=re.I) is not None
-    has_girls = re.search(r"\bgirls\b", s, flags=re.I) is not None
-
-    s = re.sub(r"\bgirls\b", "Girls", s, flags=re.I)
-    s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
-
-    if not has_boys:
-        s = re.sub(r"\bB\b", "Boys", s)
-    if not has_girls:
-        s = re.sub(r"\bG\b", "Girls", s)
-
-    s = re.sub(r"(Boys)\s*(Boys)\b", r"\1", s)
-    s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
-    return re.sub(r"\s+"," ", s).strip()
-
-MONTHS = {
-    "jan":"January","january":"January",
-    "feb":"February","february":"February",
-    "mar":"March","march":"March",
-    "apr":"April","april":"April",
-    "may":"May",
-    "jun":"June","june":"June",
-    "jul":"July","july":"July",
-    "aug":"August","august":"August",
-    "sep":"September","september":"September",
-    "oct":"October","october":"October",
-    "nov":"November","november":"November",
-    "dec":"December","december":"December",
-}
-
-def parse_date_sa(s):
-    if s is None: return None
-    raw = str(s).strip()
-    if raw == "" or raw.lower() in ["nan","none"]: return None
-
-    if re.fullmatch(r"\d+(\.\d+)?", raw):
-        try:
-            n = float(raw)
-            if n > 30000:
-                base = datetime(1899, 12, 30)
-                return base + timedelta(days=int(n))
-        except:
-            pass
-
-    m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
-    if m:
-        d = int(m.group(1))
-        mon = m.group(2).lower()
-        if mon in MONTHS:
-            year = datetime.now(TZ).year
-            try:
-                return datetime.strptime(f"{d} {MONTHS[mon]} {year}", "%d %B %Y")
-            except:
-                pass
-
-    cleaned = raw.replace(".", "/").replace("-", "/")
-    cleaned = re.sub(r"\s+"," ", cleaned)
-
-    d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1): return d1.to_pydatetime()
-
-    d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2): return d2.to_pydatetime()
-
-    return None
-
-def format_date_long_sa(s) -> str:
-    dt = parse_date_sa(s)
-    if not dt: return str(s or "").strip()
-    return f"{dt.day} {dt.strftime('%B %Y')}"
-
-VENUE_MAP = {
-    "musiekkamer": "Music Room",
-    "musiek kamer": "Music Room",
-    "saal": "Hall",
-    "ouditorium": "Auditorium",
-    "veld": "Field",
-    "bondev": "Bondev Field",
-    "swembad": "Swimming Pool",
-    "tennis bane": "Tennis Courts",
-    "netbal bane": "Netball Courts",
-    "cricket oval": "Cricket Oval",
-}
-
-def normalize_venue(v: str) -> str:
-    s = str(v or "").strip().replace("_", " ")
-    s = re.sub(r"\s+"," ", s)
-    sl = s.lower()
-    if "see programme" in sl or "see program" in sl or "sien program" in sl or "sien programme" in sl:
-        return "SEE_PROGRAMME"
-    for k, vv in VENUE_MAP.items():
-        if k in sl:
-            return vv
-    return s
-
-def expand_group_range(raw: str, kind: str):
-    """
-    Expands:
-      - "Gr 4 - Gr7", "Gr4-Gr7", "4-7" => Gr 4..Gr 7
-      - "U8-U13", "8-13" => U8..U13
-      - "1,2,3" / "9,10" => Gr 1,2,3 OR U9,U10
-      - "Gr 7" / "U9" / "7" / "9" => single
-    """
-    s = str(raw or "").strip()
-    if not s:
-        return []
-    s = s.replace("–", "-").replace("—", "-")
-    s = re.sub(r"\s*-\s*", "-", s)
-    s = s.replace(" ", "")
-
-    if "," in s and "-" not in s:
-        nums = re.findall(r"\d+", s)
-        return [f"U{n}" for n in nums] if kind == "U" else [f"Gr {n}" for n in nums]
-
-    if "-" in s:
-        nums = re.findall(r"\d+", s)
-        if len(nums) >= 2:
-            lo, hi = sorted([int(nums[0]), int(nums[1])])
-            return [f"U{i}" for i in range(lo, hi + 1)] if kind == "U" else [f"Gr {i}" for i in range(lo, hi + 1)]
-        return []
-
-    nums = re.findall(r"\d+", s)
-    if len(nums) == 1:
-        return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
-    return []
-
-def group_from_cat_and_grade(cat_norm: str, act_norm: str, grade_raw: str):
-    g = str(grade_raw or "").strip()
-    if cat_norm == "sport":
-        if g:
-            m = expand_group_range(g, "U")
-            if len(m) >= 2: return f"{m[0]}-{m[-1]}", m
-            return m[0] if m else "", m
-        if act_norm.lower() == "swimming":
-            m = [f"U{i}" for i in range(8, 14)]
-            return "U8-U13", m
-        if act_norm.lower() == "athletics":
-            m = [f"U{i}" for i in range(7, 14)]
-            return "U7-U13", m
-        return "", []
-    else:
-        if g:
-            m = expand_group_range(g, "Gr")
-            if len(m) >= 2: return f"{m[0]}–{m[-1]}", m
-            return m[0] if m else "", m
-        return "", []
-
-def build_title(cat_val: str, b_val: str, c_val: str, grade_val: str) -> str:
-    cn = normalize_category(cat_val)
-    act_norm = normalize_activity(b_val)
-    b_txt = norm_gender_words(act_norm)
-    c_txt = norm_gender_words(c_val).strip()
-    grp, _ = group_from_cat_and_grade(cn, act_norm, grade_val)
-    if not grp:
-        return f"{b_txt} {c_txt}".strip()
-    if cn == "sport":
-        return f"{b_txt} {grp}{c_txt}".strip()
-    return f"{b_txt} {grp} {c_txt}".strip()
-
-@st.cache_data(ttl=120)
-def load_csv(url: str):
-    r = requests.get(url, timeout=25, headers={"User-Agent":"Mozilla/5.0"}, allow_redirects=True)
-    r.encoding = "utf-8"
+@st.cache_data(ttl=60)
+def load_upcoming(url: str):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, timeout=20, headers=headers, allow_redirects=True)
     txt = r.text or ""
-    if r.status_code != 200 or len(txt) < 20 or "<html" in txt.lower():
-        return pd.DataFrame(), txt
-    df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
-    df.columns = [str(c).strip() for c in df.columns]  # IMPORTANT
-    return df, txt
+    meta = {
+        "status_code": r.status_code,
+        "content_type": r.headers.get("content-type", ""),
+        "text_len": len(txt),
+        "head_lines": "\n".join(txt.splitlines()[:3])
+    }
 
-df, raw_txt = load_csv(CSV_URL)
+    if r.status_code != 200 or looks_like_html(txt) or len(txt) < 20:
+        return pd.DataFrame(), meta
+
+    df = pd.read_csv(
+        io.StringIO(txt),
+        dtype=str,
+        engine="python",
+        on_bad_lines="skip"
+    ).fillna("")
+    return df, meta
+
+# ---------- SIDEBAR ----------
+st.sidebar.markdown("## 🔎 Filters")
+debug = st.sidebar.checkbox("Show debug", value=False)
+show_past = st.sidebar.checkbox("Show past events", value=False)
+sq = st.sidebar.text_input("Search", placeholder="Type to filter titles...")
+
+# ---------- LOAD ----------
+df, meta = load_upcoming(U)
+
+if debug:
+    st.sidebar.markdown("### Debug")
+    st.sidebar.write("Status:", meta["status_code"])
+    st.sidebar.write("Content-Type:", meta["content_type"])
+    st.sidebar.write("Text length:", meta["text_len"])
+    st.sidebar.code(meta["head_lines"] if meta["head_lines"] else "(no content)")
+
 if df.empty:
-    st.error("Geen data is gelaai nie. Wag 1–2 minute na republish en refresh.")
+    st.error("Geen data is gelaai nie vanaf die Upcoming tab. (CSV link gee waarskynlik HTML of is leeg.)")
+    if debug:
+        st.write(meta)
     st.stop()
 
-# ---- Exact header mapping (your current headers) ----
-COL_CATEGORY  = "Category"
-COL_ACTIVITY  = "Activity/Subject Name"
-COL_TEAM      = "Team / Assessment"
-COL_DATE      = "Date / Due Date"
-COL_VENUE     = "Venue"
-COL_PROGRAMME = "Programme / Document Link"
-COL_TEAMS_LNK = "Team"
-COL_CONFIRM   = "Confirm"
-COL_INFO      = "Information"
-COL_GRADE     = "Age Group (9,10) / Grade (1,2,3)"
-COL_TERM      = "Display Duration"
+# ---------- EXPECTED COLUMNS BY POSITION ----------
+# 2=Category, 3=Activity, 4=Extra, 5=Date, 6=Venue, 7=DocLink, 8=Teams/List, 10=InfoLink, 11=Age
+cat_series = df.iloc[:, 2].astype(str)
+act_series = df.iloc[:, 3].astype(str)
 
-def s(colname):
-    return df[colname].astype(str) if colname in df.columns else pd.Series([""]*len(df), dtype=str)
+sc = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"])
+sa = st.sidebar.multiselect("Activity", sorted({c_a(x) for x in act_series}))
+ao = ["Gr 1","Gr 2","Gr 3","Gr 4","Gr 5","Gr 6","Gr 7","U7","U8","U9","U10","U11","U12","U13"]
+sg = st.sidebar.multiselect("Age Group", ao)
 
-cat_s   = s(COL_CATEGORY)
-act_s   = s(COL_ACTIVITY)
-team_s  = s(COL_TEAM)
-date_s  = s(COL_DATE)
-ven_s   = s(COL_VENUE)
-prog_s  = s(COL_PROGRAMME)
-teamlnk_s = s(COL_TEAMS_LNK)
-conf_s  = s(COL_CONFIRM)
-info_s  = s(COL_INFO)
-grade_s = s(COL_GRADE)
-term_s  = s(COL_TERM)
-# ------------------ VIEW TOGGLES ------------------
-view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
+# ---------- FILTER ----------
+tz = pytz.timezone("Africa/Johannesburg")
+today = datetime.now(tz).date()
 
-# ------------------ FILTERS ------------------
-st.sidebar.markdown("## Filters")
-category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
-search = st.sidebar.text_input("Whole school search", placeholder="Type to filter...")
-
-wanted = {c.lower() for c in category_choice} if category_choice else set()
-
-def cat_ok(i: int) -> bool:
-    if not wanted:
-        return True
-    cn = normalize_category(cat_s.iloc[i])
-    return (("sport" in wanted and cn == "sport") or
-            ("culture" in wanted and cn == "culture") or
-            ("academics" in wanted and cn == "academics"))
-
-act_opts = sorted({normalize_activity(act_s.iloc[i]) for i in range(len(df)) if str(act_s.iloc[i]).strip() and cat_ok(i)})
-selected_act = st.sidebar.multiselect("Activity/Subject", act_opts, default=[])
-
-selected_u = st.sidebar.multiselect("Age Groups (Sport)", [f"U{i}" for i in range(7,14)], default=[]) if (not wanted or "sport" in wanted) else []
-selected_gr = st.sidebar.multiselect("Grades (Culture/Academics)", [f"Gr {i}" for i in range(1,8)], default=[]) if (not wanted or "culture" in wanted or "academics" in wanted) else []
-
-selected_u_set = set(selected_u)
-selected_gr_set = set(selected_gr)
-
-# ------------------ NEW UPDATE (docs only): last hour + only animate 10 minutes ------------------
-def row_signature(i: int) -> str:
-    parts = [
-        cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i],
-        prog_s.iloc[i], teamlnk_s.iloc[i], conf_s.iloc[i], info_s.iloc[i],
-        grade_s.iloc[i], term_s.iloc[i]
-    ]
-    return hashlib.sha256(("||".join(map(str, parts))).encode("utf-8")).hexdigest()
-
-if "row_hashes" not in st.session_state:
-    st.session_state.row_hashes = {}
-if "row_updated_at" not in st.session_state:
-    st.session_state.row_updated_at = {}
-
-# ------------------ BUILD RESULTS ------------------
 res = []
-for i in range(len(df)):
-    cn = normalize_category(cat_s.iloc[i])
-    act_norm = normalize_activity(act_s.iloc[i])
+skipped = []
 
-    if wanted and not cat_ok(i):
-        continue
-    if selected_act and act_norm not in selected_act:
-        continue
+for _, r in df.iterrows():
+    cat = str(r.iloc[2]).lower().strip()
+    act = str(r.iloc[3]).strip()
+    age = cl(r.iloc[11])
+    rd  = cl(r.iloc[5])
 
-    # term rules
-    term_val = str(term_s.iloc[i]).strip().lower()
-    looks_like_term_doc = any(k in (act_norm.lower() + " " + str(team_s.iloc[i]).lower())
-                              for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse"])
-    term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
-
-    # due date
-    d_raw = str(date_s.iloc[i]).strip()
-    d_dt = parse_date_sa(d_raw)
-
-    # show today+future if date exists; if blank, allow (term docs can sometimes be blank)
-    if d_dt and d_dt.date() < today:
+    dt = pd.to_datetime(rd, dayfirst=True, errors="coerce")
+    if pd.isnull(dt):
+        dt = datetime(2099, 1, 1)
+    elif (not show_past) and dt.date() < today:
+        if debug:
+            skipped.append(("Date in past", act, rd, age))
         continue
 
-    if view_mode == "Next 7 Days":
-        if not d_dt:
-            continue
-        if d_dt.date() > (today + timedelta(days=7)):
-            continue
-
-    if view_mode == "Term Documents":
-        if not term_flag:
-            continue
-
-    grp_disp, grp_matches = group_from_cat_and_grade(cn, act_norm, grade_s.iloc[i])
-
-    # filter ranges must match individual selection
-    if cn == "sport" and selected_u_set:
-        if grp_matches and not any(x in selected_u_set for x in grp_matches):
-            continue
-        if not grp_matches:
-            continue
-
-    if cn in ["culture", "academics"] and selected_gr_set:
-        if grp_matches and not any(x in selected_gr_set for x in grp_matches):
-            continue
-        if not grp_matches:
-            continue
-
-    title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
-
-    if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
+    if sc and not any(x.lower() in cat for x in sc):
+        if debug:
+            skipped.append(("Category", act, rd, age))
         continue
 
-    # update tracking
-    sig = row_signature(i)
-    prev = st.session_state.row_hashes.get(i)
-    if prev is None:
-        st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = now_dt
-    elif prev != sig:
-        st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = now_dt
+    if sa and not any(x.lower() in act.lower() for x in sa):
+        if debug:
+            skipped.append(("Activity", act, rd, age))
+        continue
 
-    updated_at = st.session_state.row_updated_at.get(i)
+    if sg and age:
+        if not any(v.replace("Gr ", "").replace("U", "") in age for v in sg):
+            if debug:
+                skipped.append(("Age", act, rd, age))
+            continue
 
-    show_new = False
-    if cn == "academics" and updated_at:
-        if (now_dt - updated_at) <= timedelta(hours=1) and (now_dt - updated_at) <= timedelta(minutes=10):
-            show_new = True
+    res.append({"r": r, "dt": dt, "ds": rd})
 
-    sort_dt = d_dt if d_dt else datetime(2099,1,1)
-    res.append({"i": i, "dt": sort_dt, "title": title.lower(), "term": term_flag, "new": show_new})
+res.sort(key=lambda x: x["dt"])
 
-# ALWAYS: Term docs first (no matter which filter/view)
-term_items = sorted([x for x in res if x["term"]], key=lambda x: x["title"])
-other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"]))
-res_sorted = term_items + other_items
+# ⛔ STOP HIER – PLAK DEEL 2 DIREK HIERONDER
+# ---------- MAIN DISPLAY ----------
+left, right = st.columns([2.2, 1])
 
-# ------------------ DISPLAY ------------------
-st.markdown("## 📅 Events")
+with left:
+    st.markdown("## 📅 Upcoming Events")
 
-pin = "&#128205;"  # always-visible pin
+    shown = 0
 
-if not res_sorted:
-    st.info("Niks pas by jou filters nie.")
-else:
-    for item in res_sorted:
-        i = item["i"]
-        cn = normalize_category(cat_s.iloc[i])
-        act_norm = normalize_activity(act_s.iloc[i])
-        afr = is_afrikaans_subject(act_s.iloc[i])
+    if not res:
+        st.info("Geen komende items gevind nie. Probeer filters losser maak of skakel 'Show past events' aan.")
+    else:
+        for i in res:
+            r = i["r"]
+            ds = i["ds"]
 
-        title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
-        d_raw = str(date_s.iloc[i]).strip()
-        date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
-
-        prog_link = first_url(prog_s.iloc[i])
-        teams_link = first_url(teamlnk_s.iloc[i])
-        confirm_link = first_url(conf_s.iloc[i])
-
-        info_raw = str(info_s.iloc[i]).strip().replace("_"," ")
-        info_link = first_url(info_raw)  # IMPORTANT: extract even if text + link
-        info_text = info_raw
-        if info_link:
-            info_text = info_text.replace(info_link, "").strip(" -|")
-
-        # Buttons
-        buttons = []
-        notes_parts = []
-
-        if cn == "academics":
-            b_docs = "Dokumente" if afr else "Documents"
-            b_info = "Inligting" if afr else "Information"
-            if prog_link and is_http(prog_link):
-                buttons.append((b_docs, prog_link))
-            if info_link and is_http(info_link):
-                buttons.append((b_info, info_link))
-        else:
-            if prog_link and is_http(prog_link):
-                buttons.append(("Programme", prog_link))
-            if teams_link and is_http(teams_link):
-                buttons.append(("Teams", teams_link))
-            if info_link and is_http(info_link):
-                buttons.append(("Information", info_link))
-            if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
-                buttons.append(("Confirm", confirm_link))
-
-        # Venue line OR see programme
-        venue_line = ""
-        if ven_norm == "SEE_PROGRAMME":
-            notes_parts.append("<b>Venue:</b><br>See programme")
-        elif ven_norm:
-            q = ven_norm
-            if "midstream" in ven_norm.lower():
-                q = f"{ven_norm} Midstream College"
-            map_url = f"https://www.google.com/maps/search/?api=1&query={q.replace(' ','+')}"
-            venue_line = (
-                f"<div class='meta'>{pin} "
-                f"<a href='{map_url}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
-                f"{safe_txt(ven_norm).upper()}</a></div>"
-            )
-
-        # Notes: info text always allowed
-        if info_text:
-            notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
-
-        if "revue" in (title.lower() + " " + info_raw.lower()):
-            notes_parts.append("<b>Note:</b><br>Revue")
-
-        notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
-
-        btn_html = ""
-        if buttons:
-            btn_html = "<div class='btnRow'>" + "".join(
-                [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
-            ) + "</div>"
-
-        ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>" if item["new"] else ""
-
-        st.markdown(f"""
-<div class="card">
-  {ribbon}
-  <div class="card-title">{safe_txt(title)}</div>
-  {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
-  {venue_line}
-  {notes_block}
-  {btn_html}
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown(
-    "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
-    unsafe_allow_html=True
-)
