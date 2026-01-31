@@ -12,74 +12,28 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
-:root{
-  --card:#ffffff; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06);
-  --maroon:#800000; --teal:#008080; --muted:#64748b;
-}
+:root{--card:#fff;--line:#e8edf5;--shadow:0 10px 30px rgba(0,0,0,.06);--maroon:#800000;--teal:#008080;--muted:#64748b;}
 .block-container{padding-top:1.0rem;}
 section[data-testid="stSidebar"]{border-right:1px solid var(--line);}
 
-.hero{
-  border:1px solid var(--line);
-  background:linear-gradient(135deg,#fff, #f3fbfb);
-  box-shadow:var(--shadow);
-  border-radius:22px;
-  padding:18px 18px;
-  display:flex;gap:16px;align-items:center;
-  margin-bottom:10px;
-}
+.hero{border:1px solid var(--line);background:linear-gradient(135deg,#fff,#f3fbfb);box-shadow:var(--shadow);border-radius:22px;padding:18px;display:flex;gap:16px;align-items:center;margin-bottom:10px;}
 .hero img{width:80px;border-radius:16px;}
 .hero .title{font-weight:900;color:var(--maroon);font-size:1.45rem;line-height:1.1;}
 .hero .sub{font-weight:800;color:var(--teal);margin-top:6px;font-size:1.05rem;}
 
-.updateBanner{
-  margin: 0 0 14px 0;
-  border:1px solid rgba(0,128,128,0.30);
-  background:rgba(0,128,128,0.08);
-  padding:10px 12px;
-  border-radius:14px;
-  font-weight:900;
-  color:#008080;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
+.updateBanner{margin:0 0 14px 0;border:1px solid rgba(0,128,128,0.30);background:rgba(0,128,128,0.08);padding:10px 12px;border-radius:14px;font-weight:900;color:#008080;display:flex;align-items:center;gap:10px;}
 .dot{width:10px;height:10px;border-radius:999px;background:#008080;animation:pulse 1.2s infinite;}
-@keyframes pulse{
-  0%{transform:scale(1); opacity:0.35;}
-  50%{transform:scale(1.7); opacity:1;}
-  100%{transform:scale(1); opacity:0.35;}
-}
+@keyframes pulse{0%{transform:scale(1);opacity:.35;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.35;}}
 
-.card{
-  border:1px solid var(--line);
-  background:var(--card);
-  box-shadow:var(--shadow);
-  border-radius:18px;
-  padding:14px 14px 12px 14px;
-  margin-bottom:14px;
-  border-left:10px solid var(--maroon);
-}
+.card{border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow);border-radius:18px;padding:14px 14px 12px 14px;margin-bottom:14px;border-left:10px solid var(--maroon);}
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:var(--muted);margin-top:8px;font-size:.95rem;}
 
-.noteBlock{
-  margin-top:12px;
-  padding:12px 12px;
-  border-radius:14px;
-  background:rgba(0,128,128,0.08);
-  border:1px solid rgba(0,128,128,0.25);
-  color:#0f172a;
-  font-size:0.95rem;
-  line-height:1.35;
-}
+.noteBlock{margin-top:12px;padding:12px;border-radius:14px;background:rgba(0,128,128,0.08);border:1px solid rgba(0,128,128,0.25);color:#0f172a;font-size:.95rem;line-height:1.35;}
 
 .tealbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-.tealbtn{
-  display:inline-block;background:#008080;color:white !important;
-  padding:9px 12px;border-radius:12px;font-weight:900;text-decoration:none;font-size:0.90rem;
-}
-.tealbtn:hover{opacity:0.92;}
+.tealbtn{display:inline-block;background:#008080;color:white !important;padding:9px 12px;border-radius:12px;font-weight:900;text-decoration:none;font-size:.90rem;}
+.tealbtn:hover{opacity:.92;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -144,6 +98,7 @@ def get_col_by_letter(df: pd.DataFrame, letter: str, default: str = "") -> pd.Se
 def normalize_category(raw_cat: str) -> str:
     s = (raw_cat or "").lower().strip()
     s = re.sub(r"\s+", " ", s)
+    # programme counts as sport if it appears in category text
     if "programme" in s or "program" in s:
         return "sport"
     if "culture" in s or "kultuur" in s:
@@ -160,7 +115,6 @@ AFR_EN = {
     "program":"Programme","programme":"Programme","assessering":"Assessment",
     "inligting":"Information","dokumente":"Documents",
 }
-
 def tr_card_text(s: str, keep_afrikaans: bool) -> str:
     if keep_afrikaans:
         return str(s or "").strip()
@@ -185,11 +139,10 @@ def load_upcoming(url: str):
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, timeout=25, headers=headers, allow_redirects=True)
     txt = r.text or ""
-    meta = {"status_code": r.status_code, "content_type": r.headers.get("content-type",""), "text_len": len(txt)}
     if r.status_code != 200 or looks_like_html(txt) or len(txt) < 20:
-        return pd.DataFrame(), meta, ""
+        return pd.DataFrame(), txt
     df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
-    return df, meta, txt
+    return df, txt
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.markdown("## 🧭 Navigation")
@@ -199,20 +152,19 @@ tz = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(tz)
 today = now_dt.date()
 
-df, meta, raw_txt = load_upcoming(U)
+df, raw_txt = load_upcoming(U)
 if df.empty:
     st.error("No data loaded from Google Sheet.")
     st.stop()
 
-# NEW UPDATE banner (6h)
+# NEW UPDATE banner for 6 hours after changes
 current_hash = hashlib.sha256((raw_txt or "").encode("utf-8")).hexdigest()
 if "prev_hash" not in st.session_state:
     st.session_state.prev_hash = current_hash
     st.session_state.last_change = None
-else:
-    if current_hash != st.session_state.prev_hash:
-        st.session_state.prev_hash = current_hash
-        st.session_state.last_change = now_dt
+elif current_hash != st.session_state.prev_hash:
+    st.session_state.prev_hash = current_hash
+    st.session_state.last_change = now_dt
 
 if st.session_state.get("last_change") and (now_dt - st.session_state.last_change) <= timedelta(hours=6):
     st.markdown("""<div class="updateBanner"><span class="dot"></span> NEW UPDATE</div>""", unsafe_allow_html=True)
@@ -221,24 +173,24 @@ view_mode = st.sidebar.radio("View", ["Upcoming", "Next 7 Days", "Term"], horizo
 sq = st.sidebar.text_input("Search", placeholder="Type to filter...")
 
 if debug:
-    st.sidebar.write("Columns:", df.shape[1])
     st.sidebar.write("Headers:", list(df.columns))
 
-# ---------------- COLUMN MAPPING (LOCKED) ----------------
-# Activity = B, Category = C, Date = D, Venue = E, Programme = F, Team = G, Form = H, Info = I, J = Grade/U, K = Duration
-act_series  = get_col_by_letter(df, "B", "")   # ✅ Activity
-cat_series  = get_col_by_letter(df, "C", "")
-date_series = get_col_by_letter(df, "D", "")   # ✅ event/due date
-ven_series  = get_col_by_letter(df, "E", "")   # ✅ venue
+# ---------------- COLUMN MAPPING (CORRECT) ----------------
+# ✅ A = Category, B = Activity, D = Date, E = Venue, J = Grade/U, K = Duration
+cat_series  = get_col_by_letter(df, "A", "")   # ✅ FIXED
+act_series  = get_col_by_letter(df, "B", "")
+date_series = get_col_by_letter(df, "D", "")
+ven_series  = get_col_by_letter(df, "E", "")
 j_series    = get_col_by_letter(df, "J", "")
 duration_series = get_col_by_letter(df, "K", "")
 
+# Links
 programme_series = get_col_by_letter(df, "F", "")
 team_series      = get_col_by_letter(df, "G", "")
 form_series      = get_col_by_letter(df, "H", "")
 info_series      = get_col_by_letter(df, "I", "")
 
-# Button headers with "/" rule
+# Button headers (with "/" rule)
 F_idx = col_letter_to_idx("F"); G_idx = col_letter_to_idx("G"); H_idx = col_letter_to_idx("H"); I_idx = col_letter_to_idx("I")
 F_header = str(df.columns[F_idx]) if df.shape[1] > F_idx else "Programme / Documents"
 G_header = str(df.columns[G_idx]) if df.shape[1] > G_idx else "Team"
@@ -248,35 +200,43 @@ I_header = str(df.columns[I_idx]) if df.shape[1] > I_idx else "Information / Inl
 # Filters
 st.sidebar.markdown("---")
 category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
-academics_mode = ("Academics" in category_choice)
 
-act_opts = sorted({str(x).strip() for x in act_series if str(x).strip()})
+# Activity options can depend on category selection (so it feels correct)
+wanted_norm = {c.lower() for c in category_choice} if category_choice else set()
+
+def row_matches_selected_category(i: int) -> bool:
+    if not wanted_norm:
+        return True
+    cn = normalize_category(str(cat_series.iloc[i]))
+    return (("sport" in wanted_norm and cn == "sport") or
+            ("culture" in wanted_norm and cn == "culture") or
+            ("academics" in wanted_norm and cn == "academics"))
+
+act_opts = sorted({str(act_series.iloc[i]).strip() for i in range(len(df)) if str(act_series.iloc[i]).strip() and row_matches_selected_category(i)})
 selected_activities = st.sidebar.multiselect("Activity", act_opts, default=[])
 
-selected_grades = []
-selected_ages = []
+# Grade/Age nav
+academics_mode = ("Academics" in category_choice)
+selected_grades, selected_ages = [], []
 if academics_mode:
-    grade_opts = [f"Gr {i}" for i in range(1, 8)]
-    selected_grades = st.sidebar.multiselect("Grades", grade_opts, default=[])
+    selected_grades = st.sidebar.multiselect("Grades", [f"Gr {i}" for i in range(1,8)], default=[])
 else:
-    age_opts = [f"U{i}" for i in range(7, 14)]
-    selected_ages = st.sidebar.multiselect("Age Groups", age_opts, default=[])
+    selected_ages = st.sidebar.multiselect("Age Groups", [f"U{i}" for i in range(7,14)], default=[])
 
 res = []
 # ---------------- FILTER LOOP ----------------
 for idx in range(len(df)):
-    cat_norm = normalize_category(str(cat_series.iloc[idx]))
-    is_academic = (cat_norm == "academics")
-    is_sport = (cat_norm == "sport")
-    is_culture = (cat_norm == "culture")
+    cn = normalize_category(str(cat_series.iloc[idx]))
+    is_academic = (cn == "academics")
+    is_sport = (cn == "sport")
+    is_culture = (cn == "culture")
 
-    # Category selection filter
+    # ✅ Category filter now reads Column A
     if category_choice:
         wanted = [x.lower() for x in category_choice]
-        ok = False
-        if "academics" in wanted and is_academic: ok = True
-        if "sport" in wanted and is_sport: ok = True
-        if "culture" in wanted and is_culture: ok = True
+        ok = (("academics" in wanted and is_academic) or
+              ("sport" in wanted and is_sport) or
+              ("culture" in wanted and is_culture))
         if not ok:
             continue
 
@@ -285,7 +245,7 @@ for idx in range(len(df)):
     if selected_activities and act_raw not in selected_activities:
         continue
 
-    # Afrikaans subject rules now based on activity text (because B is activity)
+    # Afrikaans subject rules based on Activity (B)
     act_lc = act_raw.lower().strip()
     is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["eat", "ht"]) or ("afrikaans eat" in act_lc) or ("afrikaans ht" in act_lc)
 
@@ -298,14 +258,12 @@ for idx in range(len(df)):
     else:
         act_show = act_raw
 
-    # Grade / Age filters use J
+    # Grade/Age filters (J)
     jv = cl(j_series.iloc[idx])
     if academics_mode:
         if selected_grades:
             g = normalize_grade(jv)
-            if not g:
-                continue
-            if f"Gr {g}" not in selected_grades:
+            if not g or f"Gr {g}" not in selected_grades:
                 continue
     else:
         if selected_ages:
@@ -314,19 +272,18 @@ for idx in range(len(df)):
                 g = normalize_grade(jv)
                 if g and g in GR_TO_U:
                     u = GR_TO_U[g]
-            if not u:
-                continue
-            if f"U{u}" not in selected_ages:
+            if not u or f"U{u}" not in selected_ages:
                 continue
 
-    # Date (D) for filtering
+    # Date (D)
     d_raw = cl(date_series.iloc[idx])
     d_dt = parse_date(d_raw)
 
+    # Duration (K)
     duration = str(duration_series.iloc[idx]).lower().strip()
     is_full_term = ("full" in duration) or ("term" in duration)
 
-    # View filter
+    # View filtering
     visible = True
     if view_mode == "Term":
         if not is_full_term:
@@ -341,7 +298,6 @@ for idx in range(len(df)):
             if view_mode == "Next 7 Days" and d_dt.date() > (today + timedelta(days=7)):
                 visible = False
         else:
-            # no date -> hide for Next 7 Days
             if view_mode == "Next 7 Days":
                 visible = False
 
@@ -352,15 +308,14 @@ for idx in range(len(df)):
         "idx": idx,
         "is_full_term": is_full_term,
         "dt": d_dt if d_dt else datetime(2099, 1, 1),
-        "a_sort": act_raw.lower().strip()  # alphabetical uses Activity now
+        "b_sort": act_raw.lower().strip()   # alphabetical by Activity (B)
     })
 
 # ---------------- SORTING ----------------
 term_items = [x for x in res if x["is_full_term"]]
 other_items = [x for x in res if not x["is_full_term"]]
-
-term_items.sort(key=lambda x: x["a_sort"])
-other_items.sort(key=lambda x: (x["dt"], x["a_sort"]))
+term_items.sort(key=lambda x: x["b_sort"])
+other_items.sort(key=lambda x: (x["dt"], x["b_sort"]))
 res_sorted = term_items + other_items
 
 # ---------------- MAIN LAYOUT ----------------
@@ -379,12 +334,11 @@ with left:
     for item in res_sorted:
         idx = item["idx"]
 
-        cat_norm = normalize_category(str(cat_series.iloc[idx]))
-        is_academic = (cat_norm == "academics")
-        is_sport = (cat_norm == "sport")
-        is_culture = (cat_norm == "culture")
+        cn = normalize_category(str(cat_series.iloc[idx]))
+        is_academic = (cn == "academics")
+        is_sport = (cn == "sport")
 
-        # Activity (B) display
+        # Activity (B)
         act_raw = str(act_series.iloc[idx]).strip()
         act_lc = act_raw.lower().strip()
 
@@ -398,6 +352,7 @@ with left:
         else:
             act_show = act_raw
 
+        # J label (Sport=U, others=Gr)
         jv = cl(j_series.iloc[idx])
         if is_sport:
             j_show = f"U{normalize_u(jv) or jv}" if jv else ""
@@ -405,20 +360,19 @@ with left:
             g = normalize_grade(jv) or jv
             j_show = f"Gr {g}" if g else ""
 
-        # Heading: in academics mode we still show "subject-first" meaning: Activity first is OK now
-        # Since B is Activity, we keep it consistent:
         act_card = tr_card_text(act_show, keep_afrikaans=is_afrikaans_subject)
         cat_card = tr_card_text(str(cat_series.iloc[idx]).strip(), keep_afrikaans=is_afrikaans_subject)
+
         heading = " ".join([x for x in [act_card, j_show, cat_card] if x]).strip()
 
         if sq and sq.lower().replace(" ", "") not in heading.lower().replace(" ", ""):
             continue
 
-        # Date line from D
+        # Date line (D)
         d_raw = cl(date_series.iloc[idx])
         date_line = format_date_long(d_raw) if d_raw else ""
 
-        # Venue from E
+        # Venue (E)
         ven = cl(ven_series.iloc[idx])
         venue_line = ""
         if ven:
@@ -430,17 +384,18 @@ with left:
                 f"{safe_txt(ven_show).upper()}</a></div>"
             )
 
-        # Buttons + notes
-        prog_link = cl(programme_series.iloc[idx])   # F
-        team_val  = cl(team_series.iloc[idx])        # G
-        form_link = cl(form_series.iloc[idx])        # H
-        info_val  = cl(info_series.iloc[idx])        # I
+        # Buttons + notes (F/G/H/I)
+        prog_link = cl(programme_series.iloc[idx])
+        team_val  = cl(team_series.iloc[idx])
+        form_link = cl(form_series.iloc[idx])
+        info_val  = cl(info_series.iloc[idx])
 
         prog_btn_label = split_label(F_header, is_academic)
         team_btn_label = split_label(G_header, is_academic)
         info_btn_label = split_label(I_header, is_academic)
         form_btn_label = H_header.strip()
 
+        # Afrikaans subject button wording
         if is_afrikaans_subject:
             prog_btn_label = prog_btn_label.replace("Documents", "Dokumente").replace("documents", "Dokumente")
             info_btn_label = info_btn_label.replace("Information", "Inligting").replace("information", "Inligting")
@@ -490,9 +445,4 @@ with left:
 
     if shown == 0:
         st.info("Nothing matched your filters/search.")
-
-st.markdown(
-    "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
-    unsafe_allow_html=True
-)
 
