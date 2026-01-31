@@ -18,7 +18,7 @@ now_dt = datetime.now(TZ)
 today = now_dt.date()
 
 # =============================
-# STYLE (KEEP YOUR LOOK)
+# STYLE
 # =============================
 st.markdown(
     """
@@ -150,13 +150,11 @@ def normalize_activity(v: str) -> str:
     s = str(v or "").strip().lower()
     s = re.sub(r"\s+", " ", s)
 
-    # Afrikaans naming rules
     if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
 
-    # Normalisations
     if "wiskunde" in s:
         return "Math"
     if "atletiek" in s or "athletics" in s:
@@ -187,41 +185,27 @@ def norm_gender_words(text: str) -> str:
 
     s = re.sub(r"\bmeisies\b", "Girls", s, flags=re.I)
     s = re.sub(r"\bseuns\b", "Boys", s, flags=re.I)
-
     s = re.sub(r"\bgirls\b", "Girls", s, flags=re.I)
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
 
-    # remove double words
     s = re.sub(r"(Boys)\s*(Boys)\b", r"\1", s)
     s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
-
     return re.sub(r"\s+", " ", s).strip()
 
 # ---------- SA DATE ----------
 MONTHS = {
-    "jan": "January",
-    "january": "January",
-    "feb": "February",
-    "february": "February",
-    "mar": "March",
-    "march": "March",
-    "apr": "April",
-    "april": "April",
+    "jan": "January","january": "January",
+    "feb": "February","february": "February",
+    "mar": "March","march": "March",
+    "apr": "April","april": "April",
     "may": "May",
-    "jun": "June",
-    "june": "June",
-    "jul": "July",
-    "july": "July",
-    "aug": "August",
-    "august": "August",
-    "sep": "September",
-    "september": "September",
-    "oct": "October",
-    "october": "October",
-    "nov": "November",
-    "november": "November",
-    "dec": "December",
-    "december": "December",
+    "jun": "June","june": "June",
+    "jul": "July","july": "July",
+    "aug": "August","august": "August",
+    "sep": "September","september": "September",
+    "oct": "October","october": "October",
+    "nov": "November","november": "November",
+    "dec": "December","december": "December",
 }
 
 def parse_date_sa(s):
@@ -231,7 +215,6 @@ def parse_date_sa(s):
     if raw == "" or raw.lower() in ["nan", "none"]:
         return None
 
-    # numeric excel-like dates
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
             n = float(raw)
@@ -241,7 +224,6 @@ def parse_date_sa(s):
         except:
             pass
 
-    # "5 Feb"
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
     if m:
         d = int(m.group(1))
@@ -253,7 +235,6 @@ def parse_date_sa(s):
             except:
                 pass
 
-    # Default: SA is day-first
     cleaned = raw.replace(".", "/").replace("-", "/")
     cleaned = re.sub(r"\s+", " ", cleaned)
 
@@ -298,15 +279,21 @@ def normalize_venue(v: str) -> str:
             return vv
     return s
 
-# ---------- GROUP EXPANSION ----------
+# =============================
+# AGE GROUP / GRADE PARSING
+# =============================
 def expand_group_range(raw: str, kind: str):
     """
-    Works with:
-      - 'Gr 4 - Gr 7' / 'U7-U13'
-      - 'Gr 4, 5, 6, 7'
-      - '10-13' or '07-13' (Form short text)
-      - 'U10, 11, 12, 13'
-      - '4' / 'Gr 4' / 'U10'
+    Supports:
+      Sport:
+        - U10-U13 / U10–U13
+        - 10-13 / 07-13 (short text)
+        - U10,11,12,13 / 10,11,12,13
+      Culture/Academics:
+        - Gr 4 - Gr 7
+        - 4-7
+        - Gr 4,5,6,7
+        - 4,5,6,7
     Returns list like ['U10','U11'...] or ['Gr 4','Gr 5'...]
     """
     s = str(raw or "").strip()
@@ -314,128 +301,141 @@ def expand_group_range(raw: str, kind: str):
         return []
 
     s = s.replace("–", "-").replace("—", "-")
-    s = re.sub(r"\s*", "", s)  # remove all spaces
+    s_nospace = re.sub(r"\s+", "", s)
 
-    nums = [int(n) for n in re.findall(r"\d+", s)]
+    nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
     if not nums:
         return []
 
-    # range like 10-13 or U10-U13 or Gr4-Gr7
-    if "-" in s and len(nums) >= 2:
+    # range
+    if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
-    # list like 4,5,6,7 or U10,11,12,13
-    if "," in s:
+    # list
+    if "," in s_nospace:
         lo, hi = min(nums), max(nums)
-        # if contiguous, expand
         if len(nums) >= 3 and (hi - lo) <= 8:
             nums = list(range(lo, hi + 1))
-        if kind == "U":
-            return [f"U{x}" for x in nums]
-        return [f"Gr {x}" for x in nums]
+        return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
     # single
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
-    # fallback list
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
-def group_from_cat_and_grade(cat_norm: str, grade_raw: str):
+def extract_u_groups_from_text(text: str):
     """
-    IMPORTANT CHANGE:
-    - NO DEFAULT Athletics U7-U13 anymore.
-    - Only use what's in the AgeGroup/Grade column.
+    Pull sport age groups out of Team/Assessment if user typed it there.
+    Examples it catches:
+      - U10-U13, U10–U13
+      - 10-13, 07-13
+      - U10,11,12,13 or 10,11,12,13
     """
-    g = str(grade_raw or "").strip()
-    if not g:
-        return "", []
+    t = str(text or "").strip()
+    if not t:
+        return []
+
+    t = t.replace("–", "-").replace("—", "-")
+
+    # First: explicit U-range
+    m = re.search(r"\bU?\d{1,2}\s*-\s*U?\d{1,2}\b", t, flags=re.I)
+    if m:
+        return expand_group_range(m.group(0), "U")
+
+    # Next: list with commas
+    m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
+    if m:
+        return expand_group_range(m.group(0), "U")
+
+    # Next: short range like 10-13
+    m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
+    if m:
+        return expand_group_range(m.group(0), "U")
+
+    # If they typed a single U11 somewhere
+    m = re.search(r"\bU(\d{1,2})\b", t, flags=re.I)
+    if m:
+        return [f"U{int(m.group(1))}"]
+
+    return []
+
+def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
+    """
+    SPORT RULE:
+      - Prefer Age Group column (grade_raw)
+      - If blank, fallback to Team/Assessment (team_raw)
+    NO more athletics-default.
+    """
     if cat_norm == "sport":
-        m = expand_group_range(g, "U")
+        g = str(grade_raw or "").strip()
+        if g:
+            m = expand_group_range(g, "U")
+        else:
+            m = extract_u_groups_from_text(team_raw)
+
         if len(m) >= 2:
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
-    else:
-        m = expand_group_range(g, "Gr")
-        if len(m) >= 2:
-            return f"{m[0]}–{m[-1]}", m
-        return (m[0] if m else ""), m
+
+    # Culture / Academics
+    g = str(grade_raw or "").strip()
+    if not g:
+        return "", []
+    m = expand_group_range(g, "Gr")
+    if len(m) >= 2:
+        return f"{m[0]}–{m[-1]}", m
+    return (m[0] if m else ""), m
 
 # ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
 def strip_group_tokens(text: str) -> str:
-    """
-    Remove any U..-U.. / Gr..-Gr.. / 10-13 / 07-13 / U10,U11.. tokens from team text
-    to prevent duplicate like 'U10-U13 U10-U13'.
-    """
     t = str(text or "")
-    # remove U10-U13 / U10–U13 / Gr4-Gr7 etc
+
+    # remove U10-U13 / 10-13 etc
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
-    t = re.sub(r"\bGr\s*\d{1,2}\s*[-–]\s*Gr\s*\d{1,2}\b", "", t, flags=re.I)
-    # remove comma lists like 10,11,12,13 or Gr4,5,6,7 or U10,11,12,13
-    t = re.sub(r"\b(Gr)?U?\d{1,2}(?:\s*,\s*(?:Gr)?U?\d{1,2}){1,}\b", "", t, flags=re.I)
-    # clean extra separators
-    t = re.sub(r"[\|\-–]{2,}", " ", t)
+    # remove comma lists
+    t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
+
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip(" -–|,")
 
 def fix_boys_girls_combo(s: str) -> str:
     t = str(s or "").strip().replace("&amp;", "&")
     t = re.sub(r"\s*&\s*", " & ", t)
-    # if someone typed Boys & Girls -> we want B Girls (your rule)
     if re.search(r"\bBoys\s*&\s*Girls\b", t, flags=re.I):
         t = re.sub(r"\bBoys\s*&\s*Girls\b", "B Girls", t, flags=re.I)
     t = re.sub(r"\bBoys\s+and\s+Girls\b", "B Girls", t, flags=re.I)
     return re.sub(r"\s{2,}", " ", t).strip()
 
 def tidy_team_text(s: str) -> str:
-    """
-    - Fix spaces like U 13 -> U13
-    - Fix Hockey U13Girls -> U13 Girls
-    - Fix TennisU11B -> Tennis U11B
-    - Apply Boys & Girls -> B Girls
-    """
     t = str(s or "").strip()
     if not t:
         return ""
 
     t = t.replace("&amp;", "&")
-
-    # U 13 -> U13
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
-
-    # Hockey U13Girls -> U13 Girls
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
-
-    # TennisU11B -> Tennis U11B
     t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
-
-    # U11Boys -> U11 Boys (only if attached)
     t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
-
-    # fix & combo
     t = fix_boys_girls_combo(t)
 
-    # normalize dashes
-    t = t.replace("--", "-")
     t = re.sub(r"\s{2,}", " ", t).strip()
-
     return t
 
 def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
     cn = normalize_category(cat_val)
-    act_norm = normalize_activity(act_val)
-    act_txt = norm_gender_words(act_norm)
+    act_txt = norm_gender_words(normalize_activity(act_val))
 
-    grp_disp, _ = group_from_cat_and_grade(cn, grade_val)
+    grp_disp, _ = group_for_row(cn, grade_val, team_val)
 
-    # team text: remove any group tokens to avoid duplicates
+    # remove age tokens from team so we don't double-print
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
 
     if grp_disp:
-        # Ensure we don't add group twice if team still contains it (extra safety)
+        # if still contains grp (safety), don't repeat
         if grp_disp.lower() in team_clean.lower():
             return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
         return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
@@ -453,14 +453,12 @@ def load_csv(url: str):
 
     txt = r.text or ""
     ctype = (r.headers.get("Content-Type") or "").lower()
-
-    # Guard: HTML page instead of CSV
     if "<html" in txt.lower() and "text/csv" not in ctype and "application/csv" not in ctype:
         return pd.DataFrame(), txt
 
-    df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
-    df.columns = [str(c).strip() for c in df.columns]
-    return df, txt
+    df_ = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
+    df_.columns = [str(c).strip() for c in df_.columns]
+    return df_, txt
 
 try:
     df, raw_txt = load_csv(CSV_URL)
@@ -492,14 +490,13 @@ if df.empty:
         st.rerun()
     st.stop()
 
-# Manual refresh (keeps your look - simple)
 with st.sidebar:
     if st.button("🔄 Refresh data"):
         st.cache_data.clear()
         st.rerun()
 
 # =============================
-# COLUMNS (YOUR HEADERS)
+# COLUMNS
 # =============================
 COL_CATEGORY  = "Category"
 COL_ACTIVITY  = "Activity/Subject Name"
@@ -534,7 +531,7 @@ term_s    = s(COL_TERM)
 view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
 
 # =============================
-# FILTERS (SIDEBAR)
+# FILTERS
 # =============================
 st.sidebar.markdown("## Filters")
 
@@ -607,7 +604,6 @@ for i in range(len(df)):
     if selected_act and act_norm not in selected_act:
         continue
 
-    # term rules
     term_val = str(term_s.iloc[i]).strip().lower()
     looks_like_term_doc = any(
         k in (act_norm.lower() + " " + str(team_s.iloc[i]).lower())
@@ -615,11 +611,9 @@ for i in range(len(df)):
     )
     term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
-    # due date
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
-    # show only today+future if date exists
     if d_dt and d_dt.date() < today:
         continue
 
@@ -633,16 +627,16 @@ for i in range(len(df)):
         if not term_flag:
             continue
 
-    grp_disp, grp_matches = group_from_cat_and_grade(cn, grade_s.iloc[i])
+    grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport: must match selected U and MUST come from column (no athletics default)
+    # Sport filters: now works even if ages typed in Team/Assessment
     if cn == "sport" and selected_u_set:
         if grp_matches and not any(x in selected_u_set for x in grp_matches):
             continue
         if not grp_matches:
             continue
 
-    # Culture/Academics: grade filter also matches ranges like Gr4-Gr7
+    # Culture/Academics grade filter: range match OK
     if cn in ["culture", "academics"] and selected_gr_set:
         if grp_matches and not any(x in selected_gr_set for x in grp_matches):
             continue
@@ -654,7 +648,6 @@ for i in range(len(df)):
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
 
-    # update tracking
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
     if prev is None:
@@ -683,7 +676,6 @@ for i in range(len(df)):
         "grade": grade_raw_for_sort
     })
 
-# Term docs first (alphabetical), then date items (date -> title -> grade)
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
 res_sorted = term_items + other_items
@@ -716,38 +708,28 @@ else:
         info_raw = str(info_s.iloc[i]).strip().replace("_", " ")
         info_text, info_links = split_info_text_and_links(info_raw)
 
-        # Buttons
         buttons = []
         notes_parts = []
 
         if cn == "academics":
             b_docs = "Dokumente" if afr else "Documents"
             b_info = "Inligting" if afr else "Information"
-
             if prog_link and is_http(prog_link):
                 buttons.append((b_docs, prog_link))
-
-            # info links (if any) become buttons
             for idx, lk in enumerate(info_links, start=1):
                 if is_http(lk):
                     buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
-
         else:
             if prog_link and is_http(prog_link):
                 buttons.append(("Programme", prog_link))
             if teams_link and is_http(teams_link):
                 buttons.append(("Teams", teams_link))
-
-            # info links become Information buttons
             for idx, lk in enumerate(info_links, start=1):
                 if is_http(lk):
                     buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
-
-            # Confirm only if it's a Google Form
             if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
                 buttons.append(("Confirm", confirm_link))
 
-        # Venue
         venue_line = ""
         if ven_norm == "SEE_PROGRAMME":
             notes_parts.append("<b>Venue:</b><br>See programme")
@@ -762,7 +744,6 @@ else:
                 f"{safe_txt(ven_norm).upper()}</a></div>"
             )
 
-        # Notes (text part only)
         if info_text:
             notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
@@ -773,7 +754,6 @@ else:
 
         btn_html = ""
         if buttons:
-            # limit to 4 buttons per card for neatness
             btn_html = "<div class='btnRow'>" + "".join(
                 [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
             ) + "</div>"
