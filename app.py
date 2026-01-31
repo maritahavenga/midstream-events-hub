@@ -1,9 +1,3 @@
-Dit is nou regtig die heel laaste trappie. As die skakel werk (en ek het hom getoets, hy laai die data af), maar die app sê steeds hy wag vir data, beteken dit die app "sien" nie die rye nie omdat hy dink hulle is leeg of omdat die kolom-opskrifte hom verwar.
-
-Kom ons gebruik die "Deep Clean" weergawe. Hierdie kode gaan die data dwing om te verskyn, ongeag of daar vreemde spasies of kolom-titels is.
-
-Plak hierdie finale weergawe in GitHub:
-Python
 import streamlit as st
 import pandas as pd
 import requests, io
