@@ -5,35 +5,80 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
-U = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+# ---- PASTE YOUR PUBLISHED CSV HERE ----
+U = "PASTE_YOUR_CSV_LINK_HERE"
 
-# ---------------- STYLE ----------------
+TZ = pytz.timezone("Africa/Johannesburg")
+
+# ------------------ STYLE ------------------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
-:root{--card:#fff;--line:#e8edf5;--shadow:0 10px 30px rgba(0,0,0,.06);--maroon:#800000;--teal:#008080;--muted:#64748b;}
-.block-container{padding-top:1.0rem;}
+:root{
+  --card:#ffffff; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06);
+  --maroon:#800000; --teal:#008080; --muted:#64748b; --soft:#f3fbfb;
+}
+.block-container{padding-top:1rem;}
 section[data-testid="stSidebar"]{border-right:1px solid var(--line);}
 
-.hero{border:1px solid var(--line);background:linear-gradient(135deg,#fff,#f3fbfb);box-shadow:var(--shadow);border-radius:22px;padding:18px;display:flex;gap:16px;align-items:center;margin-bottom:10px;}
-.hero img{width:80px;border-radius:16px;}
+.hero{
+  border:1px solid var(--line);
+  background:linear-gradient(135deg,#fff, var(--soft));
+  box-shadow:var(--shadow);
+  border-radius:22px;
+  padding:18px;
+  display:flex;gap:16px;align-items:center;
+  margin-bottom:10px;
+}
+.hero img{width:86px;border-radius:16px;}
 .hero .title{font-weight:900;color:var(--maroon);font-size:1.45rem;line-height:1.1;}
 .hero .sub{font-weight:800;color:var(--teal);margin-top:6px;font-size:1.05rem;}
 
-.updateBanner{margin:0 0 14px 0;border:1px solid rgba(0,128,128,0.30);background:rgba(0,128,128,0.08);padding:10px 12px;border-radius:14px;font-weight:900;color:#008080;display:flex;align-items:center;gap:10px;}
-.dot{width:10px;height:10px;border-radius:999px;background:#008080;animation:pulse 1.2s infinite;}
-@keyframes pulse{0%{transform:scale(1);opacity:.35;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.35;}}
+.updateBanner{
+  margin: 0 0 14px 0;
+  border:1px solid rgba(0,128,128,0.30);
+  background:rgba(0,128,128,0.08);
+  padding:10px 12px;
+  border-radius:14px;
+  font-weight:900;
+  color:#008080;
+  display:flex; align-items:center; gap:10px;
+}
+.dot{
+  width:10px;height:10px;border-radius:999px;background:#008080;
+  animation:pulse 1.2s infinite;
+}
+@keyframes pulse{
+  0%{transform:scale(1); opacity:0.35;}
+  50%{transform:scale(1.7); opacity:1;}
+  100%{transform:scale(1); opacity:0.35;}
+}
 
-.card{border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow);border-radius:18px;padding:14px 14px 12px 14px;margin-bottom:14px;border-left:10px solid var(--maroon);}
+.card{
+  border:1px solid var(--line);
+  background:var(--card);
+  box-shadow:var(--shadow);
+  border-radius:18px;
+  padding:14px 14px 12px 14px;
+  margin-bottom:14px;
+  border-left:10px solid var(--maroon);
+}
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:var(--muted);margin-top:8px;font-size:.95rem;}
-
-.noteBlock{margin-top:12px;padding:12px;border-radius:14px;background:rgba(0,128,128,0.08);border:1px solid rgba(0,128,128,0.25);color:#0f172a;font-size:.95rem;line-height:1.35;}
-
-.tealbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-.tealbtn{display:inline-block;background:#008080;color:white !important;padding:9px 12px;border-radius:12px;font-weight:900;text-decoration:none;font-size:.90rem;}
-.tealbtn:hover{opacity:.92;}
+.noteBlock{
+  margin-top:12px; padding:12px;
+  border-radius:14px;
+  background:rgba(0,128,128,0.08);
+  border:1px solid rgba(0,128,128,0.25);
+  color:#0f172a; font-size:.95rem; line-height:1.35;
+}
+.btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.btn{
+  display:inline-block;background:#008080;color:white !important;
+  padding:9px 12px;border-radius:12px;font-weight:900;text-decoration:none;font-size:.90rem;
+}
+.btn:hover{opacity:.92;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -47,117 +92,120 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- HELPERS ----------------
-def cl(v): return str(v).replace(".0", "").replace("nan", "").strip()
-
-def safe_txt(x: str) -> str:
+# ------------------ HELPERS ------------------
+def safe_txt(x) -> str:
     s = str(x or "")
-    return (s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").strip())
+    return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").strip()
 
 def is_http(u: str) -> bool:
-    s = (u or "").strip().lower()
+    s = str(u or "").strip().lower()
     return s.startswith("http://") or s.startswith("https://")
 
 def is_form_link(u: str) -> bool:
-    s = (u or "").lower()
+    s = str(u or "").lower()
     return ("forms.gle" in s) or ("docs.google.com/forms" in s)
 
-def looks_like_html(txt: str) -> bool:
-    s = (txt or "").lower()
-    return ("<!doctype" in s) or ("<html" in s)
-
-def parse_date(s: str):
-    d = pd.to_datetime(str(s), dayfirst=True, errors="coerce")
-    return None if pd.isnull(d) else d.to_pydatetime()
-
-def format_date_long(ds: str) -> str:
-    dt = pd.to_datetime(ds, dayfirst=True, errors="coerce")
-    if pd.isnull(dt):
-        return str(ds).strip()
-    return f"{dt.day} {dt.strftime('%B %Y')}"
-
-def split_label(label: str, is_academic: bool) -> str:
-    s = (label or "").strip()
-    if "/" not in s: return s
-    left, right = [p.strip() for p in s.split("/", 1)]
-    return right if is_academic else left
-
-def col_letter_to_idx(letter: str) -> int:
-    return ord(letter.upper()) - ord("A")
-
-def get_col(df: pd.DataFrame, idx: int, default: str = "") -> pd.Series:
-    if df is None or df.empty:
-        return pd.Series([], dtype=str)
-    if df.shape[1] > idx:
-        return df.iloc[:, idx].astype(str)
-    return pd.Series([default] * len(df), dtype=str)
-
-def get_col_by_letter(df: pd.DataFrame, letter: str, default: str = "") -> pd.Series:
-    return get_col(df, col_letter_to_idx(letter), default)
-
-def normalize_category(raw_cat: str) -> str:
-    s = (raw_cat or "").lower().strip()
-    s = re.sub(r"\s+", " ", s)
-    # programme counts as sport if it appears in category text
-    if "programme" in s or "program" in s:
+def normalize_category(v: str) -> str:
+    s = str(v or "").strip().lower()
+    s = re.sub(r"\s+"," ",s)
+    if "sport" in s or "programme" in s or "program" in s:
         return "sport"
     if "culture" in s or "kultuur" in s:
         return "culture"
     if "academic" in s or "academics" in s or "akadem" in s:
         return "academics"
-    if "sport" in s:
-        return "sport"
     return s
+
+def normalize_activity(v: str) -> str:
+    s = str(v or "").strip().lower()
+    s = re.sub(r"\s+"," ",s)
+
+    # Afrikaans mappings (HT / EAT)
+    if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
+        return "Afrikaans Hooftaal"
+    if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
+        return "Afrikaans Eerste Addisionele Taal"
+
+    # Athletics (and Atletiek)
+    if "athletics" in s or "atletiek" in s:
+        return "Athletics"
+
+    # Common sport normalisation (optional but helpful)
+    if "netbal" in s or "netball" in s:
+        return "Netball"
+    if "rugby" in s:
+        return "Rugby"
+    if "hockey" in s:
+        return "Hockey"
+    if "tennis" in s:
+        return "Tennis"
+    if "swimming" in s or "swem" in s or "gala" in s:
+        return "Swimming"
+
+    return s.title()
 
 AFR_EN = {
     "atletiek":"Athletics","netbal":"Netball","swem":"Swimming","gala":"Gala",
     "saal":"Hall","veld":"Field","wiskunde":"Math","kultuur":"Culture",
-    "program":"Programme","programme":"Programme","assessering":"Assessment",
     "inligting":"Information","dokumente":"Documents",
 }
-def tr_card_text(s: str, keep_afrikaans: bool) -> str:
+def tr_en_if_needed(text: str, keep_afrikaans: bool) -> str:
+    """Translate Afrikaans sport/culture words to English unless Afrikaans subject."""
     if keep_afrikaans:
-        return str(s or "").strip()
-    txt = str(s or "").strip()
+        return str(text or "").strip()
+    t = str(text or "").strip()
     for k, v in AFR_EN.items():
-        txt = re.sub(rf"\\b{k}\\b", v, txt, flags=re.I)
-    return re.sub(r"\\s+", " ", txt).strip()
+        t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
+    return re.sub(r"\s+"," ",t).strip()
 
-GR_TO_U = {"1":"7","2":"8","3":"9","4":"10","5":"11","6":"12","7":"13"}
-def normalize_grade(s: str) -> str:
-    t = (s or "").lower().replace("grade","").replace("gr","").replace(".","").strip()
-    t = re.sub(r"\\s+","",t)
-    return t
-def normalize_u(s: str) -> str:
-    t = (s or "").lower().replace("u","").replace("under","").strip()
-    t = re.sub(r"\\s+","",t)
-    return t
+def parse_date_sa(s: str):
+    # dayfirst=True ensures South African style parsing
+    d = pd.to_datetime(str(s), dayfirst=True, errors="coerce")
+    return None if pd.isnull(d) else d.to_pydatetime()
 
-# ---------------- LOAD DATA ----------------
+def format_date_long_sa(s: str) -> str:
+    dt = parse_date_sa(s)
+    if not dt:
+        return str(s or "").strip()
+    return f"{dt.day} {dt.strftime('%B %Y')}"
+
+def is_full_term(v: str) -> bool:
+    s = str(v or "").strip().lower()
+    return ("full term" in s) or (s == "full") or ("term" in s and "specific" not in s)
+
+def clean_first_url(v: str) -> str:
+    """If a cell contains two URLs stuck together / weird chars, keep the first URL only."""
+    s = str(v or "").replace("\n"," ").strip()
+    m = re.search(r"https?://\S+", s)
+    return m.group(0) if m else s
+
 @st.cache_data(ttl=60)
-def load_upcoming(url: str):
+def load_csv(url: str):
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, timeout=25, headers=headers, allow_redirects=True)
     txt = r.text or ""
-    if r.status_code != 200 or looks_like_html(txt) or len(txt) < 20:
-        return pd.DataFrame(), txt
+    if r.status_code != 200 or len(txt) < 20:
+        return pd.DataFrame(), ""
     df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
     return df, txt
 
-# ---------------- SIDEBAR ----------------
+# ------------------ SIDEBAR ------------------
 st.sidebar.markdown("## 🧭 Navigation")
+view_mode = st.sidebar.radio("View", ["Upcoming", "Next 7 Days", "Term"], horizontal=True)
+category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
+
+search = st.sidebar.text_input("Search", placeholder="Type to filter...")
 debug = st.sidebar.checkbox("Debug mode", value=False)
 
-tz = pytz.timezone("Africa/Johannesburg")
-now_dt = datetime.now(tz)
-today = now_dt.date()
-
-df, raw_txt = load_upcoming(U)
+df, raw_txt = load_csv(U)
 if df.empty:
-    st.error("No data loaded from Google Sheet.")
+    st.error("No data loaded. Check your published CSV link.")
     st.stop()
 
-# NEW UPDATE banner for 6 hours after changes
+# NEW UPDATE banner for 6 hours after CSV changes
+now_dt = datetime.now(TZ)
+today = now_dt.date()
+
 current_hash = hashlib.sha256((raw_txt or "").encode("utf-8")).hexdigest()
 if "prev_hash" not in st.session_state:
     st.session_state.prev_hash = current_hash
@@ -169,124 +217,100 @@ elif current_hash != st.session_state.prev_hash:
 if st.session_state.get("last_change") and (now_dt - st.session_state.last_change) <= timedelta(hours=6):
     st.markdown("""<div class="updateBanner"><span class="dot"></span> NEW UPDATE</div>""", unsafe_allow_html=True)
 
-view_mode = st.sidebar.radio("View", ["Upcoming", "Next 7 Days", "Term"], horizontal=True)
-sq = st.sidebar.text_input("Search", placeholder="Type to filter...")
+# Column mapping (0-based): A..K
+A_CAT = 0
+B_ACT = 1
+C_GROUP = 2
+D_DATE = 3
+E_VEN = 4
+F_PROG = 5
+G_TEAM = 6
+H_FORM = 7
+I_INFO = 8
+J_GRADEU = 9
+K_DUR = 10
 
-if debug:
-    st.sidebar.write("Headers:", list(df.columns))
+def col(i, default=""):
+    if df.shape[1] > i:
+        return df.iloc[:, i].astype(str)
+    return pd.Series([default]*len(df), dtype=str)
 
-# ---------------- COLUMN MAPPING (CORRECT) ----------------
-# ✅ A = Category, B = Activity, D = Date, E = Venue, J = Grade/U, K = Duration
-cat_series  = get_col_by_letter(df, "A", "")   # ✅ FIXED
-act_series  = get_col_by_letter(df, "B", "")
-date_series = get_col_by_letter(df, "D", "")
-ven_series  = get_col_by_letter(df, "E", "")
-j_series    = get_col_by_letter(df, "J", "")
-duration_series = get_col_by_letter(df, "K", "")
+cat_s = col(A_CAT)
+act_s = col(B_ACT)
+grp_s = col(C_GROUP)
+date_s = col(D_DATE)
+ven_s = col(E_VEN)
+prog_s = col(F_PROG)
+team_s = col(G_TEAM)
+form_s = col(H_FORM)
+info_s = col(I_INFO)
+j_s = col(J_GRADEU)
+dur_s = col(K_DUR)
 
-# Links
-programme_series = get_col_by_letter(df, "F", "")
-team_series      = get_col_by_letter(df, "G", "")
-form_series      = get_col_by_letter(df, "H", "")
-info_series      = get_col_by_letter(df, "I", "")
+# Build Activity options (normalized) filtered by selected categories
+wanted = {c.lower() for c in category_choice} if category_choice else set()
 
-# Button headers (with "/" rule)
-F_idx = col_letter_to_idx("F"); G_idx = col_letter_to_idx("G"); H_idx = col_letter_to_idx("H"); I_idx = col_letter_to_idx("I")
-F_header = str(df.columns[F_idx]) if df.shape[1] > F_idx else "Programme / Documents"
-G_header = str(df.columns[G_idx]) if df.shape[1] > G_idx else "Team"
-H_header = str(df.columns[H_idx]) if df.shape[1] > H_idx else "Register"
-I_header = str(df.columns[I_idx]) if df.shape[1] > I_idx else "Information / Inligting"
-
-# Filters
-st.sidebar.markdown("---")
-category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
-
-# Activity options can depend on category selection (so it feels correct)
-wanted_norm = {c.lower() for c in category_choice} if category_choice else set()
-
-def row_matches_selected_category(i: int) -> bool:
-    if not wanted_norm:
+def row_ok_cat(i: int) -> bool:
+    if not wanted:
         return True
-    cn = normalize_category(str(cat_series.iloc[i]))
-    return (("sport" in wanted_norm and cn == "sport") or
-            ("culture" in wanted_norm and cn == "culture") or
-            ("academics" in wanted_norm and cn == "academics"))
+    cn = normalize_category(cat_s.iloc[i])
+    return (("sport" in wanted and cn == "sport") or
+            ("culture" in wanted and cn == "culture") or
+            ("academics" in wanted and cn == "academics"))
 
-act_opts = sorted({str(act_series.iloc[i]).strip() for i in range(len(df)) if str(act_series.iloc[i]).strip() and row_matches_selected_category(i)})
+act_opts = sorted({normalize_activity(act_s.iloc[i]) for i in range(len(df)) if act_s.iloc[i].strip() and row_ok_cat(i)})
 selected_activities = st.sidebar.multiselect("Activity", act_opts, default=[])
 
-# Grade/Age nav
 academics_mode = ("Academics" in category_choice)
-selected_grades, selected_ages = [], []
 if academics_mode:
-    selected_grades = st.sidebar.multiselect("Grades", [f"Gr {i}" for i in range(1,8)], default=[])
+    selected_grades = st.sidebar.multiselect("Grades", [f"Gr {i}" for i in range(1, 8)], default=[])
 else:
-    selected_ages = st.sidebar.multiselect("Age Groups", [f"U{i}" for i in range(7,14)], default=[])
+    selected_ages = st.sidebar.multiselect("Age Groups", [f"U{i}" for i in range(7, 14)], default=[])
 
 res = []
-# ---------------- FILTER LOOP ----------------
-for idx in range(len(df)):
-    cn = normalize_category(str(cat_series.iloc[idx]))
-    is_academic = (cn == "academics")
+# ------------------ FILTER + SORT ------------------
+for i in range(len(df)):
+    cn = normalize_category(cat_s.iloc[i])
+
     is_sport = (cn == "sport")
+    is_academic = (cn == "academics")
     is_culture = (cn == "culture")
 
-    # ✅ Category filter now reads Column A
+    # Category filter (Column A)
     if category_choice:
-        wanted = [x.lower() for x in category_choice]
-        ok = (("academics" in wanted and is_academic) or
-              ("sport" in wanted and is_sport) or
-              ("culture" in wanted and is_culture))
+        ok = (("Sport" in category_choice and is_sport) or
+              ("Culture" in category_choice and is_culture) or
+              ("Academics" in category_choice and is_academic))
         if not ok:
             continue
 
-    # Activity filter (B)
-    act_raw = str(act_series.iloc[idx]).strip()
-    if selected_activities and act_raw not in selected_activities:
+    # Activity filter (normalized)
+    act_raw = act_s.iloc[i]
+    act_norm = normalize_activity(act_raw)
+    if selected_activities and act_norm not in selected_activities:
         continue
 
-    # Afrikaans subject rules based on Activity (B)
-    act_lc = act_raw.lower().strip()
-    is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["eat", "ht"]) or ("afrikaans eat" in act_lc) or ("afrikaans ht" in act_lc)
+    # Afrikaans subject detection (based on Activity/Subject in Column B)
+    act_lc = str(act_raw).strip().lower()
+    is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-    if act_lc in ["eat", "afrikaans eat", "afrikaans e.a.t", "afrikaans e.a.t."]:
-        act_show = "Afrikaans Eerste Addisionele Taal"
-        is_afrikaans_subject = True
-    elif act_lc in ["ht", "afrikaans ht"]:
-        act_show = "Afrikaans Hooftaal"
-        is_afrikaans_subject = True
+    # Grade/U label (Column J)
+    jv = str(j_s.iloc[i]).strip()
+    if is_sport:
+        j_label = f"U{jv}" if jv else ""
     else:
-        act_show = act_raw
+        j_label = f"Gr {jv}" if jv else ""
 
-    # Grade/Age filters (J)
-    jv = cl(j_series.iloc[idx])
-    if academics_mode:
-        if selected_grades:
-            g = normalize_grade(jv)
-            if not g or f"Gr {g}" not in selected_grades:
-                continue
-    else:
-        if selected_ages:
-            u = normalize_u(jv)
-            if not u:
-                g = normalize_grade(jv)
-                if g and g in GR_TO_U:
-                    u = GR_TO_U[g]
-            if not u or f"U{u}" not in selected_ages:
-                continue
+    # Date filtering (Column D) — SA parsing
+    d_raw = str(date_s.iloc[i]).strip()
+    d_dt = parse_date_sa(d_raw)
 
-    # Date (D)
-    d_raw = cl(date_series.iloc[idx])
-    d_dt = parse_date(d_raw)
+    term_flag = is_full_term(dur_s.iloc[i])
 
-    # Duration (K)
-    duration = str(duration_series.iloc[idx]).lower().strip()
-    is_full_term = ("full" in duration) or ("term" in duration)
-
-    # View filtering
+    # view_mode rules
     visible = True
     if view_mode == "Term":
-        if not is_full_term:
+        if not term_flag:
             visible = False
         else:
             if d_dt and today >= d_dt.date():
@@ -298,27 +322,35 @@ for idx in range(len(df)):
             if view_mode == "Next 7 Days" and d_dt.date() > (today + timedelta(days=7)):
                 visible = False
         else:
+            # no date -> hide in Next 7 Days
             if view_mode == "Next 7 Days":
                 visible = False
 
     if not visible:
         continue
 
+    # Title = Column B + J + C ONLY (no extra)
+    group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
+    act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
+    title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
+
+    # Search
+    if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
+        continue
+
     res.append({
-        "idx": idx,
-        "is_full_term": is_full_term,
+        "i": i,
         "dt": d_dt if d_dt else datetime(2099, 1, 1),
-        "b_sort": act_raw.lower().strip()   # alphabetical by Activity (B)
+        "term": term_flag,
+        "alpha": act_txt.lower()
     })
 
-# ---------------- SORTING ----------------
-term_items = [x for x in res if x["is_full_term"]]
-other_items = [x for x in res if not x["is_full_term"]]
-term_items.sort(key=lambda x: x["b_sort"])
-other_items.sort(key=lambda x: (x["dt"], x["b_sort"]))
+# Sort: Full Term on top (alphabetical), then by date, then alphabetical
+term_items = sorted([x for x in res if x["term"]], key=lambda x: x["alpha"])
+other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["alpha"]))
 res_sorted = term_items + other_items
 
-# ---------------- MAIN LAYOUT ----------------
+# ------------------ DISPLAY ------------------
 left, right = st.columns([2.2, 1])
 
 with right:
@@ -326,57 +358,41 @@ with right:
     st.metric("Rows loaded", len(df))
     st.metric("Events shown", len(res_sorted))
     st.caption(f"View: **{view_mode}**")
+    if debug:
+        st.write("Columns:", df.shape[1])
+        st.write("First headers (if any):", list(df.columns)[:12])
 
 with left:
     st.markdown("## 📅 Events")
 
     shown = 0
     for item in res_sorted:
-        idx = item["idx"]
-
-        cn = normalize_category(str(cat_series.iloc[idx]))
-        is_academic = (cn == "academics")
+        i = item["i"]
+        cn = normalize_category(cat_s.iloc[i])
         is_sport = (cn == "sport")
+        is_academic = (cn == "academics")
 
-        # Activity (B)
-        act_raw = str(act_series.iloc[idx]).strip()
-        act_lc = act_raw.lower().strip()
+        act_raw = act_s.iloc[i]
+        act_norm = normalize_activity(act_raw)
+        act_lc = str(act_raw).strip().lower()
+        is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-        is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["eat", "ht"]) or ("afrikaans eat" in act_lc) or ("afrikaans ht" in act_lc)
-        if act_lc in ["eat", "afrikaans eat", "afrikaans e.a.t", "afrikaans e.a.t."]:
-            act_show = "Afrikaans Eerste Addisionele Taal"
-            is_afrikaans_subject = True
-        elif act_lc in ["ht", "afrikaans ht"]:
-            act_show = "Afrikaans Hooftaal"
-            is_afrikaans_subject = True
-        else:
-            act_show = act_raw
+        # Title = B + J + C
+        jv = str(j_s.iloc[i]).strip()
+        j_label = (f"U{jv}" if is_sport else (f"Gr {jv}" if jv else "")) if jv else ""
+        group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
+        act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
+        title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
 
-        # J label (Sport=U, others=Gr)
-        jv = cl(j_series.iloc[idx])
-        if is_sport:
-            j_show = f"U{normalize_u(jv) or jv}" if jv else ""
-        else:
-            g = normalize_grade(jv) or jv
-            j_show = f"Gr {g}" if g else ""
+        # Date line (SA)
+        d_raw = str(date_s.iloc[i]).strip()
+        date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        act_card = tr_card_text(act_show, keep_afrikaans=is_afrikaans_subject)
-        cat_card = tr_card_text(str(cat_series.iloc[idx]).strip(), keep_afrikaans=is_afrikaans_subject)
-
-        heading = " ".join([x for x in [act_card, j_show, cat_card] if x]).strip()
-
-        if sq and sq.lower().replace(" ", "") not in heading.lower().replace(" ", ""):
-            continue
-
-        # Date line (D)
-        d_raw = cl(date_series.iloc[idx])
-        date_line = format_date_long(d_raw) if d_raw else ""
-
-        # Venue (E)
-        ven = cl(ven_series.iloc[idx])
+        # Venue line
+        ven = str(ven_s.iloc[i]).strip()
         venue_line = ""
         if ven:
-            ven_show = tr_card_text(ven, keep_afrikaans=is_afrikaans_subject)
+            ven_show = tr_en_if_needed(ven, keep_afrikaans=is_afrikaans_subject)
             map_url = f"https://www.google.com/maps/search/?api=1&query={ven.replace(' ','+')}+Midstream"
             venue_line = (
                 f"<div class='meta'>📍 "
@@ -384,56 +400,59 @@ with left:
                 f"{safe_txt(ven_show).upper()}</a></div>"
             )
 
-        # Buttons + notes (F/G/H/I)
-        prog_link = cl(programme_series.iloc[idx])
-        team_val  = cl(team_series.iloc[idx])
-        form_link = cl(form_series.iloc[idx])
-        info_val  = cl(info_series.iloc[idx])
+        # Links & Notes
+        prog_link = clean_first_url(prog_s.iloc[i])
+        team_val  = str(team_s.iloc[i]).strip()
+        form_link = clean_first_url(form_s.iloc[i])
+        info_val  = str(info_s.iloc[i]).strip()
 
-        prog_btn_label = split_label(F_header, is_academic)
-        team_btn_label = split_label(G_header, is_academic)
-        info_btn_label = split_label(I_header, is_academic)
-        form_btn_label = H_header.strip()
+        # Button labels
+        # For academics: Programme button should behave like Documents
+        b_prog = "Documents" if is_academic else "Programme"
+        b_team = "Team"
+        b_info = "Information"
+        b_form = "Confirm"  # Google form
 
-        # Afrikaans subject button wording
         if is_afrikaans_subject:
-            prog_btn_label = prog_btn_label.replace("Documents", "Dokumente").replace("documents", "Dokumente")
-            info_btn_label = info_btn_label.replace("Information", "Inligting").replace("information", "Inligting")
+            b_prog = "Dokumente" if is_academic else "Programme"  # your request: Afrikaans subject -> Dokumente for docs
+            b_info = "Inligting"
 
-        prog_btn_label = tr_card_text(prog_btn_label, keep_afrikaans=is_afrikaans_subject)
-        team_btn_label = tr_card_text(team_btn_label, keep_afrikaans=is_afrikaans_subject)
-        info_btn_label = tr_card_text(info_btn_label, keep_afrikaans=is_afrikaans_subject)
-        form_btn_label = tr_card_text(form_btn_label, keep_afrikaans=is_afrikaans_subject)
-
+        # Notes block (only if text and not link)
         notes_parts = []
-        if team_val and (not is_http(team_val)):
-            notes_parts.append(f"<b>{safe_txt(team_btn_label)}:</b><br>{safe_txt(tr_card_text(team_val, keep_afrikaans=is_afrikaans_subject))}")
-        if info_val and (not is_http(info_val)):
-            notes_parts.append(f"<b>{safe_txt(info_btn_label)}:</b><br>{safe_txt(tr_card_text(info_val, keep_afrikaans=is_afrikaans_subject))}")
+        if team_val and not is_http(team_val):
+            notes_parts.append(f"<b>{safe_txt(b_team)}:</b><br>{safe_txt(tr_en_if_needed(team_val, keep_afrikaans=is_afrikaans_subject))}")
+        if info_val and not is_http(info_val):
+            notes_parts.append(f"<b>{safe_txt(b_info)}:</b><br>{safe_txt(tr_en_if_needed(info_val, keep_afrikaans=is_afrikaans_subject))}")
 
-        notes_block = ""
-        if notes_parts:
-            notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>"
+        notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
 
-        btn_items = []
+        # Buttons row (only if links exist)
+        btns = []
+
         if prog_link and is_http(prog_link):
-            btn_items.append((prog_btn_label, prog_link))
+            btns.append((b_prog, prog_link))
+
+        # Team: if it is a link
         if team_val and is_http(team_val):
-            btn_items.append((team_btn_label, team_val))
+            btns.append((b_team, clean_first_url(team_val)))
+
+        # Information: if it is a link
         if info_val and is_http(info_val):
-            btn_items.append((info_btn_label, info_val))
+            btns.append((b_info, clean_first_url(info_val)))
+
+        # Form confirm: only if H has a google form link (and not empty)
         if form_link and is_http(form_link) and is_form_link(form_link):
-            btn_items.append((form_btn_label, form_link))
+            btns.append((b_form, form_link))
 
         btn_html = ""
-        if btn_items:
-            btn_html = "<div class='tealbtns'>" + "".join(
-                [f"<a class='tealbtn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in btn_items[:4]]
+        if btns:
+            btn_html = "<div class='btnRow'>" + "".join(
+                [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in btns[:4]]
             ) + "</div>"
 
         st.markdown(f"""
 <div class="card">
-  <div class="card-title">{safe_txt(heading)}</div>
+  <div class="card-title">{safe_txt(title)}</div>
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {venue_line}
   {notes_block}
@@ -446,3 +465,7 @@ with left:
     if shown == 0:
         st.info("Nothing matched your filters/search.")
 
+st.markdown(
+    "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
+    unsafe_allow_html=True
+)
