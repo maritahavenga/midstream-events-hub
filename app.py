@@ -1,10 +1,14 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Basiese Opset
+# =============================
+# 1. Basiese opset
+# =============================
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
-# 2. Styl (Midstream Rooi)
+# =============================
+# 2. Styl (Midstream rooi)
+# =============================
 st.markdown("""
 <style>
 .stApp { background-color: #f8f9fa; }
@@ -20,53 +24,72 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 3. Google Sheet CSV (Upcoming tab)
+# =============================
+# 3. Google Sheets CSV (Upcoming)
+# =============================
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-# 4. Data Laai
+# =============================
+# 4. Data laai
+# =============================
 try:
     df = pd.read_csv(URL)
+
+    # Skoonmaak
     df.columns = df.columns.str.strip()
     df = df.fillna("")
 
-    if not df.empty:
+    # Maak kolomname veilig (verwyder weird Unicode)
+    df = df.rename(columns={
+        "Activity/Subject": "Activity",
+        "Programme / Doc": "Document",
+        "Date / Due Date": "Date",
+        "Age Group (9,10…)": "AgeGroup",
+        "Age Group (9,10)": "AgeGroup"  # fallback
+    })
 
-        # Kategorie filter
-        cats = sorted([c for c in df["Category"].unique() if c.strip()])
-        sel_cat = st.multiselect("Kies Kategorie:", cats)
+    if df.empty:
+        st.info("Geen data beskikbaar nie.")
+        st.stop()
 
-        for _, row in df.iterrows():
+    # =============================
+    # Kategorie filter
+    # =============================
+    categories = sorted([c for c in df["Category"].unique() if str(c).strip()])
+    selected = st.multiselect("Kies Kategorie:", categories)
 
-            c_cat   = row["Category"].strip()
-            c_subj  = row["Activity/Subject"].strip()
-            c_team  = row["Team"].strip()
-            c_date  = row["Date / Due Date"]
-            c_ven   = row["Venue"]
-            c_info  = row["Information"]
-            c_grade = row["Age Group (9,10"]
-            c_link  = row["Programme / Doc"]
+    # =============================
+    # Events wys
+    # =============================
+    for _, row in df.iterrows():
 
-            if not sel_cat or c_cat in sel_cat:
+        category = row["Category"].strip()
+        subject  = row["Activity"].strip()
+        team     = row.get("Team", "").strip()
+        date     = row["Date"]
+        venue    = row["Venue"]
+        info     = row["Information"]
+        grade    = row.get("AgeGroup", "")
+        link     = row["Document"]
 
-                title = c_team if c_team else c_subj
+        if selected and category not in selected:
+            continue
 
-                st.markdown(f"""
-                <div class="card">
-                    <span class="tag">{c_cat}</span>
-                    <div style="color:#008080; font-weight:bold; margin-top:8px;">{c_subj}</div>
-                    <div style="font-size:1.2rem; font-weight:bold;">{title}</div>
-                    <div style="color:#555; font-size:14px;">
-                        Grade {c_grade} | 📅 {c_date} | 📍 {c_ven}
-                    </div>
-                    {f'<div class="info">{c_info}</div>' if str(c_info).strip() else ''}
-                    {f'<a href="{c_link}" target="_blank"><button style="margin-top:10px;">📂 OOP DOKUMENT</button></a>' if str(c_link).startswith("http") else ''}
-                </div>
-                """, unsafe_allow_html=True)
+        title = team if team else subject
 
-    else:
-        st.info("Wagtend op data vanaf die 'Upcoming' tab...")
+        st.markdown(f"""
+        <div class="card">
+            <span class="tag">{category}</span>
+            <div style="color:#008080; font-weight:bold; margin-top:8px;">{subject}</div>
+            <div style="font-size:1.2rem; font-weight:bold;">{title}</div>
+            <div style="color:#555; font-size:14px;">
+                Grade {grade} | 📅 {date} | 📍 {venue}
+            </div>
+            {f'<div class="info">{info}</div>' if info.strip() else ''}
+            {f'<a href="{link}" target="_blank"><button style="margin-top:10px;">📂 OOP DOKUMENT</button></a>' if link.startswith("http") else ''}
+        </div>
+        """, unsafe_allow_html=True)
 
 except Exception as e:
     st.error("Kon nie tans met Google Sheets koppel nie.")
-    if st.button("Probeer weer"):
-        st.rerun()
+    st.code(str(e))
