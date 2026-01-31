@@ -4,6 +4,7 @@ import requests, io, time
 
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
+# --- UI STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa; }
@@ -21,45 +22,47 @@ st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>PRIMARY EVENT HUB
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-@st.cache_data(ttl=1)
-def load_data():
+# ONS VERWYDER CACHE VOLLEDIG OM DATA TERUG TE BRING
+def get_fresh_data():
     try:
-        r = requests.get(f"{URL}&cb={time.time()}", timeout=15)
-        df = pd.read_csv(io.StringIO(r.content.decode('utf-8'))).fillna("")
+        # Timestamp dwing Google om vars data te stuur
+        r = requests.get(f"{URL}&cb={time.time()}", timeout=10)
+        # As Google HTML stuur ipv CSV, vang ons dit hier
+        if "<!DOCTYPE" in r.text or "html" in r.text.lower()[:50]:
+            return "HTML_ERROR"
+        df = pd.read_csv(io.StringIO(r.text)).fillna("")
         return df
     except:
         return None
 
-df = load_data()
+df = get_fresh_data()
 
-if df is not None and not df.empty:
+if df is str(df) and df == "HTML_ERROR":
+    st.error("Google stuur weer HTML. Verfris asb die bladsy oor 'n minuut.")
+elif df is not None and not df.empty:
     # FILTERS
     all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
     sel_cats = st.multiselect("Kies Kategorie:", all_cats)
     
     all_grades = sorted([str(x) for x in df.iloc[:, 9].unique() if str(x).strip()])
-    sel_grades = st.multiselect("Filter op Graad / Ouderdom:", sel_grades)
+    sel_grades = st.multiselect("Filter op Graad:", all_grades)
 
     for i in range(len(df)):
         row = df.iloc[i]
         
-        # ONS GEBRUIK JOU LYS PRESIES:
+        # JOU LYS PRESIES BELYN:
         cat   = str(row.iloc[0])  # A: Category
         subj  = str(row.iloc[1])  # B: Activity / Subject
         asses = str(row.iloc[2])  # C: Team / Assessment
-        date  = str(row.iloc[3])  # D: Date / Due Date
+        date  = str(row.iloc[3])  # D: Date
         ven   = str(row.iloc[4])  # E: Venue
-        lnk   = str(row.iloc[5])  # F: Programme / Document Link
+        lnk   = str(row.iloc[5])  # F: Link
         team  = str(row.iloc[6])  # G: Team
         info  = str(row.iloc[7])  # H: Information
-        grade = str(row.iloc[9])  # J: Age Group / Grade
-        dur   = str(row.iloc[10]) # K: Display Duration
+        grade = str(row.iloc[9])  # J: Grade
+        dur   = str(row.iloc[10]) # K: Duration
 
-        # Logika: As daar 'n span is (G), wys hom as die hoof titel. 
-        # Indien nie, gebruik Assessment (C). Indien nie, gebruik Subject (B).
         display_title = team if len(team) > 1 else (asses if len(asses) > 1 else subj)
-        
-        # Goud-effek vir "Whole Term" items (Kolom K)
         is_whole = "whole term" in dur.lower() or "whole term" in date.lower()
 
         if (not sel_cats or cat in sel_cats) and (not sel_grades or grade in sel_grades):
@@ -70,14 +73,14 @@ if df is not None and not df.empty:
                     <div style="color:#008080; font-weight:bold; margin-top:5px;">{subj}</div>
                     <div class="event-title">{display_title}</div>
                     <div style="color:#555; font-size:0.9rem;">
-                        <b>Grade: {grade}</b> | 📅 {date} | 📍 {ven}
+                        <b>Target: {grade}</b> | 📅 {date} | 📍 {ven}
                     </div>
                     {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 2 else ''}
-                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT / PROGRAM</a>' if 'http' in lnk else ''}
+                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT</a>' if 'http' in lnk else ''}
                 </div>
             """, unsafe_allow_html=True)
 else:
-    st.info("Besig om data te laai...")
+    st.info("Besig om konneksie te herstel... Klik op 'Dwing Verfris' as die data nie binne 5 sekondes verskyn nie.")
 
-if st.button("Verfris"):
+if st.button("Dwing Verfris"):
     st.rerun()
