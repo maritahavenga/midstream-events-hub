@@ -25,7 +25,7 @@ st.markdown(
 )
 
 # =============================
-# 3. Google Sheets CSV (Upcoming)
+# 3. Google Sheets CSV
 # =============================
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
@@ -34,19 +34,11 @@ URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2S
 # =============================
 try:
     df = pd.read_csv(URL)
-
-    # Skoonmaak
     df.columns = df.columns.str.strip()
     df = df.fillna("")
 
-    # Maak kolomname veilig (verwyder weird Unicode)
-    df = df.rename(columns={
-        "Activity/Subject": "Activity",
-        "Programme / Doc": "Document",
-        "Date / Due Date": "Date",
-        "Age Group (9,10…)": "AgeGroup",
-        "Age Group (9,10)": "AgeGroup"  # fallback
-    })
+    # DEBUG – kan jy later uithaal
+    # st.write("Kolomme:", list(df.columns))
 
     if df.empty:
         st.info("Geen data beskikbaar nie.")
@@ -63,30 +55,30 @@ try:
     # =============================
     for _, row in df.iterrows():
 
-        category = row["Category"].strip()
-        subject  = row["Activity"].strip()
-        team     = row.get("Team", "").strip()
-        date     = row["Date"]
-        venue    = row["Venue"]
-        info     = row["Information"]
-        grade    = row.get("AgeGroup", "")
-        link     = row["Document"]
+        c_cat   = row["Category"].strip()
+        c_subj  = row["Activity/Subject"].strip()
+        c_team  = row["Team"].strip()
+        c_date  = row["Date / Due Date"]
+        c_ven   = row["Venue"]
+        c_info  = row["Information"]
+        c_grade = row["Age Group (9,10…)"] if "Age Group (9,10…)" in df.columns else ""
+        c_link  = row["Programme / Doc"]
 
-        if selected and category not in selected:
+        if selected and c_cat not in selected:
             continue
 
-        title = team if team else subject
+        title = c_team if c_team else c_subj
 
         st.markdown(f"""
         <div class="card">
-            <span class="tag">{category}</span>
-            <div style="color:#008080; font-weight:bold; margin-top:8px;">{subject}</div>
+            <span class="tag">{c_cat}</span>
+            <div style="color:#008080; font-weight:bold; margin-top:8px;">{c_subj}</div>
             <div style="font-size:1.2rem; font-weight:bold;">{title}</div>
             <div style="color:#555; font-size:14px;">
-                Grade {grade} | 📅 {date} | 📍 {venue}
+                Grade {c_grade} | 📅 {c_date} | 📍 {c_ven}
             </div>
-            {f'<div class="info">{info}</div>' if info.strip() else ''}
-            {f'<a href="{link}" target="_blank"><button style="margin-top:10px;">📂 OOP DOKUMENT</button></a>' if link.startswith("http") else ''}
+            {f'<div class="info">{c_info}</div>' if str(c_info).strip() else ''}
+            {f'<a href="{c_link}" target="_blank"><button style="margin-top:10px;">📂 OOP DOKUMENT</button></a>' if str(c_link).startswith("http") else ''}
         </div>
         """, unsafe_allow_html=True)
 
