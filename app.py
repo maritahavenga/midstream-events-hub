@@ -60,7 +60,11 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border-left:10px solid var(--maroon);
   position:relative;
 }
-.card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
+.card-title{
+  font-weight:900;color:var(--maroon);
+  font-size:1.15rem;line-height:1.2;
+  padding-right:130px; /* space so badge doesn't overlap title */
+}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
 
 .noteBlock{
@@ -78,8 +82,10 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
+/* ---- NEW UPDATE badge (desktop default) ---- */
 .ribbon{
-  position:absolute; top:12px; right:12px;
+  position:absolute;
+  top:12px; right:12px;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
@@ -89,9 +95,48 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
   display:flex;align-items:center;gap:8px;
+  z-index:5;
 }
 .rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
+
+/* ==========================
+   MOBILE FIXES
+   ========================== */
+@media (max-width: 640px){
+
+  /* Move the badge slightly DOWN so it doesn't sit on the title */
+  .ribbon{
+    top:18px;       /* was 12px */
+    right:12px;
+    font-size:.75rem;
+    padding:6px 9px;
+  }
+
+  /* Give title a bit more breathing room on mobile */
+  .card-title{
+    padding-right:10px; /* mobile: allow title to wrap nicely */
+  }
+
+  /* Make the sidebar arrow / hamburger more visible (Streamlit top-left menu button) */
+  header [data-testid="stSidebarNav"]{
+    display:block;
+  }
+
+  /* Style the collapse/expand sidebar button */
+  button[kind="header"]{
+    transform: scale(1.15);
+    border-radius:14px !important;
+    box-shadow: 0 10px 22px rgba(0,0,0,.18) !important;
+    background: rgba(0,128,128,0.10) !important;
+  }
+
+  /* Make the icon inside pop a little */
+  button[kind="header"] svg{
+    width:26px !important;
+    height:26px !important;
+  }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -283,19 +328,6 @@ def normalize_venue(v: str) -> str:
 # AGE GROUP / GRADE PARSING
 # =============================
 def expand_group_range(raw: str, kind: str):
-    """
-    Supports:
-      Sport:
-        - U10-U13 / U10–U13
-        - 10-13 / 07-13 (short text)
-        - U10,11,12,13 / 10,11,12,13
-      Culture/Academics:
-        - Gr 4 - Gr 7
-        - 4-7
-        - Gr 4,5,6,7
-        - 4,5,6,7
-    Returns list like ['U10','U11'...] or ['Gr 4','Gr 5'...]
-    """
     s = str(raw or "").strip()
     if not s:
         return []
@@ -307,55 +339,40 @@ def expand_group_range(raw: str, kind: str):
     if not nums:
         return []
 
-    # range
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
-    # list
     if "," in s_nospace:
         lo, hi = min(nums), max(nums)
         if len(nums) >= 3 and (hi - lo) <= 8:
             nums = list(range(lo, hi + 1))
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
-    # single
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
-    """
-    Pull sport age groups out of Team/Assessment if user typed it there.
-    Examples it catches:
-      - U10-U13, U10–U13
-      - 10-13, 07-13
-      - U10,11,12,13 or 10,11,12,13
-    """
     t = str(text or "").strip()
     if not t:
         return []
-
     t = t.replace("–", "-").replace("—", "-")
 
-    # First: explicit U-range
     m = re.search(r"\bU?\d{1,2}\s*-\s*U?\d{1,2}\b", t, flags=re.I)
     if m:
         return expand_group_range(m.group(0), "U")
 
-    # Next: list with commas
     m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
     if m:
         return expand_group_range(m.group(0), "U")
 
-    # Next: short range like 10-13
     m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
     if m:
         return expand_group_range(m.group(0), "U")
 
-    # If they typed a single U11 somewhere
     m = re.search(r"\bU(\d{1,2})\b", t, flags=re.I)
     if m:
         return [f"U{int(m.group(1))}"]
@@ -363,12 +380,6 @@ def extract_u_groups_from_text(text: str):
     return []
 
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
-    """
-    SPORT RULE:
-      - Prefer Age Group column (grade_raw)
-      - If blank, fallback to Team/Assessment (team_raw)
-    NO more athletics-default.
-    """
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         if g:
@@ -380,7 +391,6 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
 
-    # Culture / Academics
     g = str(grade_raw or "").strip()
     if not g:
         return "", []
@@ -389,15 +399,10 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
-# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
-
-    # remove U10-U13 / 10-13 etc
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
-    # remove comma lists
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
-
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip(" -–|,")
 
@@ -413,14 +418,12 @@ def tidy_team_text(s: str) -> str:
     t = str(s or "").strip()
     if not t:
         return ""
-
     t = t.replace("&amp;", "&")
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
     t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
     t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
     t = fix_boys_girls_combo(t)
-
     t = re.sub(r"\s{2,}", " ", t).strip()
     return t
 
@@ -430,12 +433,10 @@ def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> st
 
     grp_disp, _ = group_for_row(cn, grade_val, team_val)
 
-    # remove age tokens from team so we don't double-print
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
 
     if grp_disp:
-        # if still contains grp (safety), don't repeat
         if grp_disp.lower() in team_clean.lower():
             return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
         return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
@@ -629,14 +630,12 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport filters: now works even if ages typed in Team/Assessment
     if cn == "sport" and selected_u_set:
         if grp_matches and not any(x in selected_u_set for x in grp_matches):
             continue
         if not grp_matches:
             continue
 
-    # Culture/Academics grade filter: range match OK
     if cn in ["culture", "academics"] and selected_gr_set:
         if grp_matches and not any(x in selected_gr_set for x in grp_matches):
             continue
