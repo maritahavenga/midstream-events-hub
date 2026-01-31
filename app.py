@@ -144,10 +144,11 @@ def safe_int(x):
     except:
         return None
 
+# Safer expiry: only expire if duration > 0 AND date is valid
 def is_expired(row, today):
     dt = row["_event_dt"]
     dur = row["_dur_days"]
-    if pd.isna(dt) or dur is None:
+    if pd.isna(dt) or dur is None or dur <= 0:
         return False
     expiry_date = dt.normalize() + pd.Timedelta(days=dur)
     return today > expiry_date
@@ -200,7 +201,8 @@ df = df.sort_values("_sort_dt", ascending=True)
 # SESSION STATE
 # =============================
 if "sel_categories" not in st.session_state:
-    st.session_state.sel_categories = ["Sport"]
+    # Show everything by default
+    st.session_state.sel_categories = ["Sport", "Culture", "Academics"]
 if "sel_under" not in st.session_state:
     st.session_state.sel_under = ""
 if "sel_grade" not in st.session_state:
@@ -221,7 +223,7 @@ st.session_state.sel_categories = st.multiselect(
     label_visibility="collapsed",
 )
 if not st.session_state.sel_categories:
-    st.session_state.sel_categories = ["Sport"]
+    st.session_state.sel_categories = ["Sport", "Culture", "Academics"]
 
 # 2) Activity
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
@@ -235,6 +237,7 @@ sel_acts = st.multiselect(
     label_visibility="collapsed",
     placeholder="All activities",
 )
+st.caption("Tip: Clear Activity to show all.")
 
 # 3) Age Group
 st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
@@ -286,7 +289,7 @@ if sel_acts:
 u = st.session_state.sel_under
 if u and want_under:
     mask_sc = filtered["_type"].isin(["Sport", "Culture"])
-    # keep blank unders to avoid over-filtering
+    # keep blank unders to avoid hiding lots of sport rows
     filtered = filtered[~mask_sc | (filtered["_under"].eq(u) | filtered["_under"].eq(""))].copy()
 
 grade_for_acad = st.session_state.sel_grade
@@ -295,6 +298,7 @@ if (not grade_for_acad) and u:
 
 if grade_for_acad and want_grade:
     mask_ac = filtered["_type"].eq("Academics")
+    # keep blank grades to avoid hiding lots of academics rows
     filtered = filtered[~mask_ac | (filtered["_grade"].eq(grade_for_acad) | filtered["_grade"].eq(""))].copy()
 
 st.caption(f"Showing {len(filtered)} item(s).")
@@ -316,8 +320,8 @@ for _, row in filtered.iterrows():
     link     = safe_str(row[COL_LINK])
 
     title = team if team else subject
+    btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
 
-    # Context line
     under = safe_str(row["_under"])
     grade = safe_str(row["_grade"])
     context_bits = []
@@ -327,16 +331,10 @@ for _, row in filtered.iterrows():
         context_bits.append(grade)
     context = " • ".join(context_bits)
 
-    # Button language rule
-    btn_text = "Dokument" if is_afrikaans_activity(subject) else "Document"
-
-    # Card container (HTML just for box)
     st.markdown('<div class="cardbox">', unsafe_allow_html=True)
 
-    # Real content rendered by Streamlit (so NO <div> appears as text)
     st.markdown(f"### {title}")
     st.markdown(f"**{subject}**")
-
     if context:
         st.caption(context)
 
