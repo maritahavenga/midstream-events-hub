@@ -9,7 +9,10 @@ st.set_page_config(page_title="LMCP Event Hub", layout="wide")
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-# =============================
+# ============================<div>📅 2/5/2026</div>
+    <div>📍 HS Waterkloof</div>
+</div>
+<div class="info">Busses will leave from gate 3 at 12:45.</div>
 # STYLING (modern, less “robot”)
 # =============================
 st.markdown("""
