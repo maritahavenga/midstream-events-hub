@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests, io, time
+import requests, io
 
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
@@ -20,48 +20,53 @@ st.markdown("""
 
 st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>PRIMARY EVENT HUB</p></div>', unsafe_allow_html=True)
 
+# JOU SKAKEL WAT ONS WEET WERK
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-# ONS VERWYDER CACHE VOLLEDIG OM DATA TERUG TE BRING
-def get_fresh_data():
+@st.cache_data(ttl=1)
+def load_data():
     try:
-        # Timestamp dwing Google om vars data te stuur
-        r = requests.get(f"{URL}&cb={time.time()}", timeout=10)
-        # As Google HTML stuur ipv CSV, vang ons dit hier
-        if "<!DOCTYPE" in r.text or "html" in r.text.lower()[:50]:
-            return "HTML_ERROR"
+        # Ons gebruik 'n eenvoudige GET sonder te veel parameters wat Google verwar
+        r = requests.get(URL, timeout=10)
+        # As Google HTML stuur, probeer ons dit hanteer
+        if "<!DOCTYPE" in r.text:
+            return "HTML_WAIT"
         df = pd.read_csv(io.StringIO(r.text)).fillna("")
         return df
     except:
         return None
 
-df = get_fresh_data()
+df = load_data()
 
-if df is str(df) and df == "HTML_ERROR":
-    st.error("Google stuur weer HTML. Verfris asb die bladsy oor 'n minuut.")
+if isinstance(df, str) and df == "HTML_WAIT":
+    st.warning("🔄 Google se bediener verfris tans... Verfris asb die app oor 10 sekondes.")
+    if st.button("Probeer nou weer"):
+        st.cache_data.clear()
+        st.rerun()
 elif df is not None and not df.empty:
     # FILTERS
     all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
-    sel_cats = st.multiselect("Kies Kategorie:", all_cats)
+    sel_cats = st.multiselect("Select Category:", all_cats)
     
     all_grades = sorted([str(x) for x in df.iloc[:, 9].unique() if str(x).strip()])
-    sel_grades = st.multiselect("Filter op Graad:", all_grades)
+    sel_grades = st.multiselect("Filter by Grade:", all_grades)
 
     for i in range(len(df)):
         row = df.iloc[i]
         
-        # JOU LYS PRESIES BELYN:
-        cat   = str(row.iloc[0])  # A: Category
-        subj  = str(row.iloc[1])  # B: Activity / Subject
-        asses = str(row.iloc[2])  # C: Team / Assessment
-        date  = str(row.iloc[3])  # D: Date
-        ven   = str(row.iloc[4])  # E: Venue
-        lnk   = str(row.iloc[5])  # F: Link
-        team  = str(row.iloc[6])  # G: Team
-        info  = str(row.iloc[7])  # H: Information
-        grade = str(row.iloc[9])  # J: Grade
-        dur   = str(row.iloc[10]) # K: Duration
+        # JOU KOLOMME (A=0 tot K=10)
+        cat   = str(row.iloc[0])  # A
+        subj  = str(row.iloc[1])  # B
+        asses = str(row.iloc[2])  # C
+        date  = str(row.iloc[3])  # D
+        ven   = str(row.iloc[4])  # E
+        lnk   = str(row.iloc[5])  # F
+        team  = str(row.iloc[6])  # G
+        info  = str(row.iloc[7])  # H
+        grade = str(row.iloc[9])  # J
+        dur   = str(row.iloc[10]) # K
 
+        # Titellogika: Wys Team as daar een is, anders Assessment/Subject
         display_title = team if len(team) > 1 else (asses if len(asses) > 1 else subj)
         is_whole = "whole term" in dur.lower() or "whole term" in date.lower()
 
@@ -73,14 +78,11 @@ elif df is not None and not df.empty:
                     <div style="color:#008080; font-weight:bold; margin-top:5px;">{subj}</div>
                     <div class="event-title">{display_title}</div>
                     <div style="color:#555; font-size:0.9rem;">
-                        <b>Target: {grade}</b> | 📅 {date} | 📍 {ven}
+                        <b>Grade: {grade}</b> | 📅 {date} | 📍 {ven}
                     </div>
-                    {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 2 else ''}
-                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 OOP DOKUMENT</a>' if 'http' in lnk else ''}
+                    {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 1 else ''}
+                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 VIEW DOCUMENT</a>' if 'http' in lnk else ''}
                 </div>
             """, unsafe_allow_html=True)
 else:
-    st.info("Besig om konneksie te herstel... Klik op 'Dwing Verfris' as die data nie binne 5 sekondes verskyn nie.")
-
-if st.button("Dwing Verfris"):
-    st.rerun()
+    st.info("🔄 Connecting... If this takes too long, make sure there is data on your 'Upcoming' tab.")
