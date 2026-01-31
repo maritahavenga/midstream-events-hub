@@ -6,9 +6,13 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
 # ---- PASTE YOUR PUBLISHED CSV HERE ----
-U = "PASTE_YOUR_CSV_LINK_HERE"
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 TZ = pytz.timezone("Africa/Johannesburg")
+
+if not str(CSV_URL).strip().lower().startswith(("http://", "https://")):
+    st.error("CSV link (CSV_URL) is missing or invalid. Paste the FULL https://...output=csv link into CSV_URL.")
+    st.stop()
 
 # ------------------ STYLE ------------------
 st.markdown("""
@@ -130,7 +134,7 @@ def normalize_activity(v: str) -> str:
     if "athletics" in s or "atletiek" in s:
         return "Athletics"
 
-    # Common sport normalisation (optional but helpful)
+    # Common sport normalisation
     if "netbal" in s or "netball" in s:
         return "Netball"
     if "rugby" in s:
@@ -150,7 +154,6 @@ AFR_EN = {
     "inligting":"Information","dokumente":"Documents",
 }
 def tr_en_if_needed(text: str, keep_afrikaans: bool) -> str:
-    """Translate Afrikaans sport/culture words to English unless Afrikaans subject."""
     if keep_afrikaans:
         return str(text or "").strip()
     t = str(text or "").strip()
@@ -159,7 +162,6 @@ def tr_en_if_needed(text: str, keep_afrikaans: bool) -> str:
     return re.sub(r"\s+"," ",t).strip()
 
 def parse_date_sa(s: str):
-    # dayfirst=True ensures South African style parsing
     d = pd.to_datetime(str(s), dayfirst=True, errors="coerce")
     return None if pd.isnull(d) else d.to_pydatetime()
 
@@ -174,7 +176,6 @@ def is_full_term(v: str) -> bool:
     return ("full term" in s) or (s == "full") or ("term" in s and "specific" not in s)
 
 def clean_first_url(v: str) -> str:
-    """If a cell contains two URLs stuck together / weird chars, keep the first URL only."""
     s = str(v or "").replace("\n"," ").strip()
     m = re.search(r"https?://\S+", s)
     return m.group(0) if m else s
@@ -193,19 +194,18 @@ def load_csv(url: str):
 st.sidebar.markdown("## 🧭 Navigation")
 view_mode = st.sidebar.radio("View", ["Upcoming", "Next 7 Days", "Term"], horizontal=True)
 category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
-
 search = st.sidebar.text_input("Search", placeholder="Type to filter...")
 debug = st.sidebar.checkbox("Debug mode", value=False)
 
-df, raw_txt = load_csv(U)
+df, raw_txt = load_csv(CSV_URL)
 if df.empty:
     st.error("No data loaded. Check your published CSV link.")
     st.stop()
 
-# NEW UPDATE banner for 6 hours after CSV changes
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
+# NEW UPDATE banner for 6 hours after CSV changes
 current_hash = hashlib.sha256((raw_txt or "").encode("utf-8")).hexdigest()
 if "prev_hash" not in st.session_state:
     st.session_state.prev_hash = current_hash
@@ -247,7 +247,7 @@ info_s = col(I_INFO)
 j_s = col(J_GRADEU)
 dur_s = col(K_DUR)
 
-# Build Activity options (normalized) filtered by selected categories
+# Activity options (normalized) limited by category selection
 wanted = {c.lower() for c in category_choice} if category_choice else set()
 
 def row_ok_cat(i: int) -> bool:
@@ -261,6 +261,7 @@ def row_ok_cat(i: int) -> bool:
 act_opts = sorted({normalize_activity(act_s.iloc[i]) for i in range(len(df)) if act_s.iloc[i].strip() and row_ok_cat(i)})
 selected_activities = st.sidebar.multiselect("Activity", act_opts, default=[])
 
+# Age group nav: show only for sport selection, grades for academics mode
 academics_mode = ("Academics" in category_choice)
 if academics_mode:
     selected_grades = st.sidebar.multiselect("Grades", [f"Gr {i}" for i in range(1, 8)], default=[])
@@ -290,16 +291,20 @@ for i in range(len(df)):
     if selected_activities and act_norm not in selected_activities:
         continue
 
-    # Afrikaans subject detection (based on Activity/Subject in Column B)
+    # Afrikaans subject detection (Column B)
     act_lc = str(act_raw).strip().lower()
     is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-    # Grade/U label (Column J)
-    jv = str(j_s.iloc[i]).strip()
-    if is_sport:
-        j_label = f"U{jv}" if jv else ""
+    # J label: USE EXACTLY AS IN SHEET (Sport = U8, Academics/Culture = Gr 4)
+    j_label = str(j_s.iloc[i]).strip()
+
+    # Grade/Age filter uses J label now
+    if academics_mode:
+        if selected_grades and j_label not in selected_grades:
+            continue
     else:
-        j_label = f"Gr {jv}" if jv else ""
+        if selected_ages and j_label not in selected_ages:
+            continue
 
     # Date filtering (Column D) — SA parsing
     d_raw = str(date_s.iloc[i]).strip()
@@ -318,23 +323,21 @@ for i in range(len(df)):
     else:
         if d_dt:
             if d_dt.date() < today:
-                visible = False  # hide yesterday and older
+                visible = False
             if view_mode == "Next 7 Days" and d_dt.date() > (today + timedelta(days=7)):
                 visible = False
         else:
-            # no date -> hide in Next 7 Days
             if view_mode == "Next 7 Days":
                 visible = False
 
     if not visible:
         continue
 
-    # Title = Column B + J + C ONLY (no extra)
+    # Title = Column B + Column J + Column C ONLY
     group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
     act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
     title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
 
-    # Search
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
 
@@ -360,7 +363,7 @@ with right:
     st.caption(f"View: **{view_mode}**")
     if debug:
         st.write("Columns:", df.shape[1])
-        st.write("First headers (if any):", list(df.columns)[:12])
+        st.write("Headers:", list(df.columns))
 
 with left:
     st.markdown("## 📅 Events")
@@ -377,9 +380,8 @@ with left:
         act_lc = str(act_raw).strip().lower()
         is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-        # Title = B + J + C
-        jv = str(j_s.iloc[i]).strip()
-        j_label = (f"U{jv}" if is_sport else (f"Gr {jv}" if jv else "")) if jv else ""
+        j_label = str(j_s.iloc[i]).strip()
+
         group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
         act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
         title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
@@ -407,14 +409,14 @@ with left:
         info_val  = str(info_s.iloc[i]).strip()
 
         # Button labels
-        # For academics: Programme button should behave like Documents
         b_prog = "Documents" if is_academic else "Programme"
         b_team = "Team"
         b_info = "Information"
-        b_form = "Confirm"  # Google form
+        b_form = "Confirm"
 
         if is_afrikaans_subject:
-            b_prog = "Dokumente" if is_academic else "Programme"  # your request: Afrikaans subject -> Dokumente for docs
+            # If Afrikaans subject: Documents -> Dokumente, Information -> Inligting
+            b_prog = "Dokumente" if is_academic else "Programme"
             b_info = "Inligting"
 
         # Notes block (only if text and not link)
@@ -426,21 +428,17 @@ with left:
 
         notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
 
-        # Buttons row (only if links exist)
+        # Buttons row (links only)
         btns = []
-
         if prog_link and is_http(prog_link):
             btns.append((b_prog, prog_link))
 
-        # Team: if it is a link
         if team_val and is_http(team_val):
             btns.append((b_team, clean_first_url(team_val)))
 
-        # Information: if it is a link
         if info_val and is_http(info_val):
             btns.append((b_info, clean_first_url(info_val)))
 
-        # Form confirm: only if H has a google form link (and not empty)
         if form_link and is_http(form_link) and is_form_link(form_link):
             btns.append((b_form, form_link))
 
@@ -469,3 +467,4 @@ st.markdown(
     "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
     unsafe_allow_html=True
 )
+
