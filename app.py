@@ -4,6 +4,7 @@ import requests, io
 
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
+# --- UI STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa; }
@@ -11,7 +12,6 @@ st.markdown("""
     .card { background: white; padding: 20px; border-radius: 15px; border-left: 10px solid #800000; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .tag-cat { background: #800000; color: white; padding: 3px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
     .event-title { color: #222; font-size: 1.2rem; font-weight: 700; margin: 5px 0; }
-    .info-box { background: #f1f3f5; padding: 10px; border-radius: 8px; font-size: 0.85rem; color: #444; margin: 10px 0; border-left: 3px solid #008080; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -23,52 +23,48 @@ URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SE
 def load_data():
     try:
         r = requests.get(f"{URL}&cb={pd.Timestamp.now().timestamp()}", timeout=15)
-        if r.status_code == 200:
-            df = pd.read_csv(io.StringIO(r.content.decode('utf-8'))).fillna("")
-            return df
-        return None
+        # header=None dwing hom om alles, insluitend ry 1, as data te sien
+        df = pd.read_csv(io.StringIO(r.content.decode('utf-8')), header=None).fillna("")
+        return df
     except:
         return None
 
 df = load_data()
 
-if df is not None and not df.empty:
-    # Filter vir Kategorie (wat nou in kolom A van die Upcoming tab is)
-    all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
-    sel_cats = st.multiselect("Kies Kategorie:", all_cats)
-
-    for i in range(len(df)):
+if df is not None and len(df) > 0:
+    # As die eerste ry die opskrifte is (Category, ens.), skip ons hom
+    start_row = 1 if "Category" in str(df.iloc[0,0]) else 0
+    
+    # Wys data vanaf die regte ry
+    for i in range(start_row, len(df)):
         row = df.iloc[i]
+        cat   = str(row[0])  # Kolom A
+        subj  = str(row[1])  # Kolom B
+        asses = str(row[2])  # Kolom C
+        date  = str(row[3])  # Kolom D
+        ven   = str(row[4])  # Kolom E
+        lnk   = str(row[5])  # Kolom F
+        team  = str(row[6])  # Kolom G
+        info  = str(row[7])  # Kolom H
+        grade = str(row[9])  # Kolom J
         
-        # Mapping gebaseer op jou FILTER (C=0, D=1, E=2, F=3, G=4, H=5, I=6, J=7, K=8, L=9, M=10)
-        cat   = str(row.iloc[0])  # Voorheen C
-        subj  = str(row.iloc[1])  # Voorheen D
-        asses = str(row.iloc[2])  # Voorheen E
-        date  = str(row.iloc[3])  # Voorheen F
-        ven   = str(row.iloc[4])  # Voorheen G
-        lnk   = str(row.iloc[5])  # Voorheen H
-        team  = str(row.iloc[6])  # Voorheen I
-        info  = str(row.iloc[8])  # Voorheen K (Information)
-        grade = str(row.iloc[9])  # Voorheen L (Grade)
-        
-        display_title = team if len(team) > 1 else (asses if len(asses) > 1 else subj)
-
-        if not sel_cats or cat in sel_cats:
+        # Wys net as die ry nie heeltemal leeg is nie
+        if len(cat) > 1:
             st.markdown(f"""
                 <div class="card">
                     <span class="tag-cat">{cat}</span>
                     <div style="color:#008080; font-weight:bold; margin-top:5px;">{subj}</div>
-                    <div class="event-title">{display_title}</div>
+                    <div class="event-title">{team if len(team) > 1 else asses}</div>
                     <div style="color:#555; font-size:0.9rem;">
                         <b>Graad {grade}</b> | 📅 {date} | 📍 {ven}
                     </div>
-                    {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 2 else ''}
+                    {f'<div style="background:#f1f3f5; padding:8px; border-radius:5px; margin-top:10px; font-size:0.85rem;">ℹ️ {info}</div>' if len(info) > 2 else ''}
                 </div>
             """, unsafe_allow_html=True)
             if "http" in str(lnk):
                 st.link_button("📂 OOP DOKUMENT", str(lnk))
 else:
-    st.warning("⚠️ Die app sien die blad, maar daar is geen data onder die opskrifte nie. Maak seker die data verskyn op jou 'Upcoming' tab.")
+    st.warning("⚠️ Geen data gevind nie. Maak seker jou formule in Google Sheets wys data op die 'Upcoming' blad.")
 
 if st.button("Herlaai"):
     st.cache_data.clear()
