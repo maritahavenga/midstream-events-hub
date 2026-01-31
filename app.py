@@ -13,7 +13,7 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-# ------------------ STYLE (TEAL WOW BANNER) ------------------
+# ------------------ STYLE ------------------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
@@ -32,13 +32,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   box-shadow:var(--shadow);
   color:#fff;
 }
-.topBannerInner{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  align-items:center;
-  text-align:center;
-}
+.topBannerInner{display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center;}
 .longLogo{
   width:min(900px, 100%);
   border-radius:16px;
@@ -46,8 +40,8 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   padding:10px 12px;
   border:2px solid rgba(255,255,255,0.35);
 }
-.longLogo img{width:100%; height:auto; display:block;}
-.hubText{font-weight:900;font-size:1.45rem; letter-spacing:.3px;}
+.longLogo img{width:100%;height:auto;display:block;}
+.hubText{font-weight:900;font-size:1.45rem;letter-spacing:.3px;}
 
 .card{
   border:1px solid var(--line);
@@ -62,11 +56,10 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
 .noteBlock{
-  margin-top:12px; padding:12px;
-  border-radius:14px;
+  margin-top:12px;padding:12px;border-radius:14px;
   background:rgba(0,128,128,0.08);
   border:1px solid rgba(0,128,128,0.25);
-  color:#0f172a; font-size:.95rem; line-height:1.35;
+  color:#0f172a;font-size:.95rem;line-height:1.35;
 }
 .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 .btn{
@@ -86,17 +79,10 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border-radius:999px;
   border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
-  display:flex; align-items:center; gap:8px;
+  display:flex;align-items:center;gap:8px;
 }
-.rDot{
-  width:8px;height:8px;border-radius:999px;background:#B00000;
-  animation:pulse 1.0s infinite;
-}
-@keyframes pulse{
-  0%{transform:scale(1); opacity:.4;}
-  50%{transform:scale(1.7); opacity:1;}
-  100%{transform:scale(1); opacity:.4;}
-}
+.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
+@keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -135,9 +121,9 @@ def normalize_activity(v: str) -> str:
     s = re.sub(r"\s+"," ", s)
     if s in ["ht","afrikaans ht"] or "hooftaal" in s:
         return "Afrikaans Hooftaal"
-    if s in ["eat","afrikaans eat"] or "eerste addisionele" in s:
+    if s in ["eat","afrikaans eat"] or "eerste addisionele" in s or s == "eat":
         return "Afrikaans Eerste Addisionele Taal"
-    if "wiskunde" in s or "math" in s: return "Math"
+    if "wiskunde" in s: return "Math"
     if "atletiek" in s or "athletics" in s: return "Athletics"
     if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
     if "tennis" in s: return "Tennis"
@@ -150,7 +136,7 @@ def normalize_activity(v: str) -> str:
 
 def is_afrikaans_subject(b_raw: str) -> bool:
     s = str(b_raw or "").strip().lower()
-    return ("afrikaans" in s) or (s in ["ht","eat"]) or ("hooftaal" in s) or ("eerste addisionele" in s) or (s == "eat")
+    return ("afrikaans" in s) or (s in ["ht","eat"]) or ("hooftaal" in s) or ("eerste addisionele" in s)
 
 def norm_gender_words(text: str) -> str:
     s = str(text or "").strip().replace("_", " ")
@@ -189,20 +175,10 @@ MONTHS = {
 }
 
 def parse_date_sa(s):
-    """
-    Handles:
-      - 02/11/2026 (day-first => 2 Nov 2026)
-      - 02/02/2026
-      - 2 November / 2 NOVEMBER (assumes current year if missing)
-      - Excel serials
-    """
-    if s is None:
-        return None
+    if s is None: return None
     raw = str(s).strip()
-    if raw == "" or raw.lower() in ["nan","none"]:
-        return None
+    if raw == "" or raw.lower() in ["nan","none"]: return None
 
-    # Excel serial
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
             n = float(raw)
@@ -212,7 +188,6 @@ def parse_date_sa(s):
         except:
             pass
 
-    # "2 NOVEMBER" (no year)
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
     if m:
         d = int(m.group(1))
@@ -224,25 +199,20 @@ def parse_date_sa(s):
             except:
                 pass
 
-    # Normal numeric formats
     cleaned = raw.replace(".", "/").replace("-", "/")
     cleaned = re.sub(r"\s+"," ", cleaned)
 
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1):
-        return d1.to_pydatetime()
+    if not pd.isnull(d1): return d1.to_pydatetime()
 
-    # fallback
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2):
-        return d2.to_pydatetime()
+    if not pd.isnull(d2): return d2.to_pydatetime()
 
     return None
 
 def format_date_long_sa(s) -> str:
     dt = parse_date_sa(s)
-    if not dt:
-        return str(s or "").strip()
+    if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
 VENUE_MAP = {
@@ -270,14 +240,32 @@ def normalize_venue(v: str) -> str:
     return s
 
 def expand_group_range(raw: str, kind: str):
-    s = str(raw or "").strip().replace(" ", "")
+    """
+    Expands:
+      - "Gr 4 - Gr7", "Gr4-Gr7", "4-7" => Gr 4..Gr 7
+      - "U8-U13", "8-13" => U8..U13
+      - "1,2,3" / "9,10" => Gr 1,2,3 OR U9,U10
+      - "Gr 7" / "U9" / "7" / "9" => single
+    """
+    s = str(raw or "").strip()
     if not s:
         return []
-    s = s.replace("–", "-").replace("to", "-").replace("TO", "-")
+    s = s.replace("–", "-").replace("—", "-")
+    s = re.sub(r"\s*-\s*", "-", s)
+    s = s.replace(" ", "")
+
+    if "," in s and "-" not in s:
+        nums = re.findall(r"\d+", s)
+        return [f"U{n}" for n in nums] if kind == "U" else [f"Gr {n}" for n in nums]
+
+    if "-" in s:
+        nums = re.findall(r"\d+", s)
+        if len(nums) >= 2:
+            lo, hi = sorted([int(nums[0]), int(nums[1])])
+            return [f"U{i}" for i in range(lo, hi + 1)] if kind == "U" else [f"Gr {i}" for i in range(lo, hi + 1)]
+        return []
+
     nums = re.findall(r"\d+", s)
-    if len(nums) >= 2 and "-" in s:
-        lo, hi = sorted([int(nums[0]), int(nums[1])])
-        return [f"U{i}" for i in range(lo, hi + 1)] if kind == "U" else [f"Gr {i}" for i in range(lo, hi + 1)]
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
     return []
@@ -289,7 +277,6 @@ def group_from_cat_and_grade(cat_norm: str, act_norm: str, grade_raw: str):
             m = expand_group_range(g, "U")
             if len(m) >= 2: return f"{m[0]}-{m[-1]}", m
             return m[0] if m else "", m
-        # defaults only if blank
         if act_norm.lower() == "swimming":
             m = [f"U{i}" for i in range(8, 14)]
             return "U8-U13", m
@@ -321,45 +308,32 @@ def load_csv(url: str):
     r = requests.get(url, timeout=25, headers={"User-Agent":"Mozilla/5.0"}, allow_redirects=True)
     r.encoding = "utf-8"
     txt = r.text or ""
-    # Google sometimes returns HTML right after republish
     if r.status_code != 200 or len(txt) < 20 or "<html" in txt.lower():
         return pd.DataFrame(), txt
     df = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
+    df.columns = [str(c).strip() for c in df.columns]  # IMPORTANT
     return df, txt
 
 df, raw_txt = load_csv(CSV_URL)
 if df.empty:
-    st.error("Geen data is gelaai nie. Probeer weer in 1–2 minute na republish, of check jou output=csv link.")
+    st.error("Geen data is gelaai nie. Wag 1–2 minute na republish en refresh.")
     st.stop()
 
-# ---- Header-based column mapping (stops breaking when columns shift) ----
-def norm_colname(x: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", str(x or "").lower())
-
-cols_norm = {norm_colname(c): c for c in df.columns}
-
-def pick_col(keys, fallback=None):
-    for k in keys:
-        for cn, real in cols_norm.items():
-            if k in cn:
-                return real
-    return fallback
-
-# Expected headings (match loosely)
-COL_CATEGORY = pick_col(["category"], df.columns[0])
-COL_ACTIVITY  = pick_col(["activitysubject","activity","subject"], df.columns[1] if len(df.columns)>1 else df.columns[0])
-COL_TEAM      = pick_col(["teamassessment","team","assessment"], df.columns[2] if len(df.columns)>2 else df.columns[0])
-COL_DATE      = pick_col(["dateduedate","duedate","date"], df.columns[3] if len(df.columns)>3 else df.columns[0])
-COL_VENUE     = pick_col(["venue"], df.columns[4] if len(df.columns)>4 else df.columns[0])
-COL_PROGRAMME = pick_col(["programme","program","documentslink","documentlink"], None)
-COL_TEAMS_LNK = pick_col(["teamslink","teamlink"], None)
-COL_CONFIRM   = pick_col(["confirm"], None)
-COL_INFO      = pick_col(["information","info"], None)
-COL_TERM      = pick_col(["term","duration"], None)
-COL_GRADE     = pick_col(["grade","agegroup","group","m"], None)  # supports your M
+# ---- Exact header mapping (your current headers) ----
+COL_CATEGORY  = "Category"
+COL_ACTIVITY  = "Activity/Subject Name"
+COL_TEAM      = "Team / Assessment"
+COL_DATE      = "Date / Due Date"
+COL_VENUE     = "Venue"
+COL_PROGRAMME = "Programme / Document Link"
+COL_TEAMS_LNK = "Team"
+COL_CONFIRM   = "Confirm"
+COL_INFO      = "Information"
+COL_GRADE     = "Age Group (9,10) / Grade (1,2,3)"
+COL_TERM      = "Display Duration"
 
 def s(colname):
-    return df[colname].astype(str) if colname and colname in df.columns else pd.Series([""]*len(df), dtype=str)
+    return df[colname].astype(str) if colname in df.columns else pd.Series([""]*len(df), dtype=str)
 
 cat_s   = s(COL_CATEGORY)
 act_s   = s(COL_ACTIVITY)
@@ -370,8 +344,8 @@ prog_s  = s(COL_PROGRAMME)
 teamlnk_s = s(COL_TEAMS_LNK)
 conf_s  = s(COL_CONFIRM)
 info_s  = s(COL_INFO)
-term_s  = s(COL_TERM)
 grade_s = s(COL_GRADE)
+term_s  = s(COL_TERM)
 # ------------------ VIEW TOGGLES ------------------
 view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
 
@@ -399,14 +373,12 @@ selected_gr = st.sidebar.multiselect("Grades (Culture/Academics)", [f"Gr {i}" fo
 selected_u_set = set(selected_u)
 selected_gr_set = set(selected_gr)
 
-# ------------------ NEW UPDATE (DOCUMENTS ONLY): last hour, show only 10 minutes ------------------
+# ------------------ NEW UPDATE (docs only): last hour + only animate 10 minutes ------------------
 def row_signature(i: int) -> str:
     parts = [
         cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i],
-        str(prog_s.iloc[i]) if len(prog_s) else "",
-        str(info_s.iloc[i]) if len(info_s) else "",
-        str(term_s.iloc[i]) if len(term_s) else "",
-        str(grade_s.iloc[i]) if len(grade_s) else "",
+        prog_s.iloc[i], teamlnk_s.iloc[i], conf_s.iloc[i], info_s.iloc[i],
+        grade_s.iloc[i], term_s.iloc[i]
     ]
     return hashlib.sha256(("||".join(map(str, parts))).encode("utf-8")).hexdigest()
 
@@ -426,15 +398,17 @@ for i in range(len(df)):
     if selected_act and act_norm not in selected_act:
         continue
 
-    # Term documents = ONLY "full term"
-    term_val = str(term_s.iloc[i]).strip().lower() if len(term_s) else ""
-    term_flag = "full term" in term_val
+    # term rules
+    term_val = str(term_s.iloc[i]).strip().lower()
+    looks_like_term_doc = any(k in (act_norm.lower() + " " + str(team_s.iloc[i]).lower())
+                              for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse"])
+    term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
-    # Due date (D)
+    # due date
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
-    # show today + future; hide yesterday (if date exists)
+    # show today+future if date exists; if blank, allow (term docs can sometimes be blank)
     if d_dt and d_dt.date() < today:
         continue
 
@@ -450,7 +424,7 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_from_cat_and_grade(cn, act_norm, grade_s.iloc[i])
 
-    # Filtering must match ranges typed in sheet (Gr 5-7 etc.)
+    # filter ranges must match individual selection
     if cn == "sport" and selected_u_set:
         if grp_matches and not any(x in selected_u_set for x in grp_matches):
             continue
@@ -468,7 +442,7 @@ for i in range(len(df)):
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
 
-    # Update tracking
+    # update tracking
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
     if prev is None:
@@ -480,7 +454,6 @@ for i in range(len(df)):
 
     updated_at = st.session_state.row_updated_at.get(i)
 
-    # documents only: last hour AND only animate for 10 minutes
     show_new = False
     if cn == "academics" and updated_at:
         if (now_dt - updated_at) <= timedelta(hours=1) and (now_dt - updated_at) <= timedelta(minutes=10):
@@ -489,13 +462,15 @@ for i in range(len(df)):
     sort_dt = d_dt if d_dt else datetime(2099,1,1)
     res.append({"i": i, "dt": sort_dt, "title": title.lower(), "term": term_flag, "new": show_new})
 
-# Sort: term docs first (alpha), then date then title
+# ALWAYS: Term docs first (no matter which filter/view)
 term_items = sorted([x for x in res if x["term"]], key=lambda x: x["title"])
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"]))
 res_sorted = term_items + other_items
 
 # ------------------ DISPLAY ------------------
 st.markdown("## 📅 Events")
+
+pin = "&#128205;"  # always-visible pin
 
 if not res_sorted:
     st.info("Niks pas by jou filters nie.")
@@ -507,23 +482,19 @@ else:
         afr = is_afrikaans_subject(act_s.iloc[i])
 
         title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
-
-        # D + Grade + E
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
-        grp_disp, _ = group_from_cat_and_grade(cn, act_norm, grade_s.iloc[i])
 
         ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-        prog_link = first_url(prog_s.iloc[i]) if len(prog_s) else ""
-        teams_link = first_url(teamlnk_s.iloc[i]) if len(teamlnk_s) else ""
-        confirm_link = first_url(conf_s.iloc[i]) if len(conf_s) else ""
+        prog_link = first_url(prog_s.iloc[i])
+        teams_link = first_url(teamlnk_s.iloc[i])
+        confirm_link = first_url(conf_s.iloc[i])
 
-        info_raw = str(info_s.iloc[i]).strip().replace("_"," ") if len(info_s) else ""
-        info_link = first_url(info_raw) if is_http(info_raw) else ""
+        info_raw = str(info_s.iloc[i]).strip().replace("_"," ")
+        info_link = first_url(info_raw)  # IMPORTANT: extract even if text + link
         info_text = info_raw
         if info_link:
-            # remove the link from text so we can show both nicely
             info_text = info_text.replace(info_link, "").strip(" -|")
 
         # Buttons
@@ -531,7 +502,6 @@ else:
         notes_parts = []
 
         if cn == "academics":
-            # Academics: Documents + Information only (Afrikaans = Dokumente + Inligting)
             b_docs = "Dokumente" if afr else "Documents"
             b_info = "Inligting" if afr else "Information"
             if prog_link and is_http(prog_link):
@@ -539,17 +509,16 @@ else:
             if info_link and is_http(info_link):
                 buttons.append((b_info, info_link))
         else:
-            # Sport/Culture: Programme + Teams + Information + Confirm
             if prog_link and is_http(prog_link):
                 buttons.append(("Programme", prog_link))
             if teams_link and is_http(teams_link):
                 buttons.append(("Teams", teams_link))
             if info_link and is_http(info_link):
                 buttons.append(("Information", info_link))
-            if confirm_link and is_http(confirm_link) and is_form_link(confirm_link):
+            if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
                 buttons.append(("Confirm", confirm_link))
 
-        # Venue line OR see programme note
+        # Venue line OR see programme
         venue_line = ""
         if ven_norm == "SEE_PROGRAMME":
             notes_parts.append("<b>Venue:</b><br>See programme")
@@ -559,16 +528,15 @@ else:
                 q = f"{ven_norm} Midstream College"
             map_url = f"https://www.google.com/maps/search/?api=1&query={q.replace(' ','+')}"
             venue_line = (
-                f"<div class='meta'>📍 "
+                f"<div class='meta'>{pin} "
                 f"<a href='{map_url}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
                 f"{safe_txt(ven_norm).upper()}</a></div>"
             )
 
-        # Information text as note block (even if link exists)
+        # Notes: info text always allowed
         if info_text:
             notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
-        # Revue note
         if "revue" in (title.lower() + " " + info_raw.lower()):
             notes_parts.append("<b>Note:</b><br>Revue")
 
@@ -587,7 +555,6 @@ else:
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
-  {f"<div class='meta'>🏷 <b>{safe_txt(grp_disp)}</b></div>" if grp_disp else ""}
   {venue_line}
   {notes_block}
   {btn_html}
