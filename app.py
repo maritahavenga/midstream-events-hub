@@ -5,13 +5,13 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
-# ---- PASTE YOUR PUBLISHED CSV HERE ----
+# ✅ Paste your published CSV link here
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
 TZ = pytz.timezone("Africa/Johannesburg")
 
 if not str(CSV_URL).strip().lower().startswith(("http://", "https://")):
-    st.error("CSV link (CSV_URL) is missing or invalid. Paste the FULL https://...output=csv link into CSV_URL.")
+    st.error("CSV_URL is missing or invalid. Paste the FULL https://...output=csv link.")
     st.stop()
 
 # ------------------ STYLE ------------------
@@ -112,7 +112,7 @@ def is_form_link(u: str) -> bool:
 def normalize_category(v: str) -> str:
     s = str(v or "").strip().lower()
     s = re.sub(r"\s+"," ",s)
-    if "sport" in s or "programme" in s or "program" in s:
+    if "sport" in s:
         return "sport"
     if "culture" in s or "kultuur" in s:
         return "culture"
@@ -124,33 +124,28 @@ def normalize_activity(v: str) -> str:
     s = str(v or "").strip().lower()
     s = re.sub(r"\s+"," ",s)
 
-    # Afrikaans mappings (HT / EAT)
     if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
 
-    # Athletics (and Atletiek)
     if "athletics" in s or "atletiek" in s:
         return "Athletics"
-
-    # Common sport normalisation
-    if "netbal" in s or "netball" in s:
-        return "Netball"
+    if "swimming" in s or "swem" in s or "gala" in s:
+        return "Swimming"
+    if "tennis" in s:
+        return "Tennis"
     if "rugby" in s:
         return "Rugby"
     if "hockey" in s:
         return "Hockey"
-    if "tennis" in s:
-        return "Tennis"
-    if "swimming" in s or "swem" in s or "gala" in s:
-        return "Swimming"
+    if "netbal" in s or "netball" in s:
+        return "Netball"
 
     return s.title()
 
 AFR_EN = {
-    "atletiek":"Athletics","netbal":"Netball","swem":"Swimming","gala":"Gala",
-    "saal":"Hall","veld":"Field","wiskunde":"Math","kultuur":"Culture",
+    "atletiek":"Athletics","netbal":"Netball","swem":"Swimming","saal":"Hall","veld":"Field",
     "inligting":"Information","dokumente":"Documents",
 }
 def tr_en_if_needed(text: str, keep_afrikaans: bool) -> str:
@@ -158,14 +153,41 @@ def tr_en_if_needed(text: str, keep_afrikaans: bool) -> str:
         return str(text or "").strip()
     t = str(text or "").strip()
     for k, v in AFR_EN.items():
-        t = re.sub(rf"\b{k}\b", v, t, flags=re.I)
-    return re.sub(r"\s+"," ",t).strip()
+        t = re.sub(rf"\\b{k}\\b", v, t, flags=re.I)
+    return re.sub(r"\\s+"," ",t).strip()
 
-def parse_date_sa(s: str):
-    d = pd.to_datetime(str(s), dayfirst=True, errors="coerce")
-    return None if pd.isnull(d) else d.to_pydatetime()
+def parse_date_sa(s):
+    """Robust SA parser: handles dd/mm/yyyy, month names, and Excel serials."""
+    if s is None:
+        return None
+    raw = str(s).strip()
+    if raw == "" or raw.lower() in ["nan", "none"]:
+        return None
 
-def format_date_long_sa(s: str) -> str:
+    # Excel serial number support
+    if re.fullmatch(r"\\d+(\\.\\d+)?", raw):
+        try:
+            n = float(raw)
+            if n > 30000:
+                base = datetime(1899, 12, 30)
+                return base + timedelta(days=int(n))
+        except:
+            pass
+
+    cleaned = raw.replace(".", "/").replace("-", "/")
+    cleaned = re.sub(r"\\s+", " ", cleaned)
+
+    d = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
+    if not pd.isnull(d):
+        return d.to_pydatetime()
+
+    d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
+    if not pd.isnull(d2):
+        return d2.to_pydatetime()
+
+    return None
+
+def format_date_long_sa(s) -> str:
     dt = parse_date_sa(s)
     if not dt:
         return str(s or "").strip()
@@ -176,9 +198,49 @@ def is_full_term(v: str) -> bool:
     return ("full term" in s) or (s == "full") or ("term" in s and "specific" not in s)
 
 def clean_first_url(v: str) -> str:
-    s = str(v or "").replace("\n"," ").strip()
-    m = re.search(r"https?://\S+", s)
+    s = str(v or "").replace("\\n"," ").strip()
+    m = re.search(r"https?://\\S+", s)
     return m.group(0) if m else s
+
+def extract_numbers(text: str):
+    return [int(x) for x in re.findall(r"\\d+", str(text or ""))]
+
+def make_u_labels(start: int, end: int):
+    return [f"U{n}" for n in range(start, end + 1)]
+
+def normalize_j_labels(category_norm: str, activity_norm: str, j_raw: str, group_text: str):
+    """
+    Returns display_label + match_labels for filtering.
+    Handles Athletics/Swimming when J blank, and Athletics ranges like 10-13.
+    Handles Afrikaans Hooftaal spelling list forcing Gr 4.
+    """
+    j = str(j_raw or "").strip()
+    grp = str(group_text or "").lower()
+    act = str(activity_norm or "").lower()
+
+    # Academics special: Afrikaans Hooftaal + Spellys -> always Gr 4
+    if category_norm == "academics" and activity_norm == "Afrikaans Hooftaal":
+        if "spellys" in grp or "spelling" in grp:
+            return "Gr 4", ["Gr 4"]
+
+    if j:
+        nums = extract_numbers(j)
+        # Expand ranges like "10-13" for sport
+        if len(nums) >= 2:
+            a, b = min(nums[0], nums[1]), max(nums[0], nums[1])
+            if category_norm == "sport":
+                return j, make_u_labels(a, b)
+            return j, [j]
+        return j, [j]
+
+    # J blank hardcodes
+    if category_norm == "sport":
+        if "athletics" in act:
+            return "U7–U13", make_u_labels(7, 13)
+        if "swimming" in act:
+            return "U8–U13", make_u_labels(8, 13)
+
+    return "", []
 
 @st.cache_data(ttl=60)
 def load_csv(url: str):
@@ -220,12 +282,12 @@ if st.session_state.get("last_change") and (now_dt - st.session_state.last_chang
 # Column mapping (0-based): A..K
 A_CAT = 0
 B_ACT = 1
-C_GROUP = 2
+C_TEAM = 2
 D_DATE = 3
 E_VEN = 4
 F_PROG = 5
-G_TEAM = 6
-H_FORM = 7
+G_TEAMLINK = 6
+H_CONFIRM = 7
 I_INFO = 8
 J_GRADEU = 9
 K_DUR = 10
@@ -237,12 +299,12 @@ def col(i, default=""):
 
 cat_s = col(A_CAT)
 act_s = col(B_ACT)
-grp_s = col(C_GROUP)
+team_s = col(C_TEAM)
 date_s = col(D_DATE)
 ven_s = col(E_VEN)
 prog_s = col(F_PROG)
-team_s = col(G_TEAM)
-form_s = col(H_FORM)
+teamlink_s = col(G_TEAMLINK)
+confirm_s = col(H_CONFIRM)
 info_s = col(I_INFO)
 j_s = col(J_GRADEU)
 dur_s = col(K_DUR)
@@ -261,7 +323,6 @@ def row_ok_cat(i: int) -> bool:
 act_opts = sorted({normalize_activity(act_s.iloc[i]) for i in range(len(df)) if act_s.iloc[i].strip() and row_ok_cat(i)})
 selected_activities = st.sidebar.multiselect("Activity", act_opts, default=[])
 
-# Age group nav: show only for sport selection, grades for academics mode
 academics_mode = ("Academics" in category_choice)
 if academics_mode:
     selected_grades = st.sidebar.multiselect("Grades", [f"Gr {i}" for i in range(1, 8)], default=[])
@@ -272,12 +333,11 @@ res = []
 # ------------------ FILTER + SORT ------------------
 for i in range(len(df)):
     cn = normalize_category(cat_s.iloc[i])
-
     is_sport = (cn == "sport")
     is_academic = (cn == "academics")
     is_culture = (cn == "culture")
 
-    # Category filter (Column A)
+    # Category filter
     if category_choice:
         ok = (("Sport" in category_choice and is_sport) or
               ("Culture" in category_choice and is_culture) or
@@ -295,31 +355,42 @@ for i in range(len(df)):
     act_lc = str(act_raw).strip().lower()
     is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-    # J label: USE EXACTLY AS IN SHEET (Sport = U8, Academics/Culture = Gr 4)
-    j_label = str(j_s.iloc[i]).strip()
+    # J display + match labels (hardcodes + range expansion)
+    j_raw = str(j_s.iloc[i]).strip()
+    team_txt_raw = team_s.iloc[i]
+    j_display, j_matches = normalize_j_labels(cn, act_norm, j_raw, team_txt_raw)
 
-    # Grade/Age filter uses J label now
+    # Grade/Age filtering
     if academics_mode:
-        if selected_grades and j_label not in selected_grades:
-            continue
+        if selected_grades:
+            if j_matches:
+                if not any(lbl in selected_grades for lbl in j_matches):
+                    continue
+            else:
+                if j_display and j_display not in selected_grades:
+                    continue
     else:
-        if selected_ages and j_label not in selected_ages:
-            continue
+        if selected_ages:
+            if j_matches:
+                if not any(lbl in selected_ages for lbl in j_matches):
+                    continue
+            else:
+                if j_display and j_display not in selected_ages:
+                    continue
 
-    # Date filtering (Column D) — SA parsing
+    # Date filtering (Column D)
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
     term_flag = is_full_term(dur_s.iloc[i])
 
-    # view_mode rules
     visible = True
     if view_mode == "Term":
         if not term_flag:
             visible = False
         else:
             if d_dt and today >= d_dt.date():
-                visible = False  # disappear on due date
+                visible = False
     else:
         if d_dt:
             if d_dt.date() < today:
@@ -333,10 +404,10 @@ for i in range(len(df)):
     if not visible:
         continue
 
-    # Title = Column B + Column J + Column C ONLY
-    group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
-    act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
-    title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
+    # Title = B + J + C only
+    c_txt = tr_en_if_needed(team_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
+    b_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
+    title = " ".join([x for x in [b_txt, j_display, c_txt] if x]).strip()
 
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
@@ -345,7 +416,7 @@ for i in range(len(df)):
         "i": i,
         "dt": d_dt if d_dt else datetime(2099, 1, 1),
         "term": term_flag,
-        "alpha": act_txt.lower()
+        "alpha": b_txt.lower()
     })
 
 # Sort: Full Term on top (alphabetical), then by date, then alphabetical
@@ -380,13 +451,14 @@ with left:
         act_lc = str(act_raw).strip().lower()
         is_afrikaans_subject = ("afrikaans" in act_lc) or (act_lc in ["ht", "eat"]) or ("hooftaal" in act_lc) or ("eerste addisionele" in act_lc)
 
-        j_label = str(j_s.iloc[i]).strip()
+        j_raw = str(j_s.iloc[i]).strip()
+        j_display, _ = normalize_j_labels(cn, act_norm, j_raw, team_s.iloc[i])
 
-        group_txt = tr_en_if_needed(grp_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
-        act_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
-        title = " ".join([x for x in [act_txt, j_label, group_txt] if x]).strip()
+        c_txt = tr_en_if_needed(team_s.iloc[i], keep_afrikaans=is_afrikaans_subject)
+        b_txt = tr_en_if_needed(act_norm, keep_afrikaans=is_afrikaans_subject)
+        title = " ".join([x for x in [b_txt, j_display, c_txt] if x]).strip()
 
-        # Date line (SA)
+        # Date line
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
 
@@ -404,18 +476,17 @@ with left:
 
         # Links & Notes
         prog_link = clean_first_url(prog_s.iloc[i])
-        team_val  = str(team_s.iloc[i]).strip()
-        form_link = clean_first_url(form_s.iloc[i])
-        info_val  = str(info_s.iloc[i]).strip()
+        team_val = str(teamlink_s.iloc[i]).strip()
+        confirm_link = clean_first_url(confirm_s.iloc[i])
+        info_val = str(info_s.iloc[i]).strip()
 
         # Button labels
         b_prog = "Documents" if is_academic else "Programme"
         b_team = "Team"
         b_info = "Information"
-        b_form = "Confirm"
+        b_confirm = "Confirm"
 
         if is_afrikaans_subject:
-            # If Afrikaans subject: Documents -> Dokumente, Information -> Inligting
             b_prog = "Dokumente" if is_academic else "Programme"
             b_info = "Inligting"
 
@@ -432,15 +503,12 @@ with left:
         btns = []
         if prog_link and is_http(prog_link):
             btns.append((b_prog, prog_link))
-
         if team_val and is_http(team_val):
             btns.append((b_team, clean_first_url(team_val)))
-
         if info_val and is_http(info_val):
             btns.append((b_info, clean_first_url(info_val)))
-
-        if form_link and is_http(form_link) and is_form_link(form_link):
-            btns.append((b_form, form_link))
+        if confirm_link and is_http(confirm_link) and is_form_link(confirm_link):
+            btns.append((b_confirm, confirm_link))
 
         btn_html = ""
         if btns:
