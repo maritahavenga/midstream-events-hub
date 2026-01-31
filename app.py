@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests, io
+import time
 
 st.set_page_config(page_title="LMCP Event Hub", layout="centered")
 
@@ -11,75 +12,57 @@ st.markdown("""
     .nav-bar { background: linear-gradient(135deg, #800000 0%, #a00000 100%); color: white; padding: 25px; text-align: center; border-radius: 0 0 20px 20px; margin-top: -60px; }
     .card { background: white; padding: 20px; border-radius: 15px; border-left: 10px solid #800000; margin-top: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .tag-cat { background: #800000; color: white; padding: 3px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
-    .event-title { color: #222; font-size: 1.2rem; font-weight: 700; margin: 5px 0; }
-    .info-box { background: #f1f3f5; padding: 10px; border-radius: 8px; font-size: 0.85rem; color: #444; margin: 10px 0; border-left: 3px solid #008080; white-space: pre-wrap; }
-    .map-btn { display: inline-block; background-color: white; color: #008080 !important; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: bold; border: 1px solid #008080; margin-top: 5px; font-size: 0.8rem; }
     </style>
     """, unsafe_allow_html=True)
 
-st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>PRIMARY EVENT HUB</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="nav-bar"><h1>MIDSTREAM COLLEGE</h1><p>EVENT HUB DEBUG MODE</p></div>', unsafe_allow_html=True)
 
 URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrig2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
 
-@st.cache_data(ttl=1)
-def load_data():
+# GEEN CACHE NIE - ons dwing hom om elke keer vars te lees
+def load_data_debug():
     try:
-        # Ons dwing 'n vars aflaai
-        r = requests.get(f"{URL}&cb={pd.Timestamp.now().timestamp()}", timeout=15)
-        # Ons lees die data rou in sonder om kolomme te raai
-        data = pd.read_csv(io.StringIO(r.content.decode('utf-8')), header=None)
-        # Verwyder die eerste ry (headers) en gebruik dit as kolomname
-        df = data.iloc[1:].copy()
-        df.columns = data.iloc[0]
-        return df.reset_index(drop=True).fillna("")
-    except:
+        # Ons gebruik 'n unieke nommer (timestamp) sodat Google nie 'n ou weergawe stuur nie
+        response = requests.get(f"{URL}&nocache={time.time()}", timeout=10)
+        content = response.content.decode('utf-8')
+        
+        # Wys vir ons op die skerm wat hy kry (net vir nou)
+        if len(content) < 50:
+            st.error(f"Google stuur amper niks nie: {content}")
+            return None
+            
+        df = pd.read_csv(io.StringIO(content)).fillna("")
+        return df
+    except Exception as e:
+        st.error(f"Fout met konneksie: {e}")
         return None
 
-df = load_data()
+df = load_data_debug()
 
-# As daar data is (ten minste een ry onder die headers)
-if df is not None and len(df) > 0:
-    # FILTERS (Gebruik kolom-indekse vir veiligheid: A=0, J=9)
-    cat_col = df.columns[0]
-    grade_col = df.columns[9]
+if df is not None and not df.empty:
+    st.success(f"Sukses! Ek sien {len(df)} events.")
     
-    all_cats = sorted([str(x) for x in df[cat_col].unique() if str(x).strip()])
+    # KATEGORIE FILTER
+    all_cats = sorted([str(x) for x in df.iloc[:, 0].unique() if str(x).strip()])
     sel_cats = st.multiselect("Select Category:", all_cats)
-    
-    all_grades = sorted([str(x) for x in df[grade_col].unique() if str(x).strip()])
-    sel_grades = st.multiselect("Filter by Grade:", all_grades)
 
     for i in range(len(df)):
         row = df.iloc[i]
-        
-        # Mapping: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, J=9
-        cat   = str(row.iloc[0])
-        subj  = str(row.iloc[1])
-        asses = str(row.iloc[2])
-        date  = str(row.iloc[3])
-        ven   = str(row.iloc[4])
-        lnk   = str(row.iloc[5])
-        team  = str(row.iloc[6])
-        info  = str(row.iloc[7])
-        grade = str(row.iloc[9])
+        cat, subj, team, date, ven = str(row.iloc[0]), str(row.iloc[1]), str(row.iloc[2]), str(row.iloc[3]), str(row.iloc[4])
+        info, grade = str(row.iloc[7]), str(row.iloc[9])
 
-        display_title = team if len(team) > 1 else (asses if len(asses) > 1 else subj)
-
-        if (not sel_cats or cat in sel_cats) and (not sel_grades or grade in sel_grades):
+        if not sel_cats or cat in sel_cats:
             st.markdown(f"""
                 <div class="card">
                     <span class="tag-cat">{cat}</span>
-                    <div style="color:#008080; font-weight:bold; margin-top:5px;">{subj}</div>
-                    <div class="event-title">{display_title}</div>
-                    <div style="color:#555; font-size:0.9rem;">
-                        <b>Grade {grade}</b> | 📅 {date} | 📍 {ven}
-                    </div>
-                    {f'<div class="info-box">ℹ️ {info}</div>' if len(info) > 2 else ''}
-                    {f'<a href="{lnk}" target="_blank" class="map-btn">📂 VIEW DOCUMENT</a>' if 'http' in lnk else ''}
+                    <div style="font-weight:bold; color:#008080;">{subj}</div>
+                    <div style="font-size:1.2rem; font-weight:700;">{team if len(team)>1 else subj}</div>
+                    <div style="color:#555;">Gr {grade} | 📅 {date} | 📍 {ven}</div>
+                    {f'<div style="background:#eee;padding:8px;border-radius:5px;margin-top:5px;">{info}</div>' if len(info)>2 else ''}
                 </div>
             """, unsafe_allow_html=True)
 else:
-    st.info("🔄 Syphoning data from Google Sheets... If this persists, please ensure your 'Upcoming' tab has visible data underneath the headers.")
-    if st.button("Check Connection Again"):
-        st.cache_data.clear()
-        st.rerun()
+    st.warning("Data is nog nie beskikbaar nie. Gaan na jou Google Sheet en maak seker daar is data onder die opskrifte in die 'Upcoming' tab.")
+
+if st.button("Dwing Vars Data"):
+    st.rerun()
