@@ -60,11 +60,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border-left:10px solid var(--maroon);
   position:relative;
 }
-.card-title{
-  font-weight:900;color:var(--maroon);
-  font-size:1.15rem;line-height:1.2;
-  padding-right:130px; /* space so badge doesn't overlap title */
-}
+.card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
 
 .noteBlock{
@@ -82,10 +78,12 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
-/* ---- NEW UPDATE badge (desktop default) ---- */
+/* ✅ badge moved to bottom-right (no overlap on phone) */
 .ribbon{
   position:absolute;
-  top:12px; right:12px;
+  right:12px;
+  bottom:12px;
+  top:auto;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
@@ -97,46 +95,9 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   display:flex;align-items:center;gap:8px;
   z-index:5;
 }
-.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
+.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;}
+.rDot.pulse{animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
-
-/* ==========================
-   MOBILE FIXES
-   ========================== */
-@media (max-width: 640px){
-
-  /* Move the badge slightly DOWN so it doesn't sit on the title */
-  .ribbon{
-    top:18px;       /* was 12px */
-    right:12px;
-    font-size:.75rem;
-    padding:6px 9px;
-  }
-
-  /* Give title a bit more breathing room on mobile */
-  .card-title{
-    padding-right:10px; /* mobile: allow title to wrap nicely */
-  }
-
-  /* Make the sidebar arrow / hamburger more visible (Streamlit top-left menu button) */
-  header [data-testid="stSidebarNav"]{
-    display:block;
-  }
-
-  /* Style the collapse/expand sidebar button */
-  button[kind="header"]{
-    transform: scale(1.15);
-    border-radius:14px !important;
-    box-shadow: 0 10px 22px rgba(0,0,0,.18) !important;
-    background: rgba(0,128,128,0.10) !important;
-  }
-
-  /* Make the icon inside pop a little */
-  button[kind="header"] svg{
-    width:26px !important;
-    height:26px !important;
-  }
-}
 </style>
 """,
     unsafe_allow_html=True,
@@ -325,35 +286,59 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# AGE GROUP / GRADE PARSING
+# AGE GROUP / GRADE PARSING (GLOBAL RULE)
 # =============================
-def expand_group_range(raw: str, kind: str):
+def parse_groups(raw: str, prefix: str):
+    """
+    GLOBAL parser for BOTH Sport and Academics/Culture
+    Returns expanded list like:
+      ['U10','U11'...] or ['Gr 4','Gr 5'...]
+    Accepts:
+      U10-U13 / 10-13 / 07-13 / U10,11,12,13 / 10,11,12,13
+      Gr4-Gr7 / 4-7 / Gr 4,5,6,7 / 4,5,6,7
+    """
     s = str(raw or "").strip()
     if not s:
         return []
 
     s = s.replace("–", "-").replace("—", "-")
-    s_nospace = re.sub(r"\s+", "", s)
+    s = re.sub(r"\s+", "", s)  # remove spaces
 
-    nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
+    nums = [int(n) for n in re.findall(r"\d{1,2}", s)]
     if not nums:
         return []
 
-    if "-" in s_nospace and len(nums) >= 2:
-        lo, hi = sorted([nums[0], nums[1]])
-        seq = list(range(lo, hi + 1))
-        return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
+    def fmt(n: int) -> str:
+        return f"U{n}" if prefix == "U" else f"Gr {n}"
 
-    if "," in s_nospace:
-        lo, hi = min(nums), max(nums)
-        if len(nums) >= 3 and (hi - lo) <= 8:
-            nums = list(range(lo, hi + 1))
-        return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
+    # range
+    if "-" in s and len(nums) >= 2:
+        lo, hi = nums[0], nums[1]
+        if lo > hi:
+            lo, hi = hi, lo
+        return [fmt(i) for i in range(lo, hi + 1)]
 
+    # list
+    if "," in s:
+        seen = set()
+        out = []
+        for n in nums:
+            if n not in seen:
+                seen.add(n)
+                out.append(n)
+
+        if len(out) >= 3:
+            lo, hi = min(out), max(out)
+            if (hi - lo) <= 10:
+                out = list(range(lo, hi + 1))
+
+        return [fmt(i) for i in out]
+
+    # single
     if len(nums) == 1:
-        return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
+        return [fmt(nums[0])]
 
-    return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
+    return [fmt(i) for i in nums]
 
 def extract_u_groups_from_text(text: str):
     t = str(text or "").strip()
@@ -363,15 +348,11 @@ def extract_u_groups_from_text(text: str):
 
     m = re.search(r"\bU?\d{1,2}\s*-\s*U?\d{1,2}\b", t, flags=re.I)
     if m:
-        return expand_group_range(m.group(0), "U")
+        return parse_groups(m.group(0), "U")
 
     m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
     if m:
-        return expand_group_range(m.group(0), "U")
-
-    m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
-    if m:
-        return expand_group_range(m.group(0), "U")
+        return parse_groups(m.group(0), "U")
 
     m = re.search(r"\bU(\d{1,2})\b", t, flags=re.I)
     if m:
@@ -382,11 +363,7 @@ def extract_u_groups_from_text(text: str):
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
-        if g:
-            m = expand_group_range(g, "U")
-        else:
-            m = extract_u_groups_from_text(team_raw)
-
+        m = parse_groups(g, "U") if g else extract_u_groups_from_text(team_raw)
         if len(m) >= 2:
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
@@ -394,11 +371,12 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
     g = str(grade_raw or "").strip()
     if not g:
         return "", []
-    m = expand_group_range(g, "Gr")
+    m = parse_groups(g, "Gr")
     if len(m) >= 2:
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
+# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
@@ -589,8 +567,9 @@ if "row_hashes" not in st.session_state:
 if "row_updated_at" not in st.session_state:
     st.session_state.row_updated_at = {}
 
+# ✅ Parents miss updates: badge shows for 1 hour, pulses for 10 minutes
 BADGE_VISIBLE_HOURS = 1
-BADGE_ANIMATE_MINUTES = 10
+BADGE_PULSE_MINUTES = 10
 
 # =============================
 # BUILD RESULTS
@@ -658,10 +637,13 @@ for i in range(len(df)):
 
     updated_at = st.session_state.row_updated_at.get(i)
 
-    show_new = False
-    if cn == "academics" and updated_at:
-        if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS) and (now_dt - updated_at) <= timedelta(minutes=BADGE_ANIMATE_MINUTES):
-            show_new = True
+    # ✅ badge for ALL categories: Sport + Culture + Academics
+    show_badge = False
+    pulse_badge = False
+    if updated_at:
+        age = now_dt - updated_at
+        show_badge = age <= timedelta(hours=BADGE_VISIBLE_HOURS)
+        pulse_badge = age <= timedelta(minutes=BADGE_PULSE_MINUTES)
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
     grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
@@ -671,7 +653,8 @@ for i in range(len(df)):
         "dt": sort_dt,
         "title": title.lower(),
         "term": term_flag,
-        "new": show_new,
+        "badge": show_badge,
+        "pulse": pulse_badge,
         "grade": grade_raw_for_sort
     })
 
@@ -757,7 +740,10 @@ else:
                 [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
             ) + "</div>"
 
-        ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>" if item["new"] else ""
+        ribbon = ""
+        if item.get("badge"):
+            dot_class = "rDot pulse" if item.get("pulse") else "rDot"
+            ribbon = f"<div class='ribbon'><span class='{dot_class}'></span>NEW UPDATE</div>"
 
         st.markdown(
             f"""
