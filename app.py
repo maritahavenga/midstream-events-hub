@@ -217,4 +217,110 @@ if not is_sport_only:
 else:
     selected_gr = st.session_state.get("gr_ms", [])
 
-if st.sidebar.button("🧹 Reset
+if st.sidebar.button("🧹 Reset All"):
+    for k in ["cat_ms", "u_ms", "gr_ms"]:
+        st.session_state[k] = []
+    st.session_state["search_q"] = ""
+    st.session_state["view_mode_radio"] = "Upcoming"
+
+    st.query_params.clear()
+
+    # clear localStorage + restored flag
+    st.markdown(f"""
+    <script>
+      localStorage.removeItem("{PERSIST_KEY}");
+      sessionStorage.removeItem("lmcp_restored_once");
+    </script>
+    """, unsafe_allow_html=True)
+
+    st.cache_data.clear()
+    st.rerun()
+
+# =============================
+# VIEW MODE
+# =============================
+view_mode = st.radio(
+    "View", ["Upcoming", "Next 7 Days", "Term Documents"],
+    horizontal=True, key="view_mode_radio", on_change=on_filter_change
+)
+
+# =============================
+# TOP ROW ACTIONS (Refresh Data)
+# =============================
+colA, colB = st.columns([1, 7])
+with colA:
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
+
+# =============================
+# FILTER LOGIC & DISPLAY
+# =============================
+res = []
+for idx, row in df.iterrows():
+    cat = normalize_category(row.get("Category", ""))
+
+    # Category filter
+    if category_choice and cat not in [c.lower() for c in category_choice]:
+        continue
+
+    # Search filter
+    q = str(search or "").strip().lower()
+    if q:
+        blob = " ".join([
+            str(row.get("Activity/Subject Name", "")),
+            str(row.get("Team / Assessment", "")),
+            str(row.get("Venue", "")),
+            str(row.get("Information", "")),
+            str(row.get("Age Group (9,10) / Grade (1,2,3)", "")),
+        ]).lower()
+        if q not in blob:
+            continue
+
+    # Grade/Age filter
+    row_grade = str(row.get("Age Group (9,10) / Grade (1,2,3)", ""))
+    row_grade_u = row_grade.upper()
+
+    match_found = False
+    if not selected_u and not selected_gr:
+        match_found = True
+    if any(u.upper() in row_grade_u for u in selected_u):
+        match_found = True
+    if any(g.upper() in row_grade_u for g in selected_gr):
+        match_found = True
+    if not match_found:
+        continue
+
+    # Date filter
+    d_dt = parse_date_sa(row.get("Date / Due Date", ""))
+    if d_dt and d_dt.date() < today:
+        continue
+
+    res.append(row)
+
+st.markdown("## 📅 Events")
+if not res:
+    st.info("Geen items gevind nie. Verander jou filters in die sidebar.")
+else:
+    for r in res:
+        title = r.get("Activity/Subject Name", "")
+        team = r.get("Team / Assessment", "")
+        date_str = r.get("Date / Due Date", "")
+        venue = r.get("Venue", "")
+        info = r.get("Information", "")
+
+        badge = ""
+        if "$" in str(info):
+            badge = '<div class="ribbon"><span class="rDot"></span>NEW UPDATE</div>'
+
+        st.markdown(f"""
+        <div class="card">
+            {badge}
+            <div class="card-title">{safe_txt(title)} - {safe_txt(team)}</div>
+            <div class="meta">📅 {safe_txt(date_str)}</div>
+            <div class="meta">📍 {safe_txt(venue).upper()}</div>
+            {f'<div class="noteBlock">{safe_txt(info).replace("$","")}</div>' if info else ""}
+        </div>
+        """, unsafe_allow_html=True)
+
+st.markdown("<br><center style='color:grey;'>LMCP Digital Hub 2026</center>", unsafe_allow_html=True)
