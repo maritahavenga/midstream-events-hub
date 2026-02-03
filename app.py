@@ -19,7 +19,6 @@ today = now_dt.date()
 
 # =============================
 # PERSIST FILTERS (localStorage restore) - SAFE VERSION
-# (No visible div/iframe, restores once, avoids loops)
 # =============================
 PERSIST_KEY = "lmcp_hub_last_qs"
 st.markdown(f"""
@@ -30,14 +29,12 @@ st.markdown(f"""
 
   const qs = window.location.search ? window.location.search.substring(1) : "";
 
-  // If URL has params -> save and clear restore-flag
   if (qs && qs.length > 0) {{
     localStorage.setItem(KEY, qs);
     sessionStorage.removeItem(RESTORED_FLAG);
     return;
   }}
 
-  // If URL has no params -> restore ONCE only
   if (sessionStorage.getItem(RESTORED_FLAG) === "1") return;
 
   const saved = localStorage.getItem(KEY);
@@ -76,9 +73,10 @@ def _qp_set_all():
     """Sync current session state to the URL automatically"""
     st.query_params["view"] = st.session_state.get("view_mode_radio", "Upcoming")
     st.query_params["cat"] = ",".join(st.session_state.get("cat_ms", []))
-    st.query_params["u"] = ",".join(st.session_state.get("u_ms", []))
-    st.query_params["gr"] = ",".join(st.session_state.get("gr_ms", []))
-    st.query_params["q"] = st.session_state.get("search_q", "")
+    st.query_params["act"] = ",".join(st.session_state.get("act_ms", []))
+    st.query_params["u"]   = ",".join(st.session_state.get("u_ms", []))
+    st.query_params["gr"]  = ",".join(st.session_state.get("gr_ms", []))
+    st.query_params["q"]   = st.session_state.get("search_q", "")
 
 # =============================
 # CALLBACKS (GEHEUE LOGIKA)
@@ -92,7 +90,7 @@ def on_filter_change():
     if is_sport_only_now:
         st.session_state["gr_ms"] = []
 
-    # Grade -> U mapping
+    # Grade -> U mapping (as jy grades kies, voeg relevante U by)
     selected_grades = st.session_state.get("gr_ms", [])
     current_u = list(st.session_state.get("u_ms", []))
 
@@ -109,7 +107,7 @@ def on_filter_change():
     _qp_set_all()
 
 # =============================
-# STYLE (CSS)
+# STYLE (CSS)  (jou oorspronklike cards/layout)
 # =============================
 st.markdown("""
 <style>
@@ -140,7 +138,7 @@ st.markdown(
 # =============================
 # DATA HELPERS
 # =============================
-def safe_txt(x): 
+def safe_txt(x):
     return str(x or "").strip()
 
 def normalize_category(v):
@@ -148,7 +146,14 @@ def normalize_category(v):
     if "sport" in s: return "sport"
     if "culture" in s or "kultuur" in s: return "culture"
     if "academic" in s or "akadem" in s: return "academics"
-    return s
+    return s.strip()
+
+def normalize_activity(v):
+    s = str(v).strip().lower()
+    if "wiskunde" in s: return "math"
+    if "atletiek" in s or "athletics" in s: return "athletics"
+    if "koor" in s or "choir" in s: return "choir"
+    return re.sub(r"\s+", " ", s)
 
 def parse_date_sa(s):
     try:
@@ -156,6 +161,40 @@ def parse_date_sa(s):
         return pd.to_datetime(cleaned, dayfirst=True).to_pydatetime()
     except:
         return None
+
+def age_tokens_from_u(u: str):
+    """
+    Maak U filters match teen:
+    - 'U10'
+    - '10'
+    - '9/10', '9-10', '9 10'
+    """
+    u = str(u).upper().strip()
+    if not u.startswith("U"):
+        return [u]
+    try:
+        n = int(u.replace("U", ""))
+    except:
+        return [u]
+    toks = [f"U{n}", str(n)]
+    if n >= 8:
+        # allow "n-1/n" patterns
+        toks += [f"{n-1}/{n}", f"{n-1}-{n}", f"{n-1} {n}", f"{n-1},{n}"]
+    return toks
+
+def grade_tokens_from_gr(g: str):
+    """
+    Maak grade filters match teen:
+    - 'Gr 4'
+    - 'Grade 4'
+    - '4' (as sheet soms net nommer het)
+    """
+    g = str(g).strip()
+    m = re.search(r"(\d+)", g)
+    if not m:
+        return [g.upper()]
+    n = m.group(1)
+    return [f"GR {n}", f"GRADE {n}", n]
 
 @st.cache_data(ttl=180)
 def load_csv(url):
@@ -172,10 +211,30 @@ if df.empty:
     st.stop()
 
 # =============================
+# BUILD ACTIVITY OPTIONS (from sheet)
+# =============================
+# Unique normalized activities (nice labels)
+activity_map = {}  # norm -> label
+for v in df.get("Activity/Subject Name", pd.Series([], dtype=str)).fillna("").tolist():
+    nv = normalize_activity(v)
+    if nv and nv not in activity_map:
+        # label in Title Case (special for known)
+        label = nv.title()
+        if nv == "math": label = "Math"
+        if nv == "athletics": label = "Athletics"
+        if nv == "choir": label = "Choir"
+        activity_map[nv] = label
+
+activity_options = [activity_map[k] for k in sorted(activity_map.keys())]
+label_to_norm = {v: k for k, v in activity_map.items()}
+
+# =============================
 # INITIALIZE SESSION STATE FROM URL
 # =============================
 if "cat_ms" not in st.session_state:
     st.session_state.cat_ms = _qp_get_list("cat")
+if "act_ms" not in st.session_state:
+    st.session_state.act_ms = _qp_get_list("act")
 if "u_ms" not in st.session_state:
     st.session_state.u_ms = _qp_get_list("u")
 if "gr_ms" not in st.session_state:
@@ -195,11 +254,17 @@ category_choice = st.sidebar.multiselect(
     key="cat_ms", on_change=on_filter_change
 )
 
+# ✅ Activity filter terug
+activity_choice = st.sidebar.multiselect(
+    "Activity", activity_options,
+    key="act_ms", on_change=on_filter_change
+)
+
 search = st.sidebar.text_input(
     "Search", key="search_q", on_change=on_filter_change
 )
 
-# Grade + Age Group in line 2 under heading
+# Grade and age group must be in line 2 underneath the heading
 st.sidebar.markdown("### Sport / Grade Filters")
 
 is_sport_only = (len(category_choice) == 1 and category_choice[0] == "Sport")
@@ -218,14 +283,13 @@ else:
     selected_gr = st.session_state.get("gr_ms", [])
 
 if st.sidebar.button("🧹 Reset All"):
-    for k in ["cat_ms", "u_ms", "gr_ms"]:
+    for k in ["cat_ms", "act_ms", "u_ms", "gr_ms"]:
         st.session_state[k] = []
     st.session_state["search_q"] = ""
     st.session_state["view_mode_radio"] = "Upcoming"
 
     st.query_params.clear()
 
-    # clear localStorage + restored flag
     st.markdown(f"""
     <script>
       localStorage.removeItem("{PERSIST_KEY}");
@@ -245,7 +309,7 @@ view_mode = st.radio(
 )
 
 # =============================
-# TOP ROW ACTIONS (Refresh Data)
+# TOP ACTIONS (Refresh Data)
 # =============================
 colA, colB = st.columns([1, 7])
 with colA:
@@ -256,16 +320,24 @@ with colA:
 # =============================
 # FILTER LOGIC & DISPLAY
 # =============================
+selected_cats_norm = [normalize_category(c) for c in category_choice]
+selected_acts_norm = [label_to_norm.get(a, normalize_activity(a)) for a in activity_choice]
+q = str(search or "").strip().lower()
+
 res = []
-for idx, row in df.iterrows():
+for _, row in df.iterrows():
     cat = normalize_category(row.get("Category", ""))
 
     # Category filter
-    if category_choice and cat not in [c.lower() for c in category_choice]:
+    if selected_cats_norm and cat not in selected_cats_norm:
         continue
 
-    # Search filter
-    q = str(search or "").strip().lower()
+    # Activity filter (robust)
+    row_act_norm = normalize_activity(row.get("Activity/Subject Name", ""))
+    if selected_acts_norm and row_act_norm not in selected_acts_norm:
+        continue
+
+    # Search filter (search across a few columns)
     if q:
         blob = " ".join([
             str(row.get("Activity/Subject Name", "")),
@@ -273,31 +345,54 @@ for idx, row in df.iterrows():
             str(row.get("Venue", "")),
             str(row.get("Information", "")),
             str(row.get("Age Group (9,10) / Grade (1,2,3)", "")),
+            str(row.get("Category", "")),
         ]).lower()
         if q not in blob:
             continue
 
-    # Grade/Age filter
-    row_grade = str(row.get("Age Group (9,10) / Grade (1,2,3)", ""))
-    row_grade_u = row_grade.upper()
+    # Grade/Age filter (MORE ROBUST)
+    # Combine multiple columns so we can match "U10" or "9/10" or "10" etc wherever it appears
+    combined = " ".join([
+        str(row.get("Age Group (9,10) / Grade (1,2,3)", "")),
+        str(row.get("Team / Assessment", "")),
+        str(row.get("Activity/Subject Name", "")),
+        str(row.get("Information", "")),
+    ]).upper()
 
     match_found = False
+
     if not selected_u and not selected_gr:
         match_found = True
-    if any(u.upper() in row_grade_u for u in selected_u):
-        match_found = True
-    if any(g.upper() in row_grade_u for g in selected_gr):
-        match_found = True
+
+    # U matching with tokens
+    if selected_u:
+        u_tokens = []
+        for u in selected_u:
+            u_tokens += age_tokens_from_u(u)
+        if any(tok.upper() in combined for tok in u_tokens):
+            match_found = True
+
+    # Grade matching with tokens
+    if selected_gr:
+        g_tokens = []
+        for g in selected_gr:
+            g_tokens += grade_tokens_from_gr(g)
+        if any(tok.upper() in combined for tok in g_tokens):
+            match_found = True
+
     if not match_found:
         continue
 
-    # Date filter
+    # Date filter (Upcoming basic)
     d_dt = parse_date_sa(row.get("Date / Due Date", ""))
     if d_dt and d_dt.date() < today:
         continue
 
     res.append(row)
 
+# =============================
+# RENDER
+# =============================
 st.markdown("## 📅 Events")
 if not res:
     st.info("Geen items gevind nie. Verander jou filters in die sidebar.")
