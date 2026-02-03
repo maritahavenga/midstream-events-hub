@@ -62,6 +62,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
+.groupMeta{color:#64748b;margin-top:6px;font-size:.92rem;font-weight:800;}
 
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
@@ -78,13 +79,8 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
-/* MOVE BADGE: bottom-right so it never covers the title (phone safe) */
 .ribbon{
-  position:absolute;
-  top:auto;
-  bottom:12px;
-  right:12px;
-
+  position:absolute; right:12px; bottom:12px;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
@@ -94,7 +90,6 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
   display:flex;align-items:center;gap:8px;
-  z-index:2;
 }
 .rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
@@ -114,56 +109,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-# =============================
-# URL + QUERY PARAMS (MAKE FILTERS STICK)
-# =============================
-def qp_get_list(key: str):
-    try:
-        v = st.query_params.get(key)
-    except Exception:
-        v = None
-    if v is None:
-        return []
-    if isinstance(v, list):
-        return [str(x) for x in v if str(x).strip()]
-    s = str(v).strip()
-    if not s:
-        return []
-    # allow comma-separated too
-    parts = [p.strip() for p in s.split(",")]
-    return [p for p in parts if p]
-
-def qp_get_str(key: str, default: str = ""):
-    try:
-        v = st.query_params.get(key)
-    except Exception:
-        v = None
-    if v is None:
-        return default
-    if isinstance(v, list):
-        return str(v[0]) if v else default
-    return str(v)
-
-def qp_set(**kwargs):
-    # Convert lists to list[str], remove empty
-    payload = {}
-    for k, v in kwargs.items():
-        if isinstance(v, list):
-            vv = [str(x) for x in v if str(x).strip()]
-            if vv:
-                payload[k] = vv
-        else:
-            s = str(v).strip()
-            if s:
-                payload[k] = s
-    try:
-        st.query_params.clear()
-        for k, v in payload.items():
-            st.query_params[k] = v
-    except Exception:
-        # if query_params not supported for any reason, fail silently
-        pass
 
 # =============================
 # HELPERS
@@ -271,7 +216,6 @@ def parse_date_sa(s):
     if raw == "" or raw.lower() in ["nan", "none"]:
         return None
 
-    # numeric excel
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
             n = float(raw)
@@ -281,7 +225,6 @@ def parse_date_sa(s):
         except:
             pass
 
-    # "5 Feb"
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
     if m:
         d = int(m.group(1))
@@ -338,27 +281,12 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# AGE GROUP / GRADE PARSING (GENERIC U?-U? and Gr?-Gr?)
+# GROUP PARSING (U & Gr rules)
 # =============================
 def expand_group_range(raw: str, kind: str):
-    """
-    Sport:
-      - U10-U13 / U10–U13
-      - 10-13 / 07-13
-      - U10,11,12,13 / 10,11,12,13
-      - U10 / 10
-    Culture/Academics:
-      - Gr 4 - Gr 7
-      - 4-7
-      - Gr 4,5,6,7
-      - 4,5,6,7
-      - Gr 4 / 4
-    Returns list like ['U10','U11'...] or ['Gr 4','Gr 5'...]
-    """
     s = str(raw or "").strip()
     if not s:
         return []
-
     s = s.replace("–", "-").replace("—", "-")
     s_nospace = re.sub(r"\s+", "", s)
 
@@ -366,30 +294,23 @@ def expand_group_range(raw: str, kind: str):
     if not nums:
         return []
 
-    # range
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
-    # list
     if "," in s_nospace:
         lo, hi = min(nums), max(nums)
-        # if looks like 10,11,12,13 -> range
-        if len(nums) >= 3 and (hi - lo) <= 10:
+        if len(nums) >= 3 and (hi - lo) <= 8:
             nums = list(range(lo, hi + 1))
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
-    # single
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
-    """
-    Pull sport age groups out of Team/Assessment if they typed it there.
-    """
     t = str(text or "").strip()
     if not t:
         return []
@@ -414,14 +335,6 @@ def extract_u_groups_from_text(text: str):
     return []
 
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
-    """
-    SPORT:
-      - Prefer Age Group column
-      - If blank, fallback to Team/Assessment
-      - NO athletics-default (deleted)
-    Culture/Academics:
-      - Use grade column
-    """
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         m = expand_group_range(g, "U") if g else extract_u_groups_from_text(team_raw)
@@ -437,7 +350,7 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
-# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
+# ---------- TEXT CLEANUP ----------
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
@@ -457,35 +370,28 @@ def tidy_team_text(s: str) -> str:
     t = str(s or "").strip()
     if not t:
         return ""
-
     t = t.replace("&amp;", "&")
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
-    t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)  # TennisU11B -> Tennis U11B
+    t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
     t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
     t = fix_boys_girls_combo(t)
-
     t = re.sub(r"\s{2,}", " ", t).strip()
     return t
 
-def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
+def build_title_and_group(cat_val: str, act_val: str, team_val: str, grade_val: str):
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
-
     grp_disp, _ = group_for_row(cn, grade_val, team_val)
 
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
 
-    if grp_disp:
-        if grp_disp.lower() in team_clean.lower():
-            return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
-        return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
-
-    return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+    title = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+    return title, grp_disp
 
 # =============================
-# LOAD CSV (ANTI-CRASH)
+# LOAD CSV
 # =============================
 @st.cache_data(ttl=180, show_spinner=False)
 def load_csv(url: str):
@@ -505,19 +411,19 @@ def load_csv(url: str):
 try:
     df, raw_txt = load_csv(CSV_URL)
 except Timeout:
-    st.warning("⏳ Die Google Sheet vat te lank. Probeer weer.")
+    st.warning("⏳ The Google Sheet took too long to respond. Please try again.")
     if st.button("Retry"):
         st.cache_data.clear()
         st.rerun()
     st.stop()
 except RequestException:
-    st.warning("⚠️ Kan nie nou aan Google Sheets koppel nie. Probeer weer.")
+    st.warning("⚠️ Could not connect to Google Sheets right now. Please try again shortly.")
     if st.button("Retry"):
         st.cache_data.clear()
         st.rerun()
     st.stop()
 except Exception as e:
-    st.warning("⚠️ Iets het skeefgeloop terwyl ons die sheet laai.")
+    st.warning("⚠️ Something went wrong while loading the sheet.")
     with st.expander("Technical details"):
         st.code(str(e))
     if st.button("Retry"):
@@ -526,11 +432,16 @@ except Exception as e:
     st.stop()
 
 if df.empty:
-    st.error("Geen data gelaai nie. Republish die sheet en refresh.")
+    st.error("No data loaded from Google Sheets yet. Republish the sheet and refresh.")
     if st.button("Retry"):
         st.cache_data.clear()
         st.rerun()
     st.stop()
+
+with st.sidebar:
+    if st.button("🔄 Refresh data"):
+        st.cache_data.clear()
+        st.rerun()
 
 # =============================
 # COLUMNS
@@ -563,29 +474,91 @@ grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
 # =============================
-# VIEW TOGGLES (stick in URL too)
+# STICKY FILTERS IN URL (bookmarkable)
 # =============================
-view_default = qp_get_str("view", "Upcoming")
-if view_default not in ["Upcoming", "Next 7 Days", "Term Documents"]:
-    view_default = "Upcoming"
+def qp_get_list(key: str):
+    try:
+        v = st.query_params.get(key)
+    except Exception:
+        v = None
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(x) for x in v if str(x).strip()]
+    s_ = str(v).strip()
+    if not s_:
+        return []
+    parts = [p.strip() for p in s_.split(",")]
+    return [p for p in parts if p]
 
-view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True, index=["Upcoming","Next 7 Days","Term Documents"].index(view_default))
+def qp_get_str(key: str, default: str = ""):
+    try:
+        v = st.query_params.get(key)
+    except Exception:
+        v = None
+    if v is None:
+        return default
+    if isinstance(v, list):
+        return str(v[0]) if v else default
+    return str(v)
+
+def qp_set(payload: dict):
+    clean = {}
+    for k, v in payload.items():
+        if isinstance(v, list):
+            vv = [str(x) for x in v if str(x).strip()]
+            if vv:
+                clean[k] = vv
+        else:
+            ss = str(v).strip()
+            if ss:
+                clean[k] = ss
+    try:
+        st.query_params.clear()
+        for k, v in clean.items():
+            st.query_params[k] = v
+    except Exception:
+        pass
+
+if "filters_inited" not in st.session_state:
+    st.session_state.filters_inited = True
+    st.session_state.view_mode = qp_get_str("view", "Upcoming")
+    if st.session_state.view_mode not in ["Upcoming", "Next 7 Days", "Term Documents"]:
+        st.session_state.view_mode = "Upcoming"
+    st.session_state.category_choice = [c for c in qp_get_list("cat") if c in ["Sport", "Culture", "Academics"]]
+    st.session_state.search_q = qp_get_str("q", "")
+    st.session_state.selected_act = qp_get_list("act")
+    st.session_state.group_filter = qp_get_list("grp")  # NEW combined field
 
 # =============================
-# FILTERS (READ DEFAULTS FROM URL)
+# VIEW TOGGLES
+# =============================
+view_mode = st.radio(
+    "View",
+    ["Upcoming", "Next 7 Days", "Term Documents"],
+    horizontal=True,
+    index=["Upcoming","Next 7 Days","Term Documents"].index(st.session_state.view_mode),
+    key="view_mode",
+)
+
+# =============================
+# FILTERS
 # =============================
 st.sidebar.markdown("## Filters")
-
-default_category = qp_get_list("cat")  # expects Sport/Culture/Academics
-default_search = qp_get_str("q", "")
 
 category_choice = st.sidebar.multiselect(
     "Category",
     ["Sport", "Culture", "Academics"],
-    default=[c for c in default_category if c in ["Sport","Culture","Academics"]],
+    default=st.session_state.category_choice,
     key="category_choice",
 )
-search = st.sidebar.text_input("Whole school search", value=default_search, placeholder="Type to filter...", key="search_q")
+
+search = st.sidebar.text_input(
+    "Whole school search",
+    value=st.session_state.search_q,
+    placeholder="Type to filter...",
+    key="search_q",
+)
 
 wanted = {c.lower() for c in category_choice} if category_choice else set()
 
@@ -604,49 +577,38 @@ act_opts = sorted({
     for i in range(len(df))
     if str(act_s.iloc[i]).strip() and cat_ok(i)
 })
+st.session_state.selected_act = [a for a in st.session_state.selected_act if a in act_opts]
 
-default_act = qp_get_list("act")
 selected_act = st.sidebar.multiselect(
     "Activity/Subject",
     act_opts,
-    default=[a for a in default_act if a in act_opts],
+    default=st.session_state.selected_act,
     key="selected_act",
 )
 
-default_u = qp_get_list("u")
-selected_u = st.sidebar.multiselect(
-    "Age Groups (Sport)",
-    [f"U{i}" for i in range(7, 14)],
-    default=[u for u in default_u if u in [f"U{i}" for i in range(7, 14)]],
-    key="selected_u",
-) if (not wanted or "sport" in wanted) else []
+# ✅ NEW: Combined group filter under Activity
+u_opts = [f"U{i}" for i in range(7, 14)]
+gr_opts = [f"Gr {i}" for i in range(1, 8)]
+grp_opts = u_opts + gr_opts
 
-default_gr = qp_get_list("gr")
-selected_gr = st.sidebar.multiselect(
-    "Grades (Culture/Academics)",
-    [f"Gr {i}" for i in range(1, 8)],
-    default=[g for g in default_gr if g in [f"Gr {i}" for i in range(1, 8)]],
-    key="selected_gr",
-) if (not wanted or "culture" in wanted or "academics" in wanted) else []
-
-selected_u_set = set(selected_u)
-selected_gr_set = set(selected_gr)
-
-# --- PUSH CURRENT FILTERS BACK TO URL (so closing the app still keeps them) ---
-qp_set(
-    view=view_mode,
-    cat=category_choice,
-    act=selected_act,
-    u=selected_u,
-    gr=selected_gr,
-    q=search,
+st.session_state.group_filter = [g for g in st.session_state.group_filter if g in grp_opts]
+group_filter = st.sidebar.multiselect(
+    "Group Filter (U & Gr)",
+    grp_opts,
+    default=st.session_state.group_filter,
+    key="group_filter",
+    help="Kies U ouderdomme en/of Grade. Items met ranges (bv U10-13 / Gr 4-7) match outomaties.",
 )
 
-# Refresh data button (keep filters!)
-with st.sidebar:
-    if st.button("🔄 Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
+# write URL only if changed (prevents mobile odd behaviour)
+current_payload = {"view": view_mode, "cat": category_choice, "act": selected_act, "grp": group_filter, "q": search}
+payload_sig = hashlib.sha256(str(current_payload).encode("utf-8")).hexdigest()
+if st.session_state.get("last_qp_sig") != payload_sig:
+    st.session_state.last_qp_sig = payload_sig
+    qp_set(current_payload)
+
+selected_u_set = {x for x in group_filter if x.startswith("U")}
+selected_gr_set = {x for x in group_filter if x.startswith("Gr")}
 
 # =============================
 # NEW UPDATE TRACKING (badge)
@@ -664,9 +626,7 @@ if "row_hashes" not in st.session_state:
 if "row_updated_at" not in st.session_state:
     st.session_state.row_updated_at = {}
 
-# Badge rules (you asked Sport + Culture maybe 1 hour; this does ALL categories the same)
-BADGE_VISIBLE_MINUTES = 60  # 1 hour
-BADGE_ANIMATE_MINUTES = 10  # pulse for 10 mins
+BADGE_VISIBLE_HOURS = 1
 
 # =============================
 # BUILD RESULTS
@@ -706,63 +666,43 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport filter strict: only show if any match selected
+    # ✅ Apply NEW combined Group Filter correctly
     if cn == "sport" and selected_u_set:
-        if grp_matches and not any(x in selected_u_set for x in grp_matches):
-            continue
-        if not grp_matches:
+        if not grp_matches or not any(x in selected_u_set for x in grp_matches):
             continue
 
-    # Culture/Academics strict: only show if any match selected
     if cn in ["culture", "academics"] and selected_gr_set:
-        if grp_matches and not any(x in selected_gr_set for x in grp_matches):
-            continue
-        if not grp_matches:
+        if not grp_matches or not any(x in selected_gr_set for x in grp_matches):
             continue
 
-    title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+    title, grp_disp_for_card = build_title_and_group(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
 
-    # badge logic: ONLY mark "updated" when a row changed (not on first load)
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
-
     if prev is None:
         st.session_state.row_hashes[i] = sig
-        # IMPORTANT: don't mark as updated yet
-        if i not in st.session_state.row_updated_at:
-            st.session_state.row_updated_at[i] = None
+        st.session_state.row_updated_at[i] = now_dt
     elif prev != sig:
         st.session_state.row_hashes[i] = sig
         st.session_state.row_updated_at[i] = now_dt
 
     updated_at = st.session_state.row_updated_at.get(i)
-
-    show_new = False
-    animate_dot = False
-    if updated_at:
-        age = now_dt - updated_at
-        if age <= timedelta(minutes=BADGE_VISIBLE_MINUTES):
-            show_new = True
-            if age <= timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                animate_dot = True
+    show_new = bool(updated_at and (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS))
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
-    grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
-
     res.append({
         "i": i,
         "dt": sort_dt,
         "title": title.lower(),
         "term": term_flag,
         "new": show_new,
-        "animate": animate_dot,
-        "grade": grade_raw_for_sort
+        "grp": grp_disp_for_card,
+        "grade": str(grade_s.iloc[i] or "").strip()
     })
 
-# Term docs always first (alphabetical), then dated items (date -> title -> grade)
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
 res_sorted = term_items + other_items
@@ -781,7 +721,7 @@ else:
         cn = normalize_category(cat_s.iloc[i])
         afr = is_afrikaans_subject(act_s.iloc[i])
 
-        title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+        title, grp_disp = build_title_and_group(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
@@ -845,17 +785,14 @@ else:
                 [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
             ) + "</div>"
 
-        ribbon = ""
-        if item["new"]:
-            # If you ever want the dot to stop animating after 10 mins, we already do that.
-            # We keep same markup; animation naturally stops if class removed, but simplest: keep pulse always for now.
-            ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>"
+        ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>" if item["new"] else ""
 
         st.markdown(
             f"""
 <div class="card">
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
+  {f"<div class='groupMeta'>👥 {safe_txt(grp_disp)}</div>" if grp_disp else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {venue_line}
   {notes_block}
