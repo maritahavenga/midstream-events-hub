@@ -19,6 +19,8 @@ today = now_dt.date()
 
 # =============================
 # STYLE
+#   - Badge now bottom-right and lower (won't cover heading on phone)
+#   - Sidebar arrow more visible (mobile)
 # =============================
 st.markdown(
     """
@@ -30,6 +32,19 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .block-container{padding-top:1.35rem;}
 
+/* Make the sidebar "arrow" / collapsed control more obvious on mobile */
+button[data-testid="stSidebarCollapsedControl"]{
+  width:44px !important; height:44px !important;
+  border-radius:14px !important;
+  border:2px solid rgba(0,128,128,0.35) !important;
+  background: rgba(0,128,128,0.12) !important;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.10) !important;
+}
+button[data-testid="stSidebarCollapsedControl"]:hover{
+  background: rgba(0,128,128,0.18) !important;
+}
+
+/* Banner */
 .topBanner{
   margin-top:14px;
   border-radius:22px;
@@ -50,6 +65,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 .longLogo img{width:100%;height:auto;display:block;}
 .hubText{font-weight:900;font-size:1.65rem;letter-spacing:.3px;}
 
+/* Cards */
 .card{
   border:1px solid var(--line);
   background:#fff;
@@ -62,7 +78,6 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
-.groupMeta{color:#64748b;margin-top:6px;font-size:.92rem;font-weight:800;}
 
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
@@ -79,8 +94,12 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
+/* NEW badge (moved bottom-right, slightly lower) */
 .ribbon{
-  position:absolute; right:12px; bottom:12px;
+  position:absolute;
+  right:12px;
+  bottom:12px;           /* <- moved to bottom */
+  top:auto;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
@@ -90,8 +109,10 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
   display:flex;align-items:center;gap:8px;
+  z-index:5;
 }
-.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
+.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;}
+.rDot.pulse{animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
 </style>
 """,
@@ -281,33 +302,66 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# GROUP PARSING (U & Gr rules)
+# AGE GROUP / GRADE PARSING
+#   * One rule for U?-U? AND Gr?-Gr?
 # =============================
 def expand_group_range(raw: str, kind: str):
+    """
+    Supports (single, range, list):
+      Sport (U):
+        - U10-U13 / U10–U13
+        - 10-13 / 07-13
+        - U10,11,12,13 / 10,11,12,13
+        - 10 13 (if someone typed space)
+      Culture/Academics (Gr):
+        - Gr 4 - Gr 7
+        - 4-7
+        - Gr 4,5,6,7
+        - 4,5,6,7
+        - 4
+    Returns list like ['U10','U11'...] or ['Gr 4','Gr 5'...]
+    """
     s = str(raw or "").strip()
     if not s:
         return []
-    s = s.replace("–", "-").replace("—", "-")
-    s_nospace = re.sub(r"\s+", "", s)
 
-    nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
+    s = s.replace("–", "-").replace("—", "-")
+    s = re.sub(r"\s+", "", s)
+
+    # Accept "10 13" as range too
+    if re.fullmatch(r"\d{1,2}\d{1,2}", s) is False:
+        s = s.replace(";", ",")
+
+    nums = [int(n) for n in re.findall(r"\d+", s)]
     if not nums:
         return []
 
-    if "-" in s_nospace and len(nums) >= 2:
+    # Range with dash
+    if "-" in s and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
-    if "," in s_nospace:
+    # List with commas
+    if "," in s:
         lo, hi = min(nums), max(nums)
+        # If it looks contiguous, expand to range
         if len(nums) >= 3 and (hi - lo) <= 8:
             nums = list(range(lo, hi + 1))
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
+    # Two numbers with space like "10 13" (or "4 7") -> treat as range
+    if len(nums) == 2 and "-" not in s and "," not in s:
+        lo, hi = sorted(nums)
+        if (hi - lo) <= 15:
+            seq = list(range(lo, hi + 1))
+            return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
+
+    # Single number
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
+    # Fallback list
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
@@ -334,7 +388,48 @@ def extract_u_groups_from_text(text: str):
 
     return []
 
+def extract_grades_from_text(text: str):
+    """
+    If someone typed grades in Team/Assessment, we still want filtering to work:
+      - Gr 4 - Gr 7
+      - 4-7
+      - Gr 4,5,6,7
+      - 4,5,6,7
+      - 4
+    """
+    t = str(text or "").strip()
+    if not t:
+        return []
+    t = t.replace("–", "-").replace("—", "-")
+
+    m = re.search(r"\bGr?\s*\d{1,2}\s*-\s*Gr?\s*\d{1,2}\b", t, flags=re.I)
+    if m:
+        return expand_group_range(m.group(0), "Gr")
+
+    m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
+    if m:
+        return expand_group_range(m.group(0), "Gr")
+
+    m = re.search(r"\bGr?\s*\d{1,2}(?:\s*,\s*Gr?\s*\d{1,2}){1,}\b", t, flags=re.I)
+    if m:
+        return expand_group_range(m.group(0), "Gr")
+
+    m = re.search(r"\bGr?\s*(\d{1,2})\b", t, flags=re.I)
+    if m:
+        return [f"Gr {int(m.group(1))}"]
+
+    return []
+
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
+    """
+    SPORT:
+      - Prefer Age Group column
+      - If blank, fallback to Team/Assessment
+    CULTURE/ACADEMICS:
+      - Prefer Grade column
+      - If blank, fallback to Team/Assessment
+    (No athletics-default anymore.)
+    """
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         m = expand_group_range(g, "U") if g else extract_u_groups_from_text(team_raw)
@@ -343,18 +438,26 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return (m[0] if m else ""), m
 
     g = str(grade_raw or "").strip()
-    if not g:
-        return "", []
-    m = expand_group_range(g, "Gr")
+    m = expand_group_range(g, "Gr") if g else extract_grades_from_text(team_raw)
     if len(m) >= 2:
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
-# ---------- TEXT CLEANUP ----------
+# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
+
+    # Remove U ranges and lists
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
+
+    # Remove Gr ranges and lists
+    t = re.sub(r"\bGr?\s*\d{1,2}\s*[-–]\s*Gr?\s*\d{1,2}\b", "", t, flags=re.I)
+    t = re.sub(r"\bGr?\s*\d{1,2}(?:\s*,\s*Gr?\s*\d{1,2}){1,}\b", "", t, flags=re.I)
+
+    # Remove plain numeric range like 4-7 if it appears alone-ish
+    t = re.sub(r"\b\d{1,2}\s*-\s*\d{1,2}\b", "", t)
+
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip(" -–|,")
 
@@ -370,28 +473,39 @@ def tidy_team_text(s: str) -> str:
     t = str(s or "").strip()
     if not t:
         return ""
+
     t = t.replace("&amp;", "&")
+    # U 13 -> U13
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
+    # U13Girls -> U13 Girls
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
+    # TennisU11B -> Tennis U11B
     t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
-    t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
+    # Boys & Girls -> B Girls
     t = fix_boys_girls_combo(t)
+
     t = re.sub(r"\s{2,}", " ", t).strip()
     return t
 
-def build_title_and_group(cat_val: str, act_val: str, team_val: str, grade_val: str):
+def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
+
     grp_disp, _ = group_for_row(cn, grade_val, team_val)
 
+    # Remove group tokens from team so we don't double-print
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
 
-    title = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
-    return title, grp_disp
+    if grp_disp:
+        if grp_disp.lower() in team_clean.lower():
+            return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+        return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
+
+    return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
 # =============================
-# LOAD CSV
+# LOAD CSV (ANTI-CRASH)
 # =============================
 @st.cache_data(ttl=180, show_spinner=False)
 def load_csv(url: str):
@@ -474,91 +588,17 @@ grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
 # =============================
-# STICKY FILTERS IN URL (bookmarkable)
-# =============================
-def qp_get_list(key: str):
-    try:
-        v = st.query_params.get(key)
-    except Exception:
-        v = None
-    if v is None:
-        return []
-    if isinstance(v, list):
-        return [str(x) for x in v if str(x).strip()]
-    s_ = str(v).strip()
-    if not s_:
-        return []
-    parts = [p.strip() for p in s_.split(",")]
-    return [p for p in parts if p]
-
-def qp_get_str(key: str, default: str = ""):
-    try:
-        v = st.query_params.get(key)
-    except Exception:
-        v = None
-    if v is None:
-        return default
-    if isinstance(v, list):
-        return str(v[0]) if v else default
-    return str(v)
-
-def qp_set(payload: dict):
-    clean = {}
-    for k, v in payload.items():
-        if isinstance(v, list):
-            vv = [str(x) for x in v if str(x).strip()]
-            if vv:
-                clean[k] = vv
-        else:
-            ss = str(v).strip()
-            if ss:
-                clean[k] = ss
-    try:
-        st.query_params.clear()
-        for k, v in clean.items():
-            st.query_params[k] = v
-    except Exception:
-        pass
-
-if "filters_inited" not in st.session_state:
-    st.session_state.filters_inited = True
-    st.session_state.view_mode = qp_get_str("view", "Upcoming")
-    if st.session_state.view_mode not in ["Upcoming", "Next 7 Days", "Term Documents"]:
-        st.session_state.view_mode = "Upcoming"
-    st.session_state.category_choice = [c for c in qp_get_list("cat") if c in ["Sport", "Culture", "Academics"]]
-    st.session_state.search_q = qp_get_str("q", "")
-    st.session_state.selected_act = qp_get_list("act")
-    st.session_state.group_filter = qp_get_list("grp")  # NEW combined field
-
-# =============================
 # VIEW TOGGLES
 # =============================
-view_mode = st.radio(
-    "View",
-    ["Upcoming", "Next 7 Days", "Term Documents"],
-    horizontal=True,
-    index=["Upcoming","Next 7 Days","Term Documents"].index(st.session_state.view_mode),
-    key="view_mode",
-)
+view_mode = st.radio("View", ["Upcoming", "Next 7 Days", "Term Documents"], horizontal=True)
 
 # =============================
 # FILTERS
 # =============================
 st.sidebar.markdown("## Filters")
 
-category_choice = st.sidebar.multiselect(
-    "Category",
-    ["Sport", "Culture", "Academics"],
-    default=st.session_state.category_choice,
-    key="category_choice",
-)
-
-search = st.sidebar.text_input(
-    "Whole school search",
-    value=st.session_state.search_q,
-    placeholder="Type to filter...",
-    key="search_q",
-)
+category_choice = st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=[])
+search = st.sidebar.text_input("Whole school search", placeholder="Type to filter...")
 
 wanted = {c.lower() for c in category_choice} if category_choice else set()
 
@@ -577,43 +617,40 @@ act_opts = sorted({
     for i in range(len(df))
     if str(act_s.iloc[i]).strip() and cat_ok(i)
 })
-st.session_state.selected_act = [a for a in st.session_state.selected_act if a in act_opts]
+selected_act = st.sidebar.multiselect("Activity/Subject", act_opts, default=[])
 
-selected_act = st.sidebar.multiselect(
-    "Activity/Subject",
-    act_opts,
-    default=st.session_state.selected_act,
-    key="selected_act",
-)
+selected_u = st.sidebar.multiselect(
+    "Age Groups (Sport)",
+    [f"U{i}" for i in range(7, 14)],
+    default=[]
+) if (not wanted or "sport" in wanted) else []
 
-# ✅ NEW: Combined group filter under Activity
-u_opts = [f"U{i}" for i in range(7, 14)]
-gr_opts = [f"Gr {i}" for i in range(1, 8)]
-grp_opts = u_opts + gr_opts
+selected_gr = st.sidebar.multiselect(
+    "Grades (Culture/Academics)",
+    [f"Gr {i}" for i in range(1, 8)],
+    default=[]
+) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
-st.session_state.group_filter = [g for g in st.session_state.group_filter if g in grp_opts]
-group_filter = st.sidebar.multiselect(
-    "Group Filter (U & Gr)",
-    grp_opts,
-    default=st.session_state.group_filter,
-    key="group_filter",
-    help="Kies U ouderdomme en/of Grade. Items met ranges (bv U10-13 / Gr 4-7) match outomaties.",
-)
-
-# write URL only if changed (prevents mobile odd behaviour)
-current_payload = {"view": view_mode, "cat": category_choice, "act": selected_act, "grp": group_filter, "q": search}
-payload_sig = hashlib.sha256(str(current_payload).encode("utf-8")).hexdigest()
-if st.session_state.get("last_qp_sig") != payload_sig:
-    st.session_state.last_qp_sig = payload_sig
-    qp_set(current_payload)
-
-selected_u_set = {x for x in group_filter if x.startswith("U")}
-selected_gr_set = {x for x in group_filter if x.startswith("Gr")}
+selected_u_set = set(selected_u)
+selected_gr_set = set(selected_gr)
 
 # =============================
 # NEW UPDATE TRACKING (badge)
+#   FIX: no badge on first load
 # =============================
+BADGE_VISIBLE_HOURS = 1
+BADGE_ANIMATE_MINUTES = 10
+
+def row_id(i: int) -> str:
+    # "Stable enough" identity for a row (so inserts don't break everything)
+    base = "||".join([
+        str(cat_s.iloc[i]), str(act_s.iloc[i]), str(team_s.iloc[i]),
+        str(date_s.iloc[i]), str(prog_s.iloc[i]), str(grade_s.iloc[i])
+    ])
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()
+
 def row_signature(i: int) -> str:
+    # Full content signature (changes detect updates)
     parts = [
         cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i],
         prog_s.iloc[i], teamlnk_s.iloc[i], conf_s.iloc[i], info_s.iloc[i],
@@ -625,8 +662,8 @@ if "row_hashes" not in st.session_state:
     st.session_state.row_hashes = {}
 if "row_updated_at" not in st.session_state:
     st.session_state.row_updated_at = {}
-
-BADGE_VISIBLE_HOURS = 1
+if "init_done" not in st.session_state:
+    st.session_state.init_done = False  # first run in this browser session
 
 # =============================
 # BUILD RESULTS
@@ -666,43 +703,68 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # ✅ Apply NEW combined Group Filter correctly
+    # Sport filters
     if cn == "sport" and selected_u_set:
-        if not grp_matches or not any(x in selected_u_set for x in grp_matches):
+        if grp_matches and not any(x in selected_u_set for x in grp_matches):
+            continue
+        if not grp_matches:
             continue
 
+    # Culture/Academics grade filter
     if cn in ["culture", "academics"] and selected_gr_set:
-        if not grp_matches or not any(x in selected_gr_set for x in grp_matches):
+        if grp_matches and not any(x in selected_gr_set for x in grp_matches):
+            continue
+        if not grp_matches:
             continue
 
-    title, grp_disp_for_card = build_title_and_group(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+    title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
     if search and search.lower().replace(" ", "") not in title.lower().replace(" ", ""):
         continue
 
+    # Badge tracking (NOT on first load)
+    rid = row_id(i)
     sig = row_signature(i)
-    prev = st.session_state.row_hashes.get(i)
-    if prev is None:
-        st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = now_dt
-    elif prev != sig:
-        st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = now_dt
+    prev_sig = st.session_state.row_hashes.get(rid)
 
-    updated_at = st.session_state.row_updated_at.get(i)
-    show_new = bool(updated_at and (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS))
+    if prev_sig is None:
+        st.session_state.row_hashes[rid] = sig
+        # if it's the first load: no badge
+        if st.session_state.init_done:
+            st.session_state.row_updated_at[rid] = now_dt
+    elif prev_sig != sig:
+        st.session_state.row_hashes[rid] = sig
+        st.session_state.row_updated_at[rid] = now_dt
+
+    updated_at = st.session_state.row_updated_at.get(rid)
+
+    show_new = False
+    pulse = False
+    # show badge for ALL categories (sport/culture/academics) for 1 hour
+    if updated_at:
+        age = (now_dt - updated_at)
+        if age <= timedelta(hours=BADGE_VISIBLE_HOURS):
+            show_new = True
+        if age <= timedelta(minutes=BADGE_ANIMATE_MINUTES):
+            pulse = True
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
+    grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
+
     res.append({
         "i": i,
         "dt": sort_dt,
         "title": title.lower(),
         "term": term_flag,
         "new": show_new,
-        "grp": grp_disp_for_card,
-        "grade": str(grade_s.iloc[i] or "").strip()
+        "pulse": pulse,
+        "grade": grade_raw_for_sort
     })
 
+# After first full build in this session, we can start showing “new” on changes/additions
+st.session_state.init_done = True
+
+# Term docs first (alphabetical), then date items (date -> title -> grade)
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
 res_sorted = term_items + other_items
@@ -721,7 +783,7 @@ else:
         cn = normalize_category(cat_s.iloc[i])
         afr = is_afrikaans_subject(act_s.iloc[i])
 
-        title, grp_disp = build_title_and_group(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+        title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
@@ -785,14 +847,17 @@ else:
                 [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
             ) + "</div>"
 
-        ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>" if item["new"] else ""
+        if item["new"]:
+            dot_class = "rDot pulse" if item.get("pulse") else "rDot"
+            ribbon = f"<div class='ribbon'><span class='{dot_class}'></span>NEW UPDATE</div>"
+        else:
+            ribbon = ""
 
         st.markdown(
             f"""
 <div class="card">
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
-  {f"<div class='groupMeta'>👥 {safe_txt(grp_disp)}</div>" if grp_disp else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {venue_line}
   {notes_block}
