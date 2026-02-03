@@ -21,15 +21,26 @@ today = now_dt.date()
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
 
 # =============================
-# COOKIE (PERSIST FILTERS ACROSS CLOSE/REFRESH)
+# COOKIE + URL PERSISTENCE (MOBILE SAFE)
 # =============================
-cookie_manager = stx.CookieManager()
+cookie_manager = stx.CookieManager(key="lmcp_cookie_mgr")  # key helps mobile
 COOKIE_KEY = "lmcp_hub_filters_v1"
+
+def _cookie_ready():
+    """
+    On first run (especially mobile / in-app browsers), the cookie component
+    may not be ready yet. If not ready, stop so Streamlit reruns and cookies
+    become available.
+    """
+    try:
+        allc = cookie_manager.get_all()
+        return allc is not None
+    except Exception:
+        return False
 
 def _cookie_read() -> dict:
     try:
-        allc = cookie_manager.get_all() or {}
-        raw = allc.get(COOKIE_KEY, "")
+        raw = cookie_manager.get(COOKIE_KEY)
         if not raw:
             return {}
         return json.loads(raw)
@@ -38,27 +49,61 @@ def _cookie_read() -> dict:
 
 def _cookie_write(payload: dict):
     try:
+        # IMPORTANT: naive UTC datetime for expires_at (mobile-safe)
+        expires = datetime.utcnow() + timedelta(days=365)
         cookie_manager.set(
             COOKIE_KEY,
             json.dumps(payload, ensure_ascii=False),
-            expires_at=(now_dt + timedelta(days=365))
+            expires_at=expires
         )
     except Exception:
         pass
 
 def _cookie_clear():
-    # set expired date to remove
     try:
-        cookie_manager.set(
-            COOKIE_KEY,
-            "",
-            expires_at=(now_dt - timedelta(days=1))
-        )
+        expires = datetime.utcnow() - timedelta(days=1)
+        cookie_manager.set(COOKIE_KEY, "", expires_at=expires)
     except Exception:
         pass
 
+def qp_get(name: str, default):
+    """Read query param and cast to list or str based on default type."""
+    try:
+        v = st.query_params.get(name, "")
+    except Exception:
+        v = ""
+    if not v:
+        return default
+    if isinstance(default, list):
+        if isinstance(v, list):
+            v = v[0] if v else ""
+        return [x for x in str(v).split(",") if x.strip()]
+    if isinstance(v, list):
+        v = v[0] if v else ""
+    return str(v)
+
+def qp_clean(payload: dict):
+    """
+    Convert payload to query params, skipping empties.
+    Lists become comma-separated strings.
+    """
+    out = {}
+    for k, v in payload.items():
+        if isinstance(v, list):
+            if v:
+                out[k] = ",".join([str(x) for x in v if str(x).strip()])
+        else:
+            s = str(v).strip()
+            if s:
+                out[k] = s
+    return out
+
+# Ensure cookie component is ready before we try to use it (mobile fix)
+if not _cookie_ready():
+    st.stop()
+
 # =============================
-# SESSION DEFAULTS (fixes AttributeError)
+# SESSION DEFAULTS
 # =============================
 def ss_init(key, default):
     if key not in st.session_state:
@@ -71,19 +116,25 @@ ss_init("u_choice", [])
 ss_init("gr_choice", [])
 ss_init("search_text", "")
 
-# Load cookies -> session (first run only)
-if "cookie_loaded" not in st.session_state:
-    st.session_state.cookie_loaded = True
-    saved = _cookie_read()
-    if saved:
-        st.session_state.view_mode = saved.get("view", st.session_state.view_mode)
-        if st.session_state.view_mode not in VIEW_OPTIONS:
-            st.session_state.view_mode = "Upcoming"
-        st.session_state.cat_choice = saved.get("cat", st.session_state.cat_choice) or []
-        st.session_state.act_choice = saved.get("act", st.session_state.act_choice) or []
-        st.session_state.u_choice = saved.get("u", st.session_state.u_choice) or []
-        st.session_state.gr_choice = saved.get("gr", st.session_state.gr_choice) or []
-        st.session_state.search_text = saved.get("q", st.session_state.search_text) or ""
+# =============================
+# INITIAL LOAD (URL > SESSION > COOKIE)
+# =============================
+if "init_sync" not in st.session_state:
+    st.session_state.init_sync = True
+
+    # Start with cookie
+    saved = _cookie_read() or {}
+
+    # Then overlay with URL params (URL has priority, helps iOS/in-app browsers)
+    st.session_state.view_mode = qp_get("view", saved.get("view", st.session_state.view_mode))
+    st.session_state.cat_choice = qp_get("cat", saved.get("cat", st.session_state.cat_choice)) or []
+    st.session_state.act_choice = qp_get("act", saved.get("act", st.session_state.act_choice)) or []
+    st.session_state.u_choice   = qp_get("u",   saved.get("u",   st.session_state.u_choice)) or []
+    st.session_state.gr_choice  = qp_get("gr",  saved.get("gr",  st.session_state.gr_choice)) or []
+    st.session_state.search_text = qp_get("q",  saved.get("q",  st.session_state.search_text)) or ""
+
+    if st.session_state.view_mode not in VIEW_OPTIONS:
+        st.session_state.view_mode = "Upcoming"
 
 # =============================
 # STYLE
@@ -439,7 +490,6 @@ def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> st
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
 
-    # NOTE: title can still include group; we display group on 2nd line anyway (below)
     if grp_disp and grp_disp.lower() in team_clean.lower():
         return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
@@ -599,7 +649,7 @@ selected_gr = st.sidebar.multiselect(
 selected_u_set = set(st.session_state.u_choice)
 selected_gr_set = set(st.session_state.gr_choice)
 
-# Reset button clears cookies + state
+# Reset button clears cookies + URL + state
 if st.sidebar.button("🧹 Reset filters"):
     st.session_state.view_mode = "Upcoming"
     st.session_state.cat_choice = []
@@ -608,10 +658,14 @@ if st.sidebar.button("🧹 Reset filters"):
     st.session_state.gr_choice = []
     st.session_state.search_text = ""
     _cookie_clear()
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
     st.rerun()
 
-# Persist filters to cookie (every run, but only write if changed)
-desired_cookie = {
+# Persist filters to cookie (only write if changed)
+desired_state = {
     "view": st.session_state.view_mode,
     "cat": st.session_state.cat_choice,
     "act": st.session_state.act_choice,
@@ -619,9 +673,19 @@ desired_cookie = {
     "gr": st.session_state.gr_choice,
     "q": st.session_state.search_text,
 }
-if st.session_state.get("_last_cookie_payload") != desired_cookie:
-    st.session_state["_last_cookie_payload"] = desired_cookie
-    _cookie_write(desired_cookie)
+
+if st.session_state.get("_last_cookie_payload") != desired_state:
+    st.session_state["_last_cookie_payload"] = desired_state
+    _cookie_write(desired_state)
+
+# Persist to URL (iOS / WhatsApp backup) - only if changed (prevents loops)
+desired_qp = qp_clean(desired_state)
+try:
+    current_qp = dict(st.query_params)
+    if current_qp != desired_qp:
+        st.query_params.from_dict(desired_qp)
+except Exception:
+    pass
 
 # =============================
 # NEW UPDATE TRACKING (badge)
