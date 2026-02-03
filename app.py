@@ -17,31 +17,46 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
-
 # =============================
-# SESSION DEFAULTS (prevents AttributeError + makes widgets stable)
+# QUERY PARAM HELPERS (SAVE FILTER LINK)
 # =============================
-if "view_mode" not in st.session_state:
-    st.session_state.view_mode = "Upcoming"
+def _qp_get_list(key: str):
+    v = st.query_params.get(key)
+    if v is None:
+        return []
+    if isinstance(v, list):
+        out = []
+        for item in v:
+            out += [x.strip() for x in str(item).split(",") if x.strip()]
+        return out
+    return [x.strip() for x in str(v).split(",") if x.strip()]
 
-if "cat_choice" not in st.session_state:
-    st.session_state.cat_choice = []
+def _qp_set_list(key: str, values):
+    if values:
+        st.query_params[key] = ",".join(values)
+    else:
+        if key in st.query_params:
+            del st.query_params[key]
 
-if "act_choice" not in st.session_state:
-    st.session_state.act_choice = []
+def _qp_get_one(key: str, default: str = ""):
+    v = st.query_params.get(key)
+    if v is None:
+        return default
+    if isinstance(v, list):
+        return str(v[0]) if v else default
+    return str(v)
 
-if "u_choice" not in st.session_state:
-    st.session_state.u_choice = []
+def _qp_set_one(key: str, value: str):
+    if value:
+        st.query_params[key] = value
+    else:
+        if key in st.query_params:
+            del st.query_params[key]
 
-if "gr_choice" not in st.session_state:
-    st.session_state.gr_choice = []
-
-if "search_text" not in st.session_state:
-    st.session_state.search_text = ""
-
-if "qp_loaded" not in st.session_state:
-    st.session_state.qp_loaded = False
+def _qp_clear(keys):
+    for k in keys:
+        if k in st.query_params:
+            del st.query_params[k]
 
 # =============================
 # STYLE
@@ -87,7 +102,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   position:relative;
 }
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
-.meta{color:#64748b;margin-top:8px;font-size:.95rem;}
+.meta{color:#64748b;margin-top:6px;font-size:.95rem;}
 
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
@@ -104,28 +119,22 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
-/* BADGE moved to bottom-right so it won't cover the heading */
+/* Badge moved to bottom-right so it won't cover headings (especially on mobile) */
 .ribbon{
-  position:absolute;
-  right:12px;
-  bottom:12px;
-  top:auto;
+  position:absolute; bottom:12px; right:12px;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
-  font-size:.78rem;
+  font-size:.75rem;
   padding:6px 10px;
   border-radius:999px;
   border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
   display:flex;align-items:center;gap:8px;
+  z-index:2;
 }
 .rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
-
-@media (max-width: 480px){
-  .ribbon{ right:10px; bottom:10px; font-size:.74rem; padding:6px 9px; }
-}
 </style>
 """,
     unsafe_allow_html=True,
@@ -142,96 +151,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-# =============================
-# QUERY PARAMS (stick filters across refresh + bookmark)
-# =============================
-def get_query_params():
-    # Streamlit newer
-    try:
-        return dict(st.query_params)
-    except Exception:
-        pass
-    # Streamlit older
-    try:
-        return st.experimental_get_query_params()
-    except Exception:
-        return {}
-
-def set_query_params(params: dict):
-    # Streamlit newer
-    try:
-        st.query_params.clear()
-        for k, v in params.items():
-            st.query_params[k] = v
-        return
-    except Exception:
-        pass
-    # Streamlit older
-    try:
-        st.experimental_set_query_params(**params)
-    except Exception:
-        return
-
-def qp_get_list(params, name: str):
-    v = params.get(name, "")
-    if isinstance(v, list):
-        v = v[0] if v else ""
-    if not v:
-        return []
-    return [p.strip() for p in str(v).split(",") if p.strip()]
-
-def qp_get_str(params, name: str, default=""):
-    v = params.get(name, "")
-    if isinstance(v, list):
-        v = v[0] if v else ""
-    return str(v) if v not in ["", None] else default
-
-def qp_set_if_changed(**kwargs):
-    params_now = get_query_params()
-
-    desired = {}
-    for k, v in kwargs.items():
-        if isinstance(v, list):
-            desired[k] = ",".join(v)
-        else:
-            desired[k] = str(v)
-
-    desired = {k: v for k, v in desired.items() if v not in ["", "None", None]}
-
-    current_norm = {}
-    for k, v in params_now.items():
-        if isinstance(v, list):
-            current_norm[k] = v[0] if v else ""
-        else:
-            current_norm[k] = str(v)
-    current_norm = {k: v for k, v in current_norm.items() if v not in ["", "None", None]}
-
-    if current_norm != desired:
-        set_query_params(desired)
-
-# Load params ONCE per session
-if not st.session_state.qp_loaded:
-    params = get_query_params()
-
-    qp_view = qp_get_str(params, "view", st.session_state.view_mode)
-    if qp_view in VIEW_OPTIONS:
-        st.session_state.view_mode = qp_view
-
-    # only overwrite if params exist (so normal first open keeps defaults)
-    qp_cat = qp_get_list(params, "cat")
-    qp_act = qp_get_list(params, "act")
-    qp_u = qp_get_list(params, "u")
-    qp_gr = qp_get_list(params, "gr")
-    qp_q = qp_get_str(params, "q", "")
-
-    if qp_cat: st.session_state.cat_choice = qp_cat
-    if qp_act: st.session_state.act_choice = qp_act
-    if qp_u:   st.session_state.u_choice = qp_u
-    if qp_gr:  st.session_state.gr_choice = qp_gr
-    if qp_q:   st.session_state.search_text = qp_q
-
-    st.session_state.qp_loaded = True
 
 # =============================
 # HELPERS
@@ -404,7 +323,7 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# AGE GROUP / GRADE PARSING
+# AGE GROUP / GRADE PARSING (SET RULE: U?-U? and Gr?-Gr?)
 # =============================
 def expand_group_range(raw: str, kind: str):
     """
@@ -412,12 +331,13 @@ def expand_group_range(raw: str, kind: str):
       - U10-U13 / U10–U13
       - 10-13 / 07-13
       - U10,11,12,13 / 10,11,12,13
-    Culture/Academics:
-      - Gr 4 - Gr 7
+      - single: U10 / 10
+    Academics/Culture:
+      - Gr 4-Gr 7 / Gr 4 – Gr 7
       - 4-7
-      - Gr 4,5,6,7
-      - 4,5,6,7
-      - single '4' also works
+      - Gr 4,5,6,7 / 4,5,6,7
+      - single: Gr 4 / 4
+    Returns list like ['U10','U11'...] or ['Gr 4','Gr 5'...]
     """
     s = str(raw or "").strip()
     if not s:
@@ -439,7 +359,8 @@ def expand_group_range(raw: str, kind: str):
     # list
     if "," in s_nospace:
         lo, hi = min(nums), max(nums)
-        if len(nums) >= 3 and (hi - lo) <= 8:
+        # compress contiguous-ish lists
+        if len(nums) >= 3 and (hi - lo) <= 10:
             nums = list(range(lo, hi + 1))
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
@@ -450,6 +371,7 @@ def expand_group_range(raw: str, kind: str):
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
+    """Fallback for sport ages typed into Team/Assessment."""
     t = str(text or "").strip()
     if not t:
         return []
@@ -477,14 +399,14 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
     """
     SPORT:
       - Prefer Age Group column
-      - else fallback to Team/Assessment
-    NO athletics-default.
+      - Else fallback Team/Assessment
+    NO athletics default.
     """
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         m = expand_group_range(g, "U") if g else extract_u_groups_from_text(team_raw)
         if len(m) >= 2:
-            return f"{m[0]}-{m[-1]}", m
+            return f"{m[0]}–{m[-1]}", m
         return (m[0] if m else ""), m
 
     # Culture / Academics
@@ -496,11 +418,20 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
-# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
+# =============================
+# TEXT CLEANUP (NO DOUBLE GROUP)
+# =============================
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
+
+    # remove U10-U13 / 10-13 / Gr 4-7
+    t = re.sub(r"\bGr?\s*\d{1,2}\s*[-–]\s*Gr?\s*\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
+
+    # remove comma lists
+    t = re.sub(r"\bGr?\s*\d{1,2}(?:\s*,\s*Gr?\s*\d{1,2}){1,}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
+
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip(" -–|,")
 
@@ -525,21 +456,22 @@ def tidy_team_text(s: str) -> str:
     t = re.sub(r"\s{2,}", " ", t).strip()
     return t
 
-def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
-    cn = normalize_category(cat_val)
+def build_title_line1(cat_val: str, act_val: str, team_val: str) -> str:
+    """
+    LINE 1 must NOT contain group (U/Gr).
+    Example: "Swimming" (or "Afrikaans Hooftaal Voorbereide lees")
+    """
     act_txt = norm_gender_words(normalize_activity(act_val))
-
-    grp_disp, _ = group_for_row(cn, grade_val, team_val)
-
-    team_clean = strip_group_tokens(team_val)
-    team_clean = tidy_team_text(norm_gender_words(team_clean))
-
-    if grp_disp:
-        if grp_disp.lower() in team_clean.lower():
-            return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
-        return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
-
+    team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+
+def build_group_line2(cat_val: str, grade_val: str, team_val: str) -> str:
+    """
+    LINE 2 shows the group only (U.. or Gr..), derived from the same logic we filter with.
+    """
+    cn = normalize_category(cat_val)
+    grp_disp, _ = group_for_row(cn, grade_val, team_val)
+    return grp_disp.strip()
 
 # =============================
 # LOAD CSV (ANTI-CRASH)
@@ -563,38 +495,19 @@ try:
     df, raw_txt = load_csv(CSV_URL)
 except Timeout:
     st.warning("⏳ The Google Sheet took too long to respond. Please try again.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
     st.stop()
 except RequestException:
     st.warning("⚠️ Could not connect to Google Sheets right now. Please try again shortly.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
     st.stop()
 except Exception as e:
     st.warning("⚠️ Something went wrong while loading the sheet.")
     with st.expander("Technical details"):
         st.code(str(e))
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
     st.stop()
 
 if df.empty:
     st.error("No data loaded from Google Sheets yet. Republish the sheet and refresh.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
     st.stop()
-
-with st.sidebar:
-    if st.button("🔄 Refresh data"):
-        # filters stay in session_state + query params;
-        # only the cached data is cleared
-        st.cache_data.clear()
-        st.rerun()
 
 # =============================
 # COLUMNS
@@ -627,26 +540,51 @@ grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
 # =============================
-# VIEW TOGGLES (keyed)
+# DEFAULTS FROM URL (PERSIST IF PARENTS CLOSE APP)
 # =============================
-st.radio(
+VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
+
+default_view = _qp_get_one("view", "Upcoming")
+if default_view not in VIEW_OPTIONS:
+    default_view = "Upcoming"
+
+default_cat = _qp_get_list("cat")
+default_act = _qp_get_list("act")
+default_u   = _qp_get_list("u")
+default_gr  = _qp_get_list("gr")
+default_q   = _qp_get_one("q", "")
+
+# =============================
+# VIEW TOGGLES
+# =============================
+view_mode = st.radio(
     "View",
     VIEW_OPTIONS,
-    index=VIEW_OPTIONS.index(st.session_state.view_mode) if st.session_state.view_mode in VIEW_OPTIONS else 0,
+    index=VIEW_OPTIONS.index(default_view),
     horizontal=True,
-    key="view_mode",
+    key="view_mode_radio"
 )
 
 # =============================
-# FILTERS (keyed + persistent)
+# FILTERS (SIDEBAR) — ENGLISH UI
 # =============================
 st.sidebar.markdown("## Filters")
-st.sidebar.caption("Tip: Kies jou filters en bookmark die bladsy—dan bly jou filters vir volgende keer.")
 
-st.sidebar.multiselect("Category", ["Sport", "Culture", "Academics"], default=st.session_state.cat_choice, key="cat_choice")
-st.sidebar.text_input("Whole school search", value=st.session_state.search_text, placeholder="Type to filter...", key="search_text")
+category_choice = st.sidebar.multiselect(
+    "Category",
+    ["Sport", "Culture", "Academics"],
+    default=[c for c in default_cat if c in ["Sport", "Culture", "Academics"]],
+    key="cat_ms"
+)
 
-wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
+search = st.sidebar.text_input(
+    "Whole school search",
+    value=default_q,
+    placeholder="Type to filter...",
+    key="search_q"
+)
+
+wanted = {c.lower() for c in category_choice} if category_choice else set()
 
 def cat_ok(i: int) -> bool:
     if not wanted:
@@ -664,33 +602,57 @@ act_opts = sorted({
     if str(act_s.iloc[i]).strip() and cat_ok(i)
 })
 
-# If previously selected activities are no longer available, keep only those still present
-st.session_state.act_choice = [a for a in st.session_state.act_choice if a in act_opts]
-
-st.sidebar.multiselect("Activity/Subject", act_opts, default=st.session_state.act_choice, key="act_choice")
-
-if (not wanted or "sport" in wanted):
-    st.sidebar.multiselect("Age Groups (Sport)", [f"U{i}" for i in range(7, 14)], default=st.session_state.u_choice, key="u_choice")
-else:
-    st.session_state.u_choice = []
-
-if (not wanted or "culture" in wanted or "academics" in wanted):
-    st.sidebar.multiselect("Grades (Culture/Academics)", [f"Gr {i}" for i in range(1, 8)], default=st.session_state.gr_choice, key="gr_choice")
-else:
-    st.session_state.gr_choice = []
-
-selected_u_set = set(st.session_state.u_choice)
-selected_gr_set = set(st.session_state.gr_choice)
-
-# Persist current selections into URL
-qp_set_if_changed(
-    view=st.session_state.view_mode,
-    cat=st.session_state.cat_choice,
-    act=st.session_state.act_choice,
-    u=st.session_state.u_choice,
-    gr=st.session_state.gr_choice,
-    q=st.session_state.search_text,
+selected_act = st.sidebar.multiselect(
+    "Activity / Subject",
+    act_opts,
+    default=[a for a in default_act if a in act_opts],
+    key="act_ms"
 )
+
+selected_u = st.sidebar.multiselect(
+    "Age Groups (Sport)",
+    [f"U{i}" for i in range(7, 14)],
+    default=[u for u in default_u if u in [f"U{i}" for i in range(7, 14)]],
+    key="u_ms"
+) if (not wanted or "sport" in wanted) else []
+
+selected_gr = st.sidebar.multiselect(
+    "Grades (Culture / Academics)",
+    [f"Gr {i}" for i in range(1, 8)],
+    default=[g for g in default_gr if g in [f"Gr {i}" for i in range(1, 8)]],
+    key="gr_ms"
+) if (not wanted or "culture" in wanted or "academics" in wanted) else []
+
+selected_u_set = set(selected_u)
+selected_gr_set = set(selected_gr)
+
+# =============================
+# SAVE / RESET / REFRESH (SIDEBAR)
+# =============================
+with st.sidebar:
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+
+    if c1.button("💾 Save my link", use_container_width=True):
+        _qp_set_one("view", view_mode)
+        _qp_set_list("cat", category_choice)
+        _qp_set_list("act", selected_act)
+        _qp_set_list("u", selected_u)
+        _qp_set_list("gr", selected_gr)
+        _qp_set_one("q", search.strip())
+        st.success("Saved to the URL. Copy/bookmark your browser link.")
+
+    if c2.button("🧹 Reset filters", use_container_width=True):
+        _qp_clear(["view", "cat", "act", "u", "gr", "q"])
+        # also clear widgets
+        for k in ["cat_ms", "act_ms", "u_ms", "gr_ms", "search_q", "view_mode_radio"]:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.rerun()
+
+    if st.button("🔄 Refresh data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 # =============================
 # NEW UPDATE TRACKING (badge)
@@ -708,8 +670,7 @@ if "row_hashes" not in st.session_state:
 if "row_updated_at" not in st.session_state:
     st.session_state.row_updated_at = {}
 
-# Parents not always on app: show badge for 1 hour
-BADGE_VISIBLE_HOURS = 1
+BADGE_VISIBLE_HOURS = 1  # show badge for 1 hour for ALL categories (Sport/Culture/Academics)
 BADGE_ANIMATE_MINUTES = 10
 
 # =============================
@@ -722,7 +683,7 @@ for i in range(len(df)):
 
     if wanted and not cat_ok(i):
         continue
-    if st.session_state.act_choice and act_norm not in st.session_state.act_choice:
+    if selected_act and act_norm not in selected_act:
         continue
 
     term_val = str(term_s.iloc[i]).strip().lower()
@@ -735,49 +696,47 @@ for i in range(len(df)):
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
+    # only today+future when a date exists
     if d_dt and d_dt.date() < today:
         continue
 
-    if st.session_state.view_mode == "Next 7 Days":
+    if view_mode == "Next 7 Days":
         if not d_dt:
             continue
         if d_dt.date() > (today + timedelta(days=7)):
             continue
 
-    if st.session_state.view_mode == "Term Documents":
+    if view_mode == "Term Documents":
         if not term_flag:
             continue
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport filters
+    # Sport filter must match selected U’s (range match supported)
     if cn == "sport" and selected_u_set:
         if grp_matches and not any(x in selected_u_set for x in grp_matches):
             continue
         if not grp_matches:
             continue
 
-    # Culture/Academics grade filters
+    # Culture/Academics grade filter must match selected Gr’s (range match supported)
     if cn in ["culture", "academics"] and selected_gr_set:
         if grp_matches and not any(x in selected_gr_set for x in grp_matches):
             continue
         if not grp_matches:
             continue
 
-    title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+    title1 = build_title_line1(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i])
 
-    q = (st.session_state.search_text or "").lower().replace(" ", "")
-    if q and q not in title.lower().replace(" ", ""):
+    if search and search.lower().replace(" ", "") not in title1.lower().replace(" ", ""):
         continue
 
-    # Badge logic:
-    # - First time we ever see a row in THIS session -> do NOT mark as "new"
-    # - Only when signature changes -> mark updated_at = now
+    # update tracking (IMPORTANT: first-ever seen rows do NOT get a badge)
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
     if prev is None:
         st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = None
+        # do NOT set updated_at here
     elif prev != sig:
         st.session_state.row_hashes[i] = sig
         st.session_state.row_updated_at[i] = now_dt
@@ -785,24 +744,22 @@ for i in range(len(df)):
     updated_at = st.session_state.row_updated_at.get(i)
 
     show_new = False
-    # Show badge for Sport + Culture (as requested)
-    if cn in ["sport", "culture"] and updated_at:
-        if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
-            show_new = True
+    if updated_at and (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
+        show_new = True
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
-    grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
+    grade_sort = str(grade_s.iloc[i] or "").strip()
 
     res.append({
         "i": i,
         "dt": sort_dt,
-        "title": title.lower(),
+        "title": title1.lower(),
         "term": term_flag,
         "new": show_new,
-        "grade": grade_raw_for_sort,
-        "grp_disp": grp_disp,  # for optional meta line
+        "grade": grade_sort
     })
 
+# Term docs first (alphabetical), then others (date -> title -> grade)
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
 res_sorted = term_items + other_items
@@ -814,14 +771,15 @@ st.markdown("## 📅 Events")
 pin = "&#128205;"
 
 if not res_sorted:
-    st.info("Niks pas by jou filters nie.")
+    st.info("No items match your filters.")
 else:
     for item in res_sorted:
         i = item["i"]
         cn = normalize_category(cat_s.iloc[i])
         afr = is_afrikaans_subject(act_s.iloc[i])
 
-        title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+        title_line1 = build_title_line1(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i])
+        group_line2 = build_group_line2(cat_s.iloc[i], grade_s.iloc[i], team_s.iloc[i])  # U.. or Gr..
 
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
@@ -839,8 +797,8 @@ else:
         notes_parts = []
 
         if cn == "academics":
-            b_docs = "Dokumente" if afr else "Documents"
-            b_info = "Inligting" if afr else "Information"
+            b_docs = "Documents"  # UI must stay English
+            b_info = "Information"
             if prog_link and is_http(prog_link):
                 buttons.append((b_docs, prog_link))
             for idx, lk in enumerate(info_links, start=1):
@@ -861,10 +819,10 @@ else:
         if ven_norm == "SEE_PROGRAMME":
             notes_parts.append("<b>Venue:</b><br>See programme")
         elif ven_norm:
-            qv = ven_norm
+            q = ven_norm
             if "midstream" in ven_norm.lower():
-                qv = f"{ven_norm} Midstream College"
-            map_url = f"https://www.google.com/maps/search/?api=1&query={qv.replace(' ', '+')}"
+                q = f"{ven_norm} Midstream College"
+            map_url = f"https://www.google.com/maps/search/?api=1&query={q.replace(' ', '+')}"
             venue_line = (
                 f"<div class='meta'>{pin} "
                 f"<a href='{map_url}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
@@ -874,7 +832,7 @@ else:
         if info_text:
             notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
-        if "revue" in (title.lower() + " " + info_raw.lower()):
+        if "revue" in (title_line1.lower() + " " + info_raw.lower()):
             notes_parts.append("<b>Note:</b><br>Revue")
 
         notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
@@ -885,25 +843,14 @@ else:
                 [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
             ) + "</div>"
 
-        ribbon = ""
-        if item["new"]:
-            # animate dot only for first 10 minutes after update
-            updated_at = st.session_state.row_updated_at.get(i)
-            animate = bool(updated_at and (now_dt - updated_at) <= timedelta(minutes=BADGE_ANIMATE_MINUTES))
-            dot_html = "<span class='rDot'></span>" if animate else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;opacity:.9;'></span>"
-            ribbon = f"<div class='ribbon'>{dot_html}NEW UPDATE</div>"
-
-        # Optional group line under title (doesn't change layout much)
-        grp_line = ""
-        if item.get("grp_disp"):
-            grp_line = f"<div class='meta' style='margin-top:6px;'><b>{safe_txt(item['grp_disp'])}</b></div>"
+        ribbon = "<div class='ribbon'><span class='rDot'></span>NEW UPDATE</div>" if item["new"] else ""
 
         st.markdown(
             f"""
 <div class="card">
   {ribbon}
-  <div class="card-title">{safe_txt(title)}</div>
-  {grp_line}
+  <div class="card-title">{safe_txt(title_line1)}</div>
+  {f"<div class='meta'><b>{safe_txt(group_line2)}</b></div>" if group_line2 else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {venue_line}
   {notes_block}
