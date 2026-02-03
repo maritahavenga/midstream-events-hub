@@ -5,3 +5,4 @@ streamlit-autorefresh
 requests
 pytz
 python-dateutil
+extra-streamlit-components==0.1.81
