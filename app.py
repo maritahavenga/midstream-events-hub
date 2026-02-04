@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz, hashlib, json
-import extra_streamlit_components as stx
+import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
+from urllib.parse import urlencode
 
 # =============================
 # PAGE CONFIG
@@ -20,87 +20,61 @@ today = now_dt.date()
 
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
 
-# =============================
-# COOKIE + URL PERSISTENCE (MOBILE SAFE)
-# =============================
-cookie_manager = stx.CookieManager(key="lmcp_cookie_mgr")  # key helps mobile
-COOKIE_KEY = "lmcp_hub_filters_v1"
+# ============================================================
+# QUERY PARAMS HELPERS (THE "BIG GUNS" LAYER)
+# ============================================================
 
-def _cookie_ready():
-    """
-    On first run (especially mobile / in-app browsers), the cookie component
-    may not be ready yet. If not ready, stop so Streamlit reruns and cookies
-    become available.
-    """
+def qp_get(name: str, default=""):
+    """Streamlit's st.query_params returns strings (or list-like in older versions). Normalize."""
     try:
-        allc = cookie_manager.get_all()
-        return allc is not None
+        v = st.query_params.get(name, default)
     except Exception:
-        return False
+        v = default
 
-def _cookie_read() -> dict:
-    try:
-        raw = cookie_manager.get(COOKIE_KEY)
-        if not raw:
-            return {}
-        return json.loads(raw)
-    except Exception:
-        return {}
-
-def _cookie_write(payload: dict):
-    try:
-        # IMPORTANT: naive UTC datetime for expires_at (mobile-safe)
-        expires = datetime.utcnow() + timedelta(days=365)
-        cookie_manager.set(
-            COOKIE_KEY,
-            json.dumps(payload, ensure_ascii=False),
-            expires_at=expires
-        )
-    except Exception:
-        pass
-
-def _cookie_clear():
-    try:
-        expires = datetime.utcnow() - timedelta(days=1)
-        cookie_manager.set(COOKIE_KEY, "", expires_at=expires)
-    except Exception:
-        pass
-
-def qp_get(name: str, default):
-    """Read query param and cast to list or str based on default type."""
-    try:
-        v = st.query_params.get(name, "")
-    except Exception:
-        v = ""
-    if not v:
+    if v is None:
         return default
-    if isinstance(default, list):
-        if isinstance(v, list):
-            v = v[0] if v else ""
-        return [x for x in str(v).split(",") if x.strip()]
-    if isinstance(v, list):
-        v = v[0] if v else ""
-    return str(v)
+    # Streamlit may return list-like in some contexts; normalize to a single string.
+    if isinstance(v, (list, tuple)):
+        return v[0] if v else default
+    return v
 
-def qp_clean(payload: dict):
-    """
-    Convert payload to query params, skipping empties.
-    Lists become comma-separated strings.
-    """
-    out = {}
+def qp_get_list(name: str):
+    """Read comma-separated list from query params."""
+    raw = qp_get(name, "")
+    if not raw:
+        return []
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+def qp_set_from_state(payload: dict):
+    """Write query params to URL (only non-empty values)."""
+    clean = {}
     for k, v in payload.items():
         if isinstance(v, list):
             if v:
-                out[k] = ",".join([str(x) for x in v if str(x).strip()])
+                clean[k] = ",".join(v)
         else:
-            s = str(v).strip()
-            if s:
-                out[k] = s
-    return out
+            if str(v).strip():
+                clean[k] = str(v).strip()
+    st.query_params.from_dict(clean)
 
-# Ensure cookie component is ready before we try to use it (mobile fix)
-if not _cookie_ready():
-    st.stop()
+def build_saved_link(payload: dict) -> str:
+    """
+    Build a relative link "?a=b&c=d" that parents can copy.
+    We can't reliably know the full domain from inside Streamlit, so we provide querystring
+    (which still works when pasted onto the same app URL).
+    """
+    clean = {}
+    for k, v in payload.items():
+        if isinstance(v, list):
+            if v:
+                clean[k] = ",".join(v)
+        else:
+            if str(v).strip():
+                clean[k] = str(v).strip()
+
+    if not clean:
+        return "(No filters applied)"
+    return "?" + urlencode(clean, doseq=False)
 
 # =============================
 # SESSION DEFAULTS
@@ -117,24 +91,25 @@ ss_init("gr_choice", [])
 ss_init("search_text", "")
 
 # =============================
-# INITIAL LOAD (URL > SESSION > COOKIE)
+# INITIAL LOAD FROM QUERY PARAMS (ONCE)
 # =============================
-if "init_sync" not in st.session_state:
-    st.session_state.init_sync = True
+if "qp_loaded" not in st.session_state:
+    st.session_state.qp_loaded = True
 
-    # Start with cookie
-    saved = _cookie_read() or {}
+    view = qp_get("view", "")
+    if view in VIEW_OPTIONS:
+        st.session_state.view_mode = view
 
-    # Then overlay with URL params (URL has priority, helps iOS/in-app browsers)
-    st.session_state.view_mode = qp_get("view", saved.get("view", st.session_state.view_mode))
-    st.session_state.cat_choice = qp_get("cat", saved.get("cat", st.session_state.cat_choice)) or []
-    st.session_state.act_choice = qp_get("act", saved.get("act", st.session_state.act_choice)) or []
-    st.session_state.u_choice   = qp_get("u",   saved.get("u",   st.session_state.u_choice)) or []
-    st.session_state.gr_choice  = qp_get("gr",  saved.get("gr",  st.session_state.gr_choice)) or []
-    st.session_state.search_text = qp_get("q",  saved.get("q",  st.session_state.search_text)) or ""
+    # Expect cat as: Sport,Culture,Academics
+    cats = qp_get_list("cat")
+    # Normalize capitalization to match your widget options
+    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics"}
+    st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
 
-    if st.session_state.view_mode not in VIEW_OPTIONS:
-        st.session_state.view_mode = "Upcoming"
+    st.session_state.act_choice = qp_get_list("act")
+    st.session_state.u_choice = qp_get_list("u")
+    st.session_state.gr_choice = qp_get_list("gr")
+    st.session_state.search_text = qp_get("q", "")
 
 # =============================
 # STYLE
@@ -153,7 +128,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   margin-top:14px;
   border-radius:22px;
   padding:18px 18px 16px 18px;
-  margin-bottom:22px;
+  margin-bottom:14px;
   background:#008080;
   box-shadow:var(--shadow);
   color:#fff;
@@ -199,7 +174,6 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
-/* Badge bottom-right so it won't cover title on phone */
 .ribbon{
   position:absolute; right:12px; bottom:12px;
   background:#FFD400;
@@ -269,12 +243,10 @@ def normalize_category(v: str) -> str:
 def normalize_activity(v: str) -> str:
     s = str(v or "").strip().lower()
     s = re.sub(r"\s+", " ", s)
-
     if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
-
     if "wiskunde" in s: return "Math"
     if "atletiek" in s or "athletics" in s: return "Athletics"
     if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
@@ -301,7 +273,6 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
     return re.sub(r"\s+", " ", s).strip()
 
-# ---------- SA DATE ----------
 MONTHS = {
     "jan": "January","january": "January",
     "feb": "February","february": "February",
@@ -358,7 +329,6 @@ def format_date_long_sa(s) -> str:
     if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
-# ---------- VENUE ----------
 VENUE_MAP = {
     "musiekkamer": "Music Room",
     "musiek kamer": "Music Room",
@@ -390,28 +360,22 @@ def expand_group_range(raw: str, kind: str):
     s = str(raw or "").strip()
     if not s:
         return []
-
     s = s.replace("–", "-").replace("—", "-")
     s_nospace = re.sub(r"\s+", "", s)
-
     nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
     if not nums:
         return []
-
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
-
     if "," in s_nospace:
         lo, hi = min(nums), max(nums)
         if len(nums) >= 2 and (hi - lo) <= 12:
             nums = list(range(lo, hi + 1)) if len(nums) >= 3 else nums
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
-
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
-
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
@@ -486,10 +450,8 @@ def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> st
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
     grp_disp, _ = group_for_row(cn, grade_val, team_val)
-
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
-
     if grp_disp and grp_disp.lower() in team_clean.lower():
         return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
@@ -649,7 +611,7 @@ selected_gr = st.sidebar.multiselect(
 selected_u_set = set(st.session_state.u_choice)
 selected_gr_set = set(st.session_state.gr_choice)
 
-# Reset button clears cookies + URL + state
+# Reset button clears URL + state
 if st.sidebar.button("🧹 Reset filters"):
     st.session_state.view_mode = "Upcoming"
     st.session_state.cat_choice = []
@@ -657,15 +619,13 @@ if st.sidebar.button("🧹 Reset filters"):
     st.session_state.u_choice = []
     st.session_state.gr_choice = []
     st.session_state.search_text = ""
-    _cookie_clear()
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
+    st.query_params.clear()
     st.rerun()
 
-# Persist filters to cookie (only write if changed)
-desired_state = {
+# =============================
+# WRITE STATE -> QUERY PARAMS (EVERY RUN, BUT ONLY IF CHANGED)
+# =============================
+payload = {
     "view": st.session_state.view_mode,
     "cat": st.session_state.cat_choice,
     "act": st.session_state.act_choice,
@@ -674,18 +634,20 @@ desired_state = {
     "q": st.session_state.search_text,
 }
 
-if st.session_state.get("_last_cookie_payload") != desired_state:
-    st.session_state["_last_cookie_payload"] = desired_state
-    _cookie_write(desired_state)
+if st.session_state.get("_last_qp_payload") != payload:
+    st.session_state["_last_qp_payload"] = payload
+    qp_set_from_state(payload)
 
-# Persist to URL (iOS / WhatsApp backup) - only if changed (prevents loops)
-desired_qp = qp_clean(desired_state)
-try:
-    current_qp = dict(st.query_params)
-    if current_qp != desired_qp:
-        st.query_params.from_dict(desired_qp)
-except Exception:
-    pass
+# =============================
+# SAVED LINK BOX (for Home Screen users who can't see URL)
+# =============================
+saved_qs = build_saved_link(payload)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔗 Saved link (share / bookmark)")
+st.sidebar.caption("If you saved the app to your Home Screen and can’t see the URL, copy this link after selecting filters.")
+st.sidebar.text_input("Your filtered link", value=saved_qs, key="saved_link_box")
+st.sidebar.button("📋 Copy (tap, then copy)", help="On iPhone: tap inside the box, Select All, then Copy.")
 
 # =============================
 # NEW UPDATE TRACKING (badge)
@@ -776,7 +738,6 @@ for i in range(len(df)):
         st.session_state.row_updated_at[i] = now_dt
 
     updated_at = st.session_state.row_updated_at.get(i)
-
     show_new = False
     if st.session_state.seen_once and updated_at:
         if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
