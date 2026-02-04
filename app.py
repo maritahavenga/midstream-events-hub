@@ -4,7 +4,7 @@ import pandas as pd
 import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
-from urllib.parse import urlencode
+from urllib.parse import urlencode  # kept (used by query param writing)
 
 # =============================
 # PAGE CONFIG
@@ -21,11 +21,11 @@ today = now_dt.date()
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
 
 # ============================================================
-# QUERY PARAMS HELPERS
+# QUERY PARAMS HELPERS (kept for “shareable links” via URL)
+# (No visible bookmark box, but URL still updates normally.)
 # ============================================================
 
 def qp_get(name: str, default=""):
-    """Streamlit's st.query_params returns strings (or list-like in older versions). Normalize."""
     try:
         v = st.query_params.get(name, default)
     except Exception:
@@ -38,14 +38,12 @@ def qp_get(name: str, default=""):
     return v
 
 def qp_get_list(name: str):
-    """Read comma-separated list from query params."""
     raw = qp_get(name, "")
     if not raw:
         return []
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 def qp_set_from_state(payload: dict):
-    """Write query params to URL (only non-empty values)."""
     clean = {}
     for k, v in payload.items():
         if isinstance(v, list):
@@ -81,7 +79,7 @@ if "qp_loaded" not in st.session_state:
         st.session_state.view_mode = view
 
     cats = qp_get_list("cat")
-    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics", "academic":"Academics"}
+    cat_norm_map = {"sport": "Sport", "culture": "Culture", "academics": "Academics", "academic": "Academics"}
     st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
 
     st.session_state.act_choice = qp_get_list("act")
@@ -213,9 +211,12 @@ def split_info_text_and_links(info: str):
 
 def normalize_category(v: str) -> str:
     s = str(v or "").strip().lower()
-    if "sport" in s: return "sport"
-    if "culture" in s or "kultuur" in s: return "culture"
-    if "academic" in s or "academics" in s or "akadem" in s: return "academics"
+    if "sport" in s:
+        return "sport"
+    if "culture" in s or "kultuur" in s:
+        return "culture"
+    if "academic" in s or "academics" in s or "akadem" in s:
+        return "academics"
     return s
 
 def normalize_activity(v: str) -> str:
@@ -225,15 +226,24 @@ def normalize_activity(v: str) -> str:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
-    if "wiskunde" in s: return "Math"
-    if "atletiek" in s or "athletics" in s: return "Athletics"
-    if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
-    if "tennis" in s: return "Tennis"
-    if "rugby" in s: return "Rugby"
-    if "hockey" in s: return "Hockey"
-    if "netbal" in s or "netball" in s: return "Netball"
-    if "koor" in s or "choir" in s: return "Choir"
-    if "revue" in s: return "Revue"
+    if "wiskunde" in s:
+        return "Math"
+    if "atletiek" in s or "athletics" in s:
+        return "Athletics"
+    if "swem" in s or "swimming" in s or "gala" in s:
+        return "Swimming"
+    if "tennis" in s:
+        return "Tennis"
+    if "rugby" in s:
+        return "Rugby"
+    if "hockey" in s:
+        return "Hockey"
+    if "netbal" in s or "netball" in s:
+        return "Netball"
+    if "koor" in s or "choir" in s:
+        return "Choir"
+    if "revue" in s:
+        return "Revue"
     return s.title()
 
 def is_afrikaans_subject(b_raw: str) -> bool:
@@ -252,24 +262,26 @@ def norm_gender_words(text: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 MONTHS = {
-    "jan": "January","january": "January",
-    "feb": "February","february": "February",
-    "mar": "March","march": "March",
-    "apr": "April","april": "April",
+    "jan": "January", "january": "January",
+    "feb": "February", "february": "February",
+    "mar": "March", "march": "March",
+    "apr": "April", "april": "April",
     "may": "May",
-    "jun": "June","june": "June",
-    "jul": "July","july": "July",
-    "aug": "August","august": "August",
-    "sep": "September","september": "September",
-    "oct": "October","october": "October",
-    "nov": "November","november": "November",
-    "dec": "December","december": "December",
+    "jun": "June", "june": "June",
+    "jul": "July", "july": "July",
+    "aug": "August", "august": "August",
+    "sep": "September", "september": "September",
+    "oct": "October", "october": "October",
+    "nov": "November", "november": "November",
+    "dec": "December", "december": "December",
 }
 
 def parse_date_sa(s):
-    if s is None: return None
+    if s is None:
+        return None
     raw = str(s).strip()
-    if raw == "" or raw.lower() in ["nan", "none"]: return None
+    if raw == "" or raw.lower() in ["nan", "none"]:
+        return None
 
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
@@ -277,7 +289,7 @@ def parse_date_sa(s):
             if n > 30000:
                 base = datetime(1899, 12, 30)
                 return base + timedelta(days=int(n))
-        except:
+        except Exception:
             pass
 
     m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
@@ -288,23 +300,26 @@ def parse_date_sa(s):
             year = datetime.now(TZ).year
             try:
                 return datetime.strptime(f"{d} {MONTHS[mon]} {year}", "%d %B %Y")
-            except:
+            except Exception:
                 pass
 
     cleaned = raw.replace(".", "/").replace("-", "/")
     cleaned = re.sub(r"\s+", " ", cleaned)
 
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1): return d1.to_pydatetime()
+    if not pd.isnull(d1):
+        return d1.to_pydatetime()
 
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2): return d2.to_pydatetime()
+    if not pd.isnull(d2):
+        return d2.to_pydatetime()
 
     return None
 
 def format_date_long_sa(s) -> str:
     dt = parse_date_sa(s)
-    if not dt: return str(s or "").strip()
+    if not dt:
+        return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
 VENUE_MAP = {
@@ -349,7 +364,7 @@ def expand_group_range(raw: str, kind: str):
         nums = [int(n) for n in re.findall(r"\d+", s)]
         return [f"Gr {n}" for n in nums] if nums else []
 
-    # Sport list like "U9,10,11" etc.
+    # Sport list like "U9,10,11"
     if kind == "U" and re.search(r"\bu\b", s, flags=re.I):
         nums = [int(n) for n in re.findall(r"\d+", s)]
         return [f"U{n}" for n in nums] if nums else []
@@ -359,11 +374,13 @@ def expand_group_range(raw: str, kind: str):
     if not nums:
         return []
 
+    # range: 4-7, 9-13, U9-U13, Gr4-Gr7, etc.
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
+    # list: 4,5,6,7 or 9,10,11
     if "," in s_nospace:
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
@@ -605,13 +622,22 @@ selected_gr = st.sidebar.multiselect(
     key="gr_choice",
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
-# Build sets from widget values (most reliable)
+# =============================
+# MATCHING NORMALIZATION (fixes Gr 4 vs Gr4 etc.)
+# =============================
+def norm_token(x: str) -> str:
+    return str(x or "").lower().replace(" ", "").strip()
+
 selected_u_set = set(selected_u)
 selected_gr_set = set(selected_gr)
+selected_u_norm = {norm_token(x) for x in selected_u_set}
+selected_gr_norm = {norm_token(x) for x in selected_gr_set}
 
 # ✅ Auto-scope when Category is empty
-force_sport = (not wanted) and bool(selected_u_set) and not bool(selected_gr_set)
-force_grades = (not wanted) and bool(selected_gr_set) and not bool(selected_u_set)
+# - If only U selected: show only sport
+# - If only Gr selected: show only culture/academics
+force_sport = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
+force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
 # =============================
 # WRITE STATE -> QUERY PARAMS (ONLY IF CHANGED)
@@ -694,18 +720,20 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport: overlap match
-    if cn == "sport" and selected_u_set:
+    # ✅ Sport: overlap match (normalized tokens)
+    if cn == "sport" and selected_u_norm:
         if not grp_matches:
             continue
-        if not (selected_u_set & set(grp_matches)):
+        grp_norm = {norm_token(x) for x in grp_matches}
+        if not (selected_u_norm & grp_norm):
             continue
 
-    # Culture/Academics: overlap match
-    if cn in ["culture", "academics"] and selected_gr_set:
+    # ✅ Culture/Academics: overlap match (normalized tokens)
+    if cn in ["culture", "academics"] and selected_gr_norm:
         if not grp_matches:
             continue
-        if not (selected_gr_set & set(grp_matches)):
+        grp_norm = {norm_token(x) for x in grp_matches}
+        if not (selected_gr_norm & grp_norm):
             continue
 
     title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
@@ -833,13 +861,13 @@ else:
             dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-        # Nice clarity lines
+        # Nice clarity lines (also helps parents understand why something shows)
         sport_age_line = ""
         grade_line = ""
         if cn == "sport" and grp_matches:
-            sport_age_line = f"<div class='meta'><b>Ages:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches)>=2 else ''}</div>"
+            sport_age_line = f"<div class='meta'><b>Ages:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
         if cn in ["culture", "academics"] and grp_matches:
-            grade_line = f"<div class='meta'><b>Grades:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches)>=2 else ''}</div>"
+            grade_line = f"<div class='meta'><b>Grades:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
 
         st.markdown(
             f"""
