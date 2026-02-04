@@ -4,7 +4,6 @@ import pandas as pd
 import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
-from urllib.parse import urlencode  # kept (used by query param writing)
 
 # =============================
 # PAGE CONFIG
@@ -18,11 +17,11 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
+VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
+NEW_UPDATES_HOURS = 8
 
 # ============================================================
-# QUERY PARAMS HELPERS (kept for “shareable links” via URL)
-# (No visible bookmark box, but URL still updates normally.)
+# QUERY PARAMS HELPERS (kept so URL updates with filters)
 # ============================================================
 
 def qp_get(name: str, default=""):
@@ -355,16 +354,12 @@ def expand_group_range(raw: str, kind: str):
         return []
 
     s = s.replace("–", "-").replace("—", "-")
-
-    # normalize common separators to comma
     s = re.sub(r"\s*(/|&|\+|and|en|to)\s*", ",", s, flags=re.I)
 
-    # Grade list like "Gr 4, 5, 6, 7"
     if kind == "Gr" and re.search(r"\bgr\b", s, flags=re.I):
         nums = [int(n) for n in re.findall(r"\d+", s)]
         return [f"Gr {n}" for n in nums] if nums else []
 
-    # Sport list like "U9,10,11"
     if kind == "U" and re.search(r"\bu\b", s, flags=re.I):
         nums = [int(n) for n in re.findall(r"\d+", s)]
         return [f"U{n}" for n in nums] if nums else []
@@ -374,13 +369,11 @@ def expand_group_range(raw: str, kind: str):
     if not nums:
         return []
 
-    # range: 4-7, 9-13, U9-U13, Gr4-Gr7, etc.
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
 
-    # list: 4,5,6,7 or 9,10,11
     if "," in s_nospace:
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
@@ -417,7 +410,7 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         m = expand_group_range(g, "U") if g else []
-        if not m:  # fallback to team text if grade parsing fails
+        if not m:
             m = extract_u_groups_from_text(team_raw)
 
         if len(m) >= 2:
@@ -463,11 +456,9 @@ def tidy_team_text(s: str) -> str:
 def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
-    grp_disp, _ = group_for_row(cn, grade_val, team_val)
+    _grp_disp, _ = group_for_row(cn, grade_val, team_val)
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
-    if grp_disp and grp_disp.lower() in team_clean.lower():
-        return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
 # =============================
@@ -554,12 +545,13 @@ grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
 # =============================
-# VIEW (KEYED)
+# VIEW
 # =============================
 view_mode = st.radio(
     "View",
     VIEW_OPTIONS,
-    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "Upcoming")),
+    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "Upcoming"))
+    if st.session_state.get("view_mode", "Upcoming") in VIEW_OPTIONS else 0,
     horizontal=True,
     key="view_mode",
 )
@@ -576,7 +568,7 @@ category_choice = st.sidebar.multiselect(
     key="cat_choice",
 )
 
-search = st.sidebar.text_input(
+st.sidebar.text_input(
     "Whole school search",
     value=st.session_state.search_text,
     placeholder="Type to filter...",
@@ -601,7 +593,7 @@ act_opts = sorted({
     if str(act_s.iloc[i]).strip() and cat_ok(i)
 })
 
-selected_act = st.sidebar.multiselect(
+st.sidebar.multiselect(
     "Activity/Subject",
     act_opts,
     default=[a for a in st.session_state.act_choice if a in act_opts],
@@ -628,14 +620,10 @@ selected_gr = st.sidebar.multiselect(
 def norm_token(x: str) -> str:
     return str(x or "").lower().replace(" ", "").strip()
 
-selected_u_set = set(selected_u)
-selected_gr_set = set(selected_gr)
-selected_u_norm = {norm_token(x) for x in selected_u_set}
-selected_gr_norm = {norm_token(x) for x in selected_gr_set}
+selected_u_norm = {norm_token(x) for x in set(selected_u)}
+selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 
 # ✅ Auto-scope when Category is empty
-# - If only U selected: show only sport
-# - If only Gr selected: show only culture/academics
 force_sport = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
 force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
@@ -650,13 +638,12 @@ payload = {
     "gr": st.session_state.gr_choice,
     "q": st.session_state.search_text,
 }
-
 if st.session_state.get("_last_qp_payload") != payload:
     st.session_state["_last_qp_payload"] = payload
     qp_set_from_state(payload)
 
 # =============================
-# NEW UPDATE TRACKING (badge)
+# NEW UPDATE TRACKING (badge + New Updates view)
 # =============================
 def row_signature(i: int) -> str:
     parts = [
@@ -673,7 +660,7 @@ if "row_updated_at" not in st.session_state:
 if "seen_once" not in st.session_state:
     st.session_state.seen_once = False
 
-BADGE_VISIBLE_HOURS = 1
+BADGE_VISIBLE_HOURS = NEW_UPDATES_HOURS
 BADGE_ANIMATE_MINUTES = 10
 
 # =============================
@@ -744,6 +731,7 @@ for i in range(len(df)):
         if needle not in hay:
             continue
 
+    # --- update tracking ---
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
 
@@ -758,6 +746,11 @@ for i in range(len(df)):
     if st.session_state.seen_once and updated_at:
         if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
             show_new = True
+
+    # View mode: New Updates (only show recently updated)
+    if st.session_state.view_mode == "New Updates":
+        if not show_new:
+            continue
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
     grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
@@ -798,6 +791,9 @@ else:
 
         grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
         group_meta = grp_disp.strip()
+
+        # ✅ Avoid repeating U11 / Gr5 twice (we show Ages/Grades lines below)
+        show_submeta = ""  # hide group_meta to prevent duplication
 
         ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
@@ -861,7 +857,7 @@ else:
             dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-        # Nice clarity lines (also helps parents understand why something shows)
+        # Clear “why is this showing” lines
         sport_age_line = ""
         grade_line = ""
         if cn == "sport" and grp_matches:
@@ -874,7 +870,7 @@ else:
 <div class="card">
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
-  {f"<div class='card-submeta'>{safe_txt(group_meta)}</div>" if group_meta else ""}
+  {f"<div class='card-submeta'>{safe_txt(show_submeta)}</div>" if show_submeta else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {sport_age_line}
   {grade_line}
