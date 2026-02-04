@@ -21,7 +21,7 @@ today = now_dt.date()
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
 
 # ============================================================
-# QUERY PARAMS HELPERS (THE "BIG GUNS" LAYER)
+# QUERY PARAMS HELPERS
 # ============================================================
 
 def qp_get(name: str, default=""):
@@ -33,7 +33,6 @@ def qp_get(name: str, default=""):
 
     if v is None:
         return default
-    # Streamlit may return list-like in some contexts; normalize to a single string.
     if isinstance(v, (list, tuple)):
         return v[0] if v else default
     return v
@@ -60,8 +59,7 @@ def qp_set_from_state(payload: dict):
 def build_saved_link(payload: dict) -> str:
     """
     Build a relative link "?a=b&c=d" that parents can copy.
-    We can't reliably know the full domain from inside Streamlit, so we provide querystring
-    (which still works when pasted onto the same app URL).
+    We can't reliably know the full domain from inside Streamlit, so we provide querystring.
     """
     clean = {}
     for k, v in payload.items():
@@ -100,10 +98,8 @@ if "qp_loaded" not in st.session_state:
     if view in VIEW_OPTIONS:
         st.session_state.view_mode = view
 
-    # Expect cat as: Sport,Culture,Academics
     cats = qp_get_list("cat")
-    # Normalize capitalization to match your widget options
-    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics"}
+    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics", "academic":"Academics"}
     st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
 
     st.session_state.act_choice = qp_get_list("act")
@@ -360,22 +356,38 @@ def expand_group_range(raw: str, kind: str):
     s = str(raw or "").strip()
     if not s:
         return []
+
     s = s.replace("–", "-").replace("—", "-")
+
+    # normalize common separators to comma
+    s = re.sub(r"\s*(/|&|\+|and|en|to)\s*", ",", s, flags=re.I)
+
+    # Grade list like "Gr 4, 5, 6, 7"
+    if kind == "Gr" and re.search(r"\bgr\b", s, flags=re.I):
+        nums = [int(n) for n in re.findall(r"\d+", s)]
+        return [f"Gr {n}" for n in nums] if nums else []
+
+    # Sport list like "U9,10,11" etc.
+    if kind == "U" and re.search(r"\bu\b", s, flags=re.I):
+        nums = [int(n) for n in re.findall(r"\d+", s)]
+        return [f"U{n}" for n in nums] if nums else []
+
     s_nospace = re.sub(r"\s+", "", s)
     nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
     if not nums:
         return []
+
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
+
     if "," in s_nospace:
-        lo, hi = min(nums), max(nums)
-        if len(nums) >= 2 and (hi - lo) <= 12:
-            nums = list(range(lo, hi + 1)) if len(nums) >= 3 else nums
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
+
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
+
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
@@ -405,7 +417,10 @@ def extract_u_groups_from_text(text: str):
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
-        m = expand_group_range(g, "U") if g else extract_u_groups_from_text(team_raw)
+        m = expand_group_range(g, "U") if g else []
+        if not m:  # fallback to team text if grade parsing fails
+            m = extract_u_groups_from_text(team_raw)
+
         if len(m) >= 2:
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
@@ -608,8 +623,9 @@ selected_gr = st.sidebar.multiselect(
     key="gr_choice",
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
-selected_u_set = set(st.session_state.u_choice)
-selected_gr_set = set(st.session_state.gr_choice)
+# ✅ IMPORTANT: build sets from widget values (most reliable)
+selected_u_set = set(selected_u)
+selected_gr_set = set(selected_gr)
 
 # Reset button clears URL + state
 if st.sidebar.button("🧹 Reset filters"):
@@ -639,7 +655,7 @@ if st.session_state.get("_last_qp_payload") != payload:
     qp_set_from_state(payload)
 
 # =============================
-# SAVED LINK BOX (for Home Screen users who can't see URL)
+# SAVED LINK BOX
 # =============================
 saved_qs = build_saved_link(payload)
 
@@ -708,16 +724,18 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+    # ✅ SPORT: show if ANY selected U overlaps event's U list
     if cn == "sport" and selected_u_set:
-        if grp_matches and not any(x in selected_u_set for x in grp_matches):
-            continue
         if not grp_matches:
+            continue
+        if not (selected_u_set & set(grp_matches)):
             continue
 
+    # ✅ CULTURE/ACADEMICS: show if ANY selected grade overlaps
     if cn in ["culture", "academics"] and selected_gr_set:
-        if grp_matches and not any(x in selected_gr_set for x in grp_matches):
-            continue
         if not grp_matches:
+            continue
+        if not (selected_gr_set & set(grp_matches)):
             continue
 
     title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
@@ -780,7 +798,7 @@ else:
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        grp_disp, _ = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+        grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
         group_meta = grp_disp.strip()
 
         ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
@@ -845,6 +863,14 @@ else:
             dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
+        # ✅ Nice clarity lines
+        sport_age_line = ""
+        grade_line = ""
+        if cn == "sport" and grp_matches:
+            sport_age_line = f"<div class='meta'><b>Ages:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches)>=2 else ''}</div>"
+        if cn in ["culture", "academics"] and grp_matches:
+            grade_line = f"<div class='meta'><b>Grades:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches)>=2 else ''}</div>"
+
         st.markdown(
             f"""
 <div class="card">
@@ -852,6 +878,8 @@ else:
   <div class="card-title">{safe_txt(title)}</div>
   {f"<div class='card-submeta'>{safe_txt(group_meta)}</div>" if group_meta else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
+  {sport_age_line}
+  {grade_line}
   {venue_line}
   {notes_block}
   {btn_html}
