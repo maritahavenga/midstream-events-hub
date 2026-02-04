@@ -18,7 +18,7 @@ now_dt = datetime.now(TZ)
 today = now_dt.date()
 
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
-NEW_UPDATES_HOURS = 8
+NEW_UPDATES_HOURS_DEFAULT = 8
 BADGE_ANIMATE_MINUTES = 10
 
 # ============================================================
@@ -330,15 +330,8 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# TIMESTAMP (for stable “New Updates”)
+# TIMESTAMP (robust: auto-detect column)
 # =============================
-def pick_timestamp_column(df_: pd.DataFrame) -> str:
-    cols = [str(c).strip() for c in df_.columns]
-    for c in cols:
-        if c.lower() == "timestamp":
-            return c
-    return df_.columns[0] if len(df_.columns) else ""
-
 def parse_sheet_timestamp(x):
     s = str(x or "").strip()
     if not s:
@@ -351,6 +344,35 @@ def parse_sheet_timestamp(x):
         return TZ.localize(py) if py.tzinfo is None else py.astimezone(TZ)
     except Exception:
         return py
+
+def pick_timestamp_column_smart(df_: pd.DataFrame) -> str:
+    if df_.empty or len(df_.columns) == 0:
+        return ""
+
+    # Prefer obvious name variants
+    for c in df_.columns:
+        cl = str(c).strip().lower()
+        if "time" in cl and ("stamp" in cl or "stemp" in cl):
+            return c
+
+    # Otherwise, parse success-rate test
+    N = min(50, len(df_))
+    best_col = df_.columns[0]
+    best_score = -1.0
+
+    # check first 6 columns only (fast)
+    for c in df_.columns[:6]:
+        vals = df_[c].astype(str).head(N).tolist()
+        ok = 0
+        for v in vals:
+            if parse_sheet_timestamp(v):
+                ok += 1
+        score = ok / max(1, len(vals))
+        if score > best_score:
+            best_score = score
+            best_col = c
+
+    return best_col
 
 # =============================
 # AGE GROUP / GRADE PARSING
@@ -461,7 +483,6 @@ def tidy_team_text(s: str) -> str:
 def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
-    _grp_disp, _ = group_for_row(cn, grade_val, team_val)
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
@@ -549,8 +570,8 @@ info_s    = s(COL_INFO)
 grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
-TS_COL = pick_timestamp_column(df)
-ts_s = s(TS_COL)
+TS_COL = pick_timestamp_column_smart(df)
+ts_s = df[TS_COL].astype(str) if TS_COL in df.columns else pd.Series([""] * len(df), dtype=str)
 
 # =============================
 # VIEW
@@ -622,6 +643,11 @@ selected_gr = st.sidebar.multiselect(
     key="gr_choice",
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
+# New Updates window slider (only visible in that view)
+NEW_UPDATES_HOURS = NEW_UPDATES_HOURS_DEFAULT
+if st.session_state.view_mode == "New Updates":
+    NEW_UPDATES_HOURS = st.sidebar.slider("New Updates window (hours)", 1, 72, NEW_UPDATES_HOURS_DEFAULT)
+
 # =============================
 # MATCHING NORMALIZATION (fixes Gr 4 vs Gr4 etc.)
 # =============================
@@ -678,7 +704,7 @@ for i in range(len(df)):
         except Exception:
             is_recent = False
 
-    # View mode: New Updates (based on timestamp, not session memory)
+    # View mode: New Updates (based on timestamp)
     if st.session_state.view_mode == "New Updates":
         if not is_recent:
             continue
