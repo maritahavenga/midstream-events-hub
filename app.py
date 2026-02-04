@@ -4,14 +4,18 @@ import pandas as pd
 import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
-from urllib.parse import urlencode
 
 # =============================
 # PAGE CONFIG
 # =============================
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+# ✅ Upcoming sheet you display (published CSV)
+UPCOMING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
+
+# ✅ Responses sheet (Timestamp column) - CSV export
+SUBMISSIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/1jB78iGRp3pmwib7k_MfdwzMC402QY9MPtHKC3TAAlPQ/export?format=csv&gid=1864466191"
+
 LOGO_URL = "https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg"
 
 TZ = pytz.timezone("Africa/Johannesburg")
@@ -19,13 +23,12 @@ now_dt = datetime.now(TZ)
 today = now_dt.date()
 
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
-NEW_UPDATES_HOURS = 8
+NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
 
-# ============================================================
-# QUERY PARAMS HELPERS (kept; no UI “bookmark box”)
-# ============================================================
-
+# =============================
+# QUERY PARAMS HELPERS
+# =============================
 def qp_get(name: str, default=""):
     try:
         v = st.query_params.get(name, default)
@@ -88,7 +91,7 @@ if "qp_loaded" not in st.session_state:
     st.session_state.search_text = qp_get("q", "")
 
 # =============================
-# STYLE
+# STYLE (fix cut-off headings in sidebar)
 # =============================
 st.markdown(
     """
@@ -99,6 +102,12 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   --maroon:#800000; --teal:#008080; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06);
 }
 .block-container{padding-top:1.35rem;}
+div[data-testid="stSidebar"] label,
+div[data-testid="stSidebar"] p,
+div[data-testid="stSidebar"] span{
+  white-space:normal !important;
+  word-break:break-word !important;
+}
 
 .topBanner{
   margin-top:14px;
@@ -130,9 +139,9 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   border-left:10px solid var(--maroon);
   position:relative;
 }
-
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
+
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
   background:rgba(0,128,128,0.08);
@@ -207,30 +216,15 @@ def split_info_text_and_links(info: str):
     text = re.sub(r"\s{2,}", " ", text).strip(" -\n\t|")
     return text, links
 
+def norm_token(x: str) -> str:
+    return str(x or "").lower().replace(" ", "").strip()
+
 def normalize_category(v: str) -> str:
     s = str(v or "").strip().lower()
     if "sport" in s: return "sport"
     if "culture" in s or "kultuur" in s: return "culture"
     if "academic" in s or "academics" in s or "akadem" in s: return "academics"
     return s
-
-def normalize_activity(v: str) -> str:
-    s = str(v or "").strip().lower()
-    s = re.sub(r"\s+", " ", s)
-    if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
-        return "Afrikaans Hooftaal"
-    if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
-        return "Afrikaans Eerste Addisionele Taal"
-    if "wiskunde" in s: return "Math"
-    if "atletiek" in s or "athletics" in s: return "Athletics"
-    if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
-    if "tennis" in s: return "Tennis"
-    if "rugby" in s: return "Rugby"
-    if "hockey" in s: return "Hockey"
-    if "netbal" in s or "netball" in s: return "Netball"
-    if "koor" in s or "choir" in s: return "Choir"
-    if "revue" in s: return "Revue"
-    return s.title()
 
 def is_afrikaans_subject(b_raw: str) -> bool:
     s = str(b_raw or "").strip().lower()
@@ -245,61 +239,67 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
     return re.sub(r"\s+", " ", s).strip()
 
-def norm_token(x: str) -> str:
-    return str(x or "").lower().replace(" ", "").strip()
+# =============================
+# ACTIVITY: display vs filter
+# =============================
+def display_activity(cat_norm: str, activity_raw: str) -> str:
+    """What shows in the CARD title."""
+    s = str(activity_raw or "").strip()
+    if cat_norm == "sport":
+        # ✅ keep full text
+        return s
+
+    sl = re.sub(r"\s+", " ", s.lower().strip())
+    if sl in ["ht", "afrikaans ht"] or "hooftaal" in sl:
+        return "Afrikaans Hooftaal"
+    if sl in ["eat", "afrikaans eat"] or "eerste addisionele" in sl:
+        return "Afrikaans Eerste Addisionele Taal"
+    if "wiskunde" in sl or "mathematics" in sl or sl == "math":
+        return "Math"
+    return s.title()
+
+def sport_base_activity(activity_raw: str) -> str:
+    """What shows in the sidebar Activity filter for sport (basic labels only)."""
+    s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
+
+    if "swim" in s or "swem" in s or "gala" in s:
+        return "Swimming"
+    if "athlet" in s or "atletiek" in s:
+        return "Athletics"
+    if "mountain bike" in s or "mtb" in s or "biking" in s or "cycling" in s or "fiets" in s:
+        return "Mountain Biking"
+    if "rugby" in s:
+        return "Rugby"
+    if "hockey" in s:
+        return "Hockey"
+    if "netball" in s or "netbal" in s:
+        return "Netball"
+    if "tennis" in s:
+        return "Tennis"
+    if "cricket" in s:
+        return "Cricket"
+    if "soccer" in s or "football" in s or "sokker" in s:
+        return "Soccer"
+
+    # fallback: first word
+    return str(activity_raw or "").strip().split(" ")[0].title() if str(activity_raw or "").strip() else ""
+
+def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
+    """Used for filtering comparisons."""
+    return sport_base_activity(activity_raw) if cat_norm == "sport" else display_activity(cat_norm, activity_raw)
 
 # =============================
 # DATE PARSING (Due dates)
 # =============================
-MONTHS = {
-    "jan":"January","january":"January",
-    "feb":"February","february":"February",
-    "mar":"March","march":"March",
-    "apr":"April","april":"April",
-    "may":"May",
-    "jun":"June","june":"June",
-    "jul":"July","july":"July",
-    "aug":"August","august":"August",
-    "sep":"September","september":"September",
-    "oct":"October","october":"October",
-    "nov":"November","november":"November",
-    "dec":"December","december":"December",
-}
-
 def parse_date_sa(s):
-    if s is None: return None
-    raw = str(s).strip()
-    if raw == "" or raw.lower() in ["nan", "none"]: return None
-
-    if re.fullmatch(r"\d+(\.\d+)?", raw):
-        try:
-            n = float(raw)
-            if n > 30000:
-                base = datetime(1899, 12, 30)
-                return base + timedelta(days=int(n))
-        except Exception:
-            pass
-
-    m = re.match(r"^\s*(\d{1,2})\s+([A-Za-z]+)\s*$", raw)
-    if m:
-        d = int(m.group(1))
-        mon = m.group(2).lower()
-        if mon in MONTHS:
-            year = datetime.now(TZ).year
-            try:
-                return datetime.strptime(f"{d} {MONTHS[mon]} {year}", "%d %B %Y")
-            except Exception:
-                pass
-
-    cleaned = raw.replace(".", "/").replace("-", "/")
-    cleaned = re.sub(r"\s+", " ", cleaned)
-
+    raw = str(s or "").strip()
+    if not raw or raw.lower() in ["nan", "none"]:
+        return None
+    cleaned = re.sub(r"\s+", " ", raw.replace(".", "/").replace("-", "/"))
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
     if not pd.isnull(d1): return d1.to_pydatetime()
-
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
     if not pd.isnull(d2): return d2.to_pydatetime()
-
     return None
 
 def format_date_long_sa(s) -> str:
@@ -307,20 +307,13 @@ def format_date_long_sa(s) -> str:
     if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
-# =============================
-# NEW UPDATES: FORM TIMESTAMP PARSING
-# IMPORTANT: we use the FIRST COLUMN only (Google Form created timestamp)
-# =============================
 def parse_form_timestamp(x):
     s = str(x or "").strip()
     if not s:
         return None
-
-    # Most common: "30/01/2026 11:33:14"
     dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
     if pd.isnull(dt):
         return None
-
     py = dt.to_pydatetime()
     try:
         return TZ.localize(py) if py.tzinfo is None else py.astimezone(TZ)
@@ -344,8 +337,7 @@ VENUE_MAP = {
 }
 
 def normalize_venue(v: str) -> str:
-    s = str(v or "").strip().replace("_", " ")
-    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"\s+", " ", str(v or "").strip().replace("_", " "))
     sl = s.lower()
     if "see programme" in sl or "see program" in sl or "sien program" in sl or "sien programme" in sl:
         return "SEE_PROGRAMME"
@@ -377,23 +369,15 @@ def expand_group_range(raw: str, kind: str):
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
-    t = str(text or "").strip()
+    t = str(text or "").strip().replace("–", "-").replace("—", "-")
     if not t:
         return []
-    t = t.replace("–", "-").replace("—", "-")
-
     m = re.search(r"\bU?\d{1,2}\s*-\s*U?\d{1,2}\b", t, flags=re.I)
     if m:
         return expand_group_range(m.group(0), "U")
-
-    m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
-    if m:
-        return expand_group_range(m.group(0), "U")
-
     m = re.search(r"\bU(\d{1,2})\b", t, flags=re.I)
     if m:
         return [f"U{int(m.group(1))}"]
-
     return []
 
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
@@ -418,71 +402,64 @@ def strip_group_tokens(text: str) -> str:
     t = str(text or "")
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
-    t = re.sub(r"\s{2,}", " ", t)
-    return t.strip(" -–|,")
+    return re.sub(r"\s{2,}", " ", t).strip(" -–|,")
 
 def tidy_team_text(s: str) -> str:
-    t = str(s or "").strip()
+    t = str(s or "").strip().replace("&amp;", "&")
     if not t:
         return ""
-    t = t.replace("&amp;", "&")
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
-    t = re.sub(r"\s{2,}", " ", t).strip()
-    return t
+    return re.sub(r"\s{2,}", " ", t).strip()
 
-def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
-    act_txt = norm_gender_words(normalize_activity(act_val))
+def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> str:
+    act_txt = norm_gender_words(display_activity(cat_norm, act_val))
     team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
+
+    # ✅ Sport: if team blank, include age range in title to avoid "just Swimming"
+    if cat_norm == "sport" and not team_clean:
+        grp_disp, _ = group_for_row("sport", grade_val, team_val)
+        return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
+
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
 # =============================
-# LOAD CSV (ANTI-CRASH)
+# LOAD CSV
 # =============================
 @st.cache_data(ttl=180, show_spinner=False)
 def load_csv(url: str):
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, timeout=(6, 25), headers=headers, allow_redirects=True)
     r.raise_for_status()
-
     txt = r.text or ""
-    ctype = (r.headers.get("Content-Type") or "").lower()
-    if "<html" in txt.lower() and "text/csv" not in ctype and "application/csv" not in ctype:
-        return pd.DataFrame(), txt
-
     df_ = pd.read_csv(io.StringIO(txt), dtype=str, engine="python", on_bad_lines="skip").fillna("")
-    df_.columns = [str(c).strip() for c in df_.columns]
-    return df_, txt
+    df_.columns = [str(c).strip() for c in df_.columns]  # ✅ trims your headers
+    return df_
 
-try:
-    df, raw_txt = load_csv(CSV_URL)
-except Timeout:
-    st.warning("⏳ The Google Sheet took too long to respond. Please try again.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
-    st.stop()
-except RequestException:
-    st.warning("⚠️ Could not connect to Google Sheets right now. Please try again shortly.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
-    st.stop()
-except Exception as e:
-    st.warning("⚠️ Something went wrong while loading the sheet.")
-    with st.expander("Technical details"):
-        st.code(str(e))
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
-    st.stop()
+def safe_load(url: str):
+    try:
+        return load_csv(url)
+    except Timeout:
+        st.warning("⏳ A Google Sheet took too long to respond.")
+        return pd.DataFrame()
+    except RequestException:
+        st.warning("⚠️ Could not connect to Google Sheets right now.")
+        return pd.DataFrame()
+    except Exception as e:
+        st.warning("⚠️ Something went wrong while loading a sheet.")
+        with st.expander("Technical details"):
+            st.code(str(e))
+        return pd.DataFrame()
 
+df = safe_load(UPCOMING_CSV_URL)
 if df.empty:
-    st.error("No data loaded from Google Sheets yet. Republish the sheet and refresh.")
-    if st.button("Retry"):
-        st.cache_data.clear()
-        st.rerun()
+    st.error("No data loaded from the Upcoming sheet.")
     st.stop()
+
+sub_df = safe_load(SUBMISSIONS_CSV_URL)
+if sub_df.empty:
+    st.warning("Responses sheet could not be read as CSV. Check sharing: Anyone with link = Viewer.")
+    # New Updates will be disabled automatically later
 
 with st.sidebar:
     if st.button("🔄 Refresh data", key="btn_refresh"):
@@ -490,7 +467,7 @@ with st.sidebar:
         st.rerun()
 
 # =============================
-# COLUMNS (your sheet)
+# COLUMNS
 # =============================
 COL_CATEGORY  = "Category"
 COL_ACTIVITY  = "Activity/Subject Name"
@@ -519,9 +496,45 @@ info_s    = s(COL_INFO)
 grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
-# ✅ Form timestamp column: FIRST column in the CSV
-FORM_TS_COL = df.columns[0]
-form_ts_s = df[FORM_TS_COL].astype(str) if FORM_TS_COL in df.columns else pd.Series([""] * len(df), dtype=str)
+# =============================
+# Matching Upcoming <-> Responses for New Updates
+# =============================
+def row_signature(category, activity, team_assessment, due_date, venue, programme_link):
+    # Signature uses raw-ish values so it matches responses
+    parts = [
+        normalize_category(category),
+        norm_token(activity),
+        norm_token(team_assessment),
+        norm_token(due_date),
+        norm_token(venue),
+        norm_token(first_url(programme_link)),
+    ]
+    return hashlib.sha256("||".join(parts).encode("utf-8")).hexdigest()
+
+sig_to_created = {}
+if not sub_df.empty and "Timestamp" in sub_df.columns:
+    ts_col = "Timestamp"
+
+    def sub_col(name):
+        return sub_df[name].astype(str) if name in sub_df.columns else pd.Series([""] * len(sub_df), dtype=str)
+
+    sub_ts   = sub_df[ts_col].astype(str)
+    sub_cat  = sub_col(COL_CATEGORY)
+    sub_act  = sub_col(COL_ACTIVITY)
+    sub_team = sub_col(COL_TEAM)
+    sub_date = sub_col(COL_DATE)
+    sub_ven  = sub_col(COL_VENUE)
+    sub_prog = sub_col(COL_PROGRAMME)
+
+    for j in range(len(sub_df)):
+        created_dt = parse_form_timestamp(sub_ts.iloc[j])
+        if not created_dt:
+            continue
+        sig = row_signature(sub_cat.iloc[j], sub_act.iloc[j], sub_team.iloc[j],
+                            sub_date.iloc[j], sub_ven.iloc[j], sub_prog.iloc[j])
+        prev = sig_to_created.get(sig)
+        if (prev is None) or (created_dt > prev):
+            sig_to_created[sig] = created_dt
 
 # =============================
 # VIEW
@@ -540,7 +553,7 @@ st.radio(
 # =============================
 st.sidebar.markdown("## Filters")
 
-category_choice = st.sidebar.multiselect(
+st.sidebar.multiselect(
     "Category",
     ["Sport", "Culture", "Academics"],
     default=st.session_state.cat_choice,
@@ -554,7 +567,7 @@ st.sidebar.text_input(
     key="search_text",
 )
 
-wanted = {c.lower() for c in category_choice} if category_choice else set()
+wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
 
 def cat_ok(i: int) -> bool:
     if not wanted:
@@ -566,8 +579,11 @@ def cat_ok(i: int) -> bool:
         or ("academics" in wanted and cn == "academics")
     )
 
+# Activity options:
+# - Sport: base labels
+# - Others: normalized display names
 act_opts = sorted({
-    normalize_activity(act_s.iloc[i])
+    activity_filter_key(normalize_category(cat_s.iloc[i]), act_s.iloc[i])
     for i in range(len(df))
     if str(act_s.iloc[i]).strip() and cat_ok(i)
 })
@@ -600,8 +616,12 @@ selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
 force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
+new_hours = NEW_UPDATES_DEFAULT_HOURS
+if st.session_state.view_mode == "New Updates":
+    new_hours = st.sidebar.slider("New Updates window (hours)", 1, 336, NEW_UPDATES_DEFAULT_HOURS)
+
 # =============================
-# WRITE STATE -> QUERY PARAMS (ONLY IF CHANGED)
+# WRITE STATE -> QUERY PARAMS
 # =============================
 payload = {
     "view": st.session_state.view_mode,
@@ -618,14 +638,16 @@ if st.session_state.get("_last_qp_payload") != payload:
 # =============================
 # BUILD RESULTS
 # =============================
-res = []
-window_start = now_dt - timedelta(hours=NEW_UPDATES_HOURS)
+window_start = now_dt - timedelta(hours=new_hours)
 
+if st.session_state.view_mode == "New Updates" and not sig_to_created:
+    st.warning("New Updates needs the Responses sheet accessible as CSV (Anyone with link = Viewer).")
+    st.stop()
+
+res = []
 for i in range(len(df)):
     cn = normalize_category(cat_s.iloc[i])
-    act_norm = normalize_activity(act_s.iloc[i])
 
-    # Auto-scope when no category is selected
     if force_sport and cn != "sport":
         continue
     if force_grades and cn == "sport":
@@ -633,28 +655,19 @@ for i in range(len(df)):
 
     if wanted and not cat_ok(i):
         continue
-    if st.session_state.act_choice and act_norm not in st.session_state.act_choice:
+
+    row_act_key = activity_filter_key(cn, act_s.iloc[i])
+    if st.session_state.act_choice and row_act_key not in st.session_state.act_choice:
         continue
 
-    # NEW UPDATES based on FORM timestamp (first column)
-    created_dt = parse_form_timestamp(form_ts_s.iloc[i])
-    is_recent = False
-    if created_dt:
-        # ✅ must be between window_start and now_dt (prevents “everything new”)
-        is_recent = (window_start <= created_dt <= now_dt)
-
-    if st.session_state.view_mode == "New Updates" and not is_recent:
-        continue
-
-    # Term docs logic
+    act_disp_for_term = display_activity(cn, act_s.iloc[i])
     term_val = str(term_s.iloc[i]).strip().lower()
     looks_like_term_doc = any(
-        k in (act_norm.lower() + " " + str(team_s.iloc[i]).lower())
+        k in (act_disp_for_term.lower() + " " + str(team_s.iloc[i]).lower())
         for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse"]
     )
     term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
-    # Due date logic
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
@@ -671,8 +684,7 @@ for i in range(len(df)):
         if not term_flag:
             continue
 
-    # Age/Grade matching
-    _grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+    _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
     if cn == "sport" and selected_u_norm:
         if not grp_matches:
@@ -688,7 +700,14 @@ for i in range(len(df)):
         if not (selected_gr_norm & grp_norm):
             continue
 
-    title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+    sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
+    created_dt = sig_to_created.get(sig)
+    is_recent = bool(created_dt and (window_start <= created_dt <= now_dt))
+
+    if st.session_state.view_mode == "New Updates" and not is_recent:
+        continue
+
+    title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
     if st.session_state.search_text:
         needle = st.session_state.search_text.lower().replace(" ", "")
@@ -725,12 +744,12 @@ else:
         cn = normalize_category(cat_s.iloc[i])
         afr = is_afrikaans_subject(act_s.iloc[i])
 
-        title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+        title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        _grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+        _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
         ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
