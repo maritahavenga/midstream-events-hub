@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz
+import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
+from urllib.parse import urlencode
 
 # =============================
 # PAGE CONFIG
@@ -18,11 +19,11 @@ now_dt = datetime.now(TZ)
 today = now_dt.date()
 
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
-NEW_UPDATES_HOURS_DEFAULT = 8
+NEW_UPDATES_HOURS = 8
 BADGE_ANIMATE_MINUTES = 10
 
 # ============================================================
-# QUERY PARAMS HELPERS (kept so URL updates with filters)
+# QUERY PARAMS HELPERS (kept; no UI “bookmark box”)
 # ============================================================
 
 def qp_get(name: str, default=""):
@@ -30,7 +31,6 @@ def qp_get(name: str, default=""):
         v = st.query_params.get(name, default)
     except Exception:
         v = default
-
     if v is None:
         return default
     if isinstance(v, (list, tuple)):
@@ -79,7 +79,7 @@ if "qp_loaded" not in st.session_state:
         st.session_state.view_mode = view
 
     cats = qp_get_list("cat")
-    cat_norm_map = {"sport": "Sport", "culture": "Culture", "academics": "Academics", "academic": "Academics"}
+    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics", "academic":"Academics"}
     st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
 
     st.session_state.act_choice = qp_get_list("act")
@@ -132,9 +132,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
-.card-submeta{margin-top:6px;font-size:.92rem;color:#64748b;font-weight:800;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
-
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
   background:rgba(0,128,128,0.08);
@@ -245,23 +243,27 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"\bseuns\b", "Boys", s, flags=re.I)
     s = re.sub(r"\bgirls\b", "Girls", s, flags=re.I)
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
-    s = re.sub(r"(Boys)\s*(Boys)\b", r"\1", s)
-    s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
     return re.sub(r"\s+", " ", s).strip()
 
+def norm_token(x: str) -> str:
+    return str(x or "").lower().replace(" ", "").strip()
+
+# =============================
+# DATE PARSING (Due dates)
+# =============================
 MONTHS = {
-    "jan": "January","january": "January",
-    "feb": "February","february": "February",
-    "mar": "March","march": "March",
-    "apr": "April","april": "April",
-    "may": "May",
-    "jun": "June","june": "June",
-    "jul": "July","july": "July",
-    "aug": "August","august": "August",
-    "sep": "September","september": "September",
-    "oct": "October","october": "October",
-    "nov": "November","november": "November",
-    "dec": "December","december": "December",
+    "jan":"January","january":"January",
+    "feb":"February","february":"February",
+    "mar":"March","march":"March",
+    "apr":"April","april":"April",
+    "may":"May",
+    "jun":"June","june":"June",
+    "jul":"July","july":"July",
+    "aug":"August","august":"August",
+    "sep":"September","september":"September",
+    "oct":"October","october":"October",
+    "nov":"November","november":"November",
+    "dec":"December","december":"December",
 }
 
 def parse_date_sa(s):
@@ -305,6 +307,29 @@ def format_date_long_sa(s) -> str:
     if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
+# =============================
+# NEW UPDATES: FORM TIMESTAMP PARSING
+# IMPORTANT: we use the FIRST COLUMN only (Google Form created timestamp)
+# =============================
+def parse_form_timestamp(x):
+    s = str(x or "").strip()
+    if not s:
+        return None
+
+    # Most common: "30/01/2026 11:33:14"
+    dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
+    if pd.isnull(dt):
+        return None
+
+    py = dt.to_pydatetime()
+    try:
+        return TZ.localize(py) if py.tzinfo is None else py.astimezone(TZ)
+    except Exception:
+        return py
+
+# =============================
+# VENUE
+# =============================
 VENUE_MAP = {
     "musiekkamer": "Music Room",
     "musiek kamer": "Music Room",
@@ -330,51 +355,6 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
-# TIMESTAMP (robust: auto-detect column)
-# =============================
-def parse_sheet_timestamp(x):
-    s = str(x or "").strip()
-    if not s:
-        return None
-    dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
-    if pd.isnull(dt):
-        return None
-    py = dt.to_pydatetime()
-    try:
-        return TZ.localize(py) if py.tzinfo is None else py.astimezone(TZ)
-    except Exception:
-        return py
-
-def pick_timestamp_column_smart(df_: pd.DataFrame) -> str:
-    if df_.empty or len(df_.columns) == 0:
-        return ""
-
-    # Prefer obvious name variants
-    for c in df_.columns:
-        cl = str(c).strip().lower()
-        if "time" in cl and ("stamp" in cl or "stemp" in cl):
-            return c
-
-    # Otherwise, parse success-rate test
-    N = min(50, len(df_))
-    best_col = df_.columns[0]
-    best_score = -1.0
-
-    # check first 6 columns only (fast)
-    for c in df_.columns[:6]:
-        vals = df_[c].astype(str).head(N).tolist()
-        ok = 0
-        for v in vals:
-            if parse_sheet_timestamp(v):
-                ok += 1
-        score = ok / max(1, len(vals))
-        if score > best_score:
-            best_score = score
-            best_col = c
-
-    return best_col
-
-# =============================
 # AGE GROUP / GRADE PARSING
 # =============================
 def expand_group_range(raw: str, kind: str):
@@ -383,14 +363,6 @@ def expand_group_range(raw: str, kind: str):
         return []
     s = s.replace("–", "-").replace("—", "-")
     s = re.sub(r"\s*(/|&|\+|and|en|to)\s*", ",", s, flags=re.I)
-
-    if kind == "Gr" and re.search(r"\bgr\b", s, flags=re.I):
-        nums = [int(n) for n in re.findall(r"\d+", s)]
-        return [f"Gr {n}" for n in nums] if nums else []
-
-    if kind == "U" and re.search(r"\bu\b", s, flags=re.I):
-        nums = [int(n) for n in re.findall(r"\d+", s)]
-        return [f"U{n}" for n in nums] if nums else []
 
     s_nospace = re.sub(r"\s+", "", s)
     nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
@@ -401,12 +373,6 @@ def expand_group_range(raw: str, kind: str):
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
-
-    if "," in s_nospace:
-        return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
-
-    if len(nums) == 1:
-        return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
 
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
@@ -421,10 +387,6 @@ def extract_u_groups_from_text(text: str):
         return expand_group_range(m.group(0), "U")
 
     m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
-    if m:
-        return expand_group_range(m.group(0), "U")
-
-    m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
     if m:
         return expand_group_range(m.group(0), "U")
 
@@ -459,14 +421,6 @@ def strip_group_tokens(text: str) -> str:
     t = re.sub(r"\s{2,}", " ", t)
     return t.strip(" -–|,")
 
-def fix_boys_girls_combo(s: str) -> str:
-    t = str(s or "").strip().replace("&amp;", "&")
-    t = re.sub(r"\s*&\s*", " & ", t)
-    if re.search(r"\bBoys\s*&\s*Girls\b", t, flags=re.I):
-        t = re.sub(r"\bBoys\s*&\s*Girls\b", "B Girls", t, flags=re.I)
-    t = re.sub(r"\bBoys\s+and\s+Girls\b", "B Girls", t, flags=re.I)
-    return re.sub(r"\s{2,}", " ", t).strip()
-
 def tidy_team_text(s: str) -> str:
     t = str(s or "").strip()
     if not t:
@@ -474,17 +428,12 @@ def tidy_team_text(s: str) -> str:
     t = t.replace("&amp;", "&")
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
-    t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
-    t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
-    t = fix_boys_girls_combo(t)
     t = re.sub(r"\s{2,}", " ", t).strip()
     return t
 
 def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> str:
-    cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
-    team_clean = strip_group_tokens(team_val)
-    team_clean = tidy_team_text(norm_gender_words(team_clean))
+    team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
 # =============================
@@ -541,7 +490,7 @@ with st.sidebar:
         st.rerun()
 
 # =============================
-# COLUMNS
+# COLUMNS (your sheet)
 # =============================
 COL_CATEGORY  = "Category"
 COL_ACTIVITY  = "Activity/Subject Name"
@@ -570,8 +519,9 @@ info_s    = s(COL_INFO)
 grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
-TS_COL = pick_timestamp_column_smart(df)
-ts_s = df[TS_COL].astype(str) if TS_COL in df.columns else pd.Series([""] * len(df), dtype=str)
+# ✅ Form timestamp column: FIRST column in the CSV
+FORM_TS_COL = df.columns[0]
+form_ts_s = df[FORM_TS_COL].astype(str) if FORM_TS_COL in df.columns else pd.Series([""] * len(df), dtype=str)
 
 # =============================
 # VIEW
@@ -643,22 +593,11 @@ selected_gr = st.sidebar.multiselect(
     key="gr_choice",
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
-# New Updates window slider (only visible in that view)
-NEW_UPDATES_HOURS = NEW_UPDATES_HOURS_DEFAULT
-if st.session_state.view_mode == "New Updates":
-    NEW_UPDATES_HOURS = st.sidebar.slider("New Updates window (hours)", 1, 72, NEW_UPDATES_HOURS_DEFAULT)
-
-# =============================
-# MATCHING NORMALIZATION (fixes Gr 4 vs Gr4 etc.)
-# =============================
-def norm_token(x: str) -> str:
-    return str(x or "").lower().replace(" ", "").strip()
-
 selected_u_norm = {norm_token(x) for x in set(selected_u)}
 selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 
 # ✅ Auto-scope when Category is empty
-force_sport = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
+force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
 force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
 # =============================
@@ -680,6 +619,8 @@ if st.session_state.get("_last_qp_payload") != payload:
 # BUILD RESULTS
 # =============================
 res = []
+window_start = now_dt - timedelta(hours=NEW_UPDATES_HOURS)
+
 for i in range(len(df)):
     cn = normalize_category(cat_s.iloc[i])
     act_norm = normalize_activity(act_s.iloc[i])
@@ -695,20 +636,17 @@ for i in range(len(df)):
     if st.session_state.act_choice and act_norm not in st.session_state.act_choice:
         continue
 
-    # Stable "new" based on sheet timestamp
-    created_dt = parse_sheet_timestamp(ts_s.iloc[i])
+    # NEW UPDATES based on FORM timestamp (first column)
+    created_dt = parse_form_timestamp(form_ts_s.iloc[i])
     is_recent = False
     if created_dt:
-        try:
-            is_recent = (now_dt - created_dt) <= timedelta(hours=NEW_UPDATES_HOURS)
-        except Exception:
-            is_recent = False
+        # ✅ must be between window_start and now_dt (prevents “everything new”)
+        is_recent = (window_start <= created_dt <= now_dt)
 
-    # View mode: New Updates (based on timestamp)
-    if st.session_state.view_mode == "New Updates":
-        if not is_recent:
-            continue
+    if st.session_state.view_mode == "New Updates" and not is_recent:
+        continue
 
+    # Term docs logic
     term_val = str(term_s.iloc[i]).strip().lower()
     looks_like_term_doc = any(
         k in (act_norm.lower() + " " + str(team_s.iloc[i]).lower())
@@ -716,6 +654,7 @@ for i in range(len(df)):
     )
     term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
+    # Due date logic
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
@@ -732,9 +671,9 @@ for i in range(len(df)):
         if not term_flag:
             continue
 
-    grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+    # Age/Grade matching
+    _grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # Sport: overlap match (normalized tokens)
     if cn == "sport" and selected_u_norm:
         if not grp_matches:
             continue
@@ -742,7 +681,6 @@ for i in range(len(df)):
         if not (selected_u_norm & grp_norm):
             continue
 
-    # Culture/Academics: overlap match (normalized tokens)
     if cn in ["culture", "academics"] and selected_gr_norm:
         if not grp_matches:
             continue
@@ -759,7 +697,6 @@ for i in range(len(df)):
             continue
 
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
-    grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
 
     res.append({
         "i": i,
@@ -768,11 +705,10 @@ for i in range(len(df)):
         "term": term_flag,
         "new": is_recent,
         "created_dt": created_dt,
-        "grade": grade_raw_for_sort,
     })
 
-term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
-other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
+term_items = sorted([x for x in res if x["term"]], key=lambda x: x["title"])
+other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"]))
 res_sorted = term_items + other_items
 
 # =============================
@@ -856,15 +792,10 @@ else:
         if item["new"]:
             created_dt = item.get("created_dt")
             dot = "<span class='rDot'></span>"
-            if created_dt:
-                try:
-                    if (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                        dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
-                except Exception:
-                    pass
+            if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
+                dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-        # Clear “why is this showing” lines (no duplicate U/Gr)
         sport_age_line = ""
         grade_line = ""
         if cn == "sport" and grp_matches:
