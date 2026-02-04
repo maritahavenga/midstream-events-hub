@@ -56,24 +56,6 @@ def qp_set_from_state(payload: dict):
                 clean[k] = str(v).strip()
     st.query_params.from_dict(clean)
 
-def build_saved_link(payload: dict) -> str:
-    """
-    Build a relative link "?a=b&c=d" that parents can copy.
-    We can't reliably know the full domain from inside Streamlit, so we provide querystring.
-    """
-    clean = {}
-    for k, v in payload.items():
-        if isinstance(v, list):
-            if v:
-                clean[k] = ",".join(v)
-        else:
-            if str(v).strip():
-                clean[k] = str(v).strip()
-
-    if not clean:
-        return "(No filters applied)"
-    return "?" + urlencode(clean, doseq=False)
-
 # =============================
 # SESSION DEFAULTS
 # =============================
@@ -623,23 +605,16 @@ selected_gr = st.sidebar.multiselect(
     key="gr_choice",
 ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
 
-# ✅ IMPORTANT: build sets from widget values (most reliable)
+# Build sets from widget values (most reliable)
 selected_u_set = set(selected_u)
 selected_gr_set = set(selected_gr)
 
-# Reset button clears URL + state
-if st.sidebar.button("🧹 Reset filters"):
-    st.session_state.view_mode = "Upcoming"
-    st.session_state.cat_choice = []
-    st.session_state.act_choice = []
-    st.session_state.u_choice = []
-    st.session_state.gr_choice = []
-    st.session_state.search_text = ""
-    st.query_params.clear()
-    st.rerun()
+# ✅ Auto-scope when Category is empty
+force_sport = (not wanted) and bool(selected_u_set) and not bool(selected_gr_set)
+force_grades = (not wanted) and bool(selected_gr_set) and not bool(selected_u_set)
 
 # =============================
-# WRITE STATE -> QUERY PARAMS (EVERY RUN, BUT ONLY IF CHANGED)
+# WRITE STATE -> QUERY PARAMS (ONLY IF CHANGED)
 # =============================
 payload = {
     "view": st.session_state.view_mode,
@@ -653,17 +628,6 @@ payload = {
 if st.session_state.get("_last_qp_payload") != payload:
     st.session_state["_last_qp_payload"] = payload
     qp_set_from_state(payload)
-
-# =============================
-# SAVED LINK BOX
-# =============================
-saved_qs = build_saved_link(payload)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔗 Saved link (share / bookmark)")
-st.sidebar.caption("If you saved the app to your Home Screen and can’t see the URL, copy this link after selecting filters.")
-st.sidebar.text_input("Your filtered link", value=saved_qs, key="saved_link_box")
-st.sidebar.button("📋 Copy (tap, then copy)", help="On iPhone: tap inside the box, Select All, then Copy.")
 
 # =============================
 # NEW UPDATE TRACKING (badge)
@@ -693,6 +657,12 @@ res = []
 for i in range(len(df)):
     cn = normalize_category(cat_s.iloc[i])
     act_norm = normalize_activity(act_s.iloc[i])
+
+    # Auto-scope when no category is selected
+    if force_sport and cn != "sport":
+        continue
+    if force_grades and cn == "sport":
+        continue
 
     if wanted and not cat_ok(i):
         continue
@@ -724,14 +694,14 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # ✅ SPORT: show if ANY selected U overlaps event's U list
+    # Sport: overlap match
     if cn == "sport" and selected_u_set:
         if not grp_matches:
             continue
         if not (selected_u_set & set(grp_matches)):
             continue
 
-    # ✅ CULTURE/ACADEMICS: show if ANY selected grade overlaps
+    # Culture/Academics: overlap match
     if cn in ["culture", "academics"] and selected_gr_set:
         if not grp_matches:
             continue
@@ -863,7 +833,7 @@ else:
             dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-        # ✅ Nice clarity lines
+        # Nice clarity lines
         sport_age_line = ""
         grade_line = ""
         if cn == "sport" and grp_matches:
