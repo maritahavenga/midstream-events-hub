@@ -4,7 +4,6 @@ import pandas as pd
 import requests, io, re, pytz, hashlib
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
-from urllib.parse import urlencode
 
 # =============================
 # PAGE CONFIG
@@ -18,67 +17,11 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
+# =============================
+# SESSION DEFAULTS (FIXES AttributeError)
+# =============================
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents"]
 
-# ============================================================
-# QUERY PARAMS HELPERS (THE "BIG GUNS" LAYER)
-# ============================================================
-
-def qp_get(name: str, default=""):
-    """Streamlit's st.query_params returns strings (or list-like in older versions). Normalize."""
-    try:
-        v = st.query_params.get(name, default)
-    except Exception:
-        v = default
-
-    if v is None:
-        return default
-    # Streamlit may return list-like in some contexts; normalize to a single string.
-    if isinstance(v, (list, tuple)):
-        return v[0] if v else default
-    return v
-
-def qp_get_list(name: str):
-    """Read comma-separated list from query params."""
-    raw = qp_get(name, "")
-    if not raw:
-        return []
-    return [x.strip() for x in raw.split(",") if x.strip()]
-
-def qp_set_from_state(payload: dict):
-    """Write query params to URL (only non-empty values)."""
-    clean = {}
-    for k, v in payload.items():
-        if isinstance(v, list):
-            if v:
-                clean[k] = ",".join(v)
-        else:
-            if str(v).strip():
-                clean[k] = str(v).strip()
-    st.query_params.from_dict(clean)
-
-def build_saved_link(payload: dict) -> str:
-    """
-    Build a relative link "?a=b&c=d" that parents can copy.
-    We can't reliably know the full domain from inside Streamlit, so we provide querystring
-    (which still works when pasted onto the same app URL).
-    """
-    clean = {}
-    for k, v in payload.items():
-        if isinstance(v, list):
-            if v:
-                clean[k] = ",".join(v)
-        else:
-            if str(v).strip():
-                clean[k] = str(v).strip()
-
-    if not clean:
-        return "(No filters applied)"
-    return "?" + urlencode(clean, doseq=False)
-
-# =============================
-# SESSION DEFAULTS
-# =============================
 def ss_init(key, default):
     if key not in st.session_state:
         st.session_state[key] = default
@@ -89,27 +32,6 @@ ss_init("act_choice", [])
 ss_init("u_choice", [])
 ss_init("gr_choice", [])
 ss_init("search_text", "")
-
-# =============================
-# INITIAL LOAD FROM QUERY PARAMS (ONCE)
-# =============================
-if "qp_loaded" not in st.session_state:
-    st.session_state.qp_loaded = True
-
-    view = qp_get("view", "")
-    if view in VIEW_OPTIONS:
-        st.session_state.view_mode = view
-
-    # Expect cat as: Sport,Culture,Academics
-    cats = qp_get_list("cat")
-    # Normalize capitalization to match your widget options
-    cat_norm_map = {"sport":"Sport", "culture":"Culture", "academics":"Academics"}
-    st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
-
-    st.session_state.act_choice = qp_get_list("act")
-    st.session_state.u_choice = qp_get_list("u")
-    st.session_state.gr_choice = qp_get_list("gr")
-    st.session_state.search_text = qp_get("q", "")
 
 # =============================
 # STYLE
@@ -128,7 +50,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
   margin-top:14px;
   border-radius:22px;
   padding:18px 18px 16px 18px;
-  margin-bottom:14px;
+  margin-bottom:22px;
   background:#008080;
   box-shadow:var(--shadow);
   color:#fff;
@@ -174,6 +96,7 @@ html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 }
 .btn:hover{opacity:.92;}
 
+/* Badge moved to bottom-right so it won't cover title on phone */
 .ribbon{
   position:absolute; right:12px; bottom:12px;
   background:#FFD400;
@@ -205,6 +128,51 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+# =============================
+# URL QUERY PARAMS (PERSIST FILTERS ACROSS REFRESH/CLOSE)
+# =============================
+def qp_get_list(name: str):
+    v = st.query_params.get(name, "")
+    if not v:
+        return []
+    parts = [p.strip() for p in str(v).split(",") if p.strip()]
+    return parts
+
+def qp_get_str(name: str, default=""):
+    v = st.query_params.get(name, "")
+    return str(v) if v is not None and str(v) != "" else default
+
+def qp_set_if_changed(**kwargs):
+    # Only write query params if something changed (prevents rerun loops)
+    current = dict(st.query_params)
+    desired = {}
+    for k, v in kwargs.items():
+        if isinstance(v, list):
+            desired[k] = ",".join(v)
+        else:
+            desired[k] = str(v)
+    # remove empty
+    desired = {k: v for k, v in desired.items() if v not in ["", None]}
+
+    if current != desired:
+        st.query_params.clear()
+        for k, v in desired.items():
+            st.query_params[k] = v
+
+# Load query params -> session_state (first run)
+# (Only if user doesn't already have state in this session)
+if "qp_loaded" not in st.session_state:
+    st.session_state.qp_loaded = True
+    qp_view = qp_get_str("view", st.session_state.view_mode)
+    if qp_view in VIEW_OPTIONS:
+        st.session_state.view_mode = qp_view
+
+    st.session_state.cat_choice = qp_get_list("cat") or st.session_state.cat_choice
+    st.session_state.act_choice = qp_get_list("act") or st.session_state.act_choice
+    st.session_state.u_choice = qp_get_list("u") or st.session_state.u_choice
+    st.session_state.gr_choice = qp_get_list("gr") or st.session_state.gr_choice
+    st.session_state.search_text = qp_get_str("q", st.session_state.search_text)
 
 # =============================
 # HELPERS
@@ -243,10 +211,12 @@ def normalize_category(v: str) -> str:
 def normalize_activity(v: str) -> str:
     s = str(v or "").strip().lower()
     s = re.sub(r"\s+", " ", s)
+
     if s in ["ht", "afrikaans ht"] or "hooftaal" in s:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
+
     if "wiskunde" in s: return "Math"
     if "atletiek" in s or "athletics" in s: return "Athletics"
     if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
@@ -273,6 +243,7 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"(Girls)\s*(Girls)\b", r"\1", s)
     return re.sub(r"\s+", " ", s).strip()
 
+# ---------- SA DATE ----------
 MONTHS = {
     "jan": "January","january": "January",
     "feb": "February","february": "February",
@@ -329,6 +300,7 @@ def format_date_long_sa(s) -> str:
     if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
+# ---------- VENUE ----------
 VENUE_MAP = {
     "musiekkamer": "Music Room",
     "musiek kamer": "Music Room",
@@ -357,25 +329,45 @@ def normalize_venue(v: str) -> str:
 # AGE GROUP / GRADE PARSING
 # =============================
 def expand_group_range(raw: str, kind: str):
+    """
+    Sport:
+      - U10-U13 / U10–U13
+      - 10-13 / 07-13
+      - U10,11,12,13 / 10,11,12,13
+      - single: U10 / 10
+    Academics/Culture:
+      - Gr 4 - Gr 7 / 4-7
+      - Gr 4,5,6,7 / 4,5,6,7
+      - single: Gr 4 / 4
+    """
     s = str(raw or "").strip()
     if not s:
         return []
+
     s = s.replace("–", "-").replace("—", "-")
     s_nospace = re.sub(r"\s+", "", s)
+
     nums = [int(n) for n in re.findall(r"\d+", s_nospace)]
     if not nums:
         return []
+
+    # range
     if "-" in s_nospace and len(nums) >= 2:
         lo, hi = sorted([nums[0], nums[1]])
         seq = list(range(lo, hi + 1))
         return [f"U{x}" for x in seq] if kind == "U" else [f"Gr {x}" for x in seq]
+
+    # comma list
     if "," in s_nospace:
         lo, hi = min(nums), max(nums)
         if len(nums) >= 2 and (hi - lo) <= 12:
             nums = list(range(lo, hi + 1)) if len(nums) >= 3 else nums
         return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
+
+    # single
     if len(nums) == 1:
         return [f"U{nums[0]}"] if kind == "U" else [f"Gr {nums[0]}"]
+
     return [f"U{x}" for x in nums] if kind == "U" else [f"Gr {x}" for x in nums]
 
 def extract_u_groups_from_text(text: str):
@@ -384,18 +376,22 @@ def extract_u_groups_from_text(text: str):
         return []
     t = t.replace("–", "-").replace("—", "-")
 
+    # U-range
     m = re.search(r"\bU?\d{1,2}\s*-\s*U?\d{1,2}\b", t, flags=re.I)
     if m:
         return expand_group_range(m.group(0), "U")
 
+    # comma list
     m = re.search(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", t, flags=re.I)
     if m:
         return expand_group_range(m.group(0), "U")
 
+    # short range 10-13
     m = re.search(r"\b\d{1,2}\s*-\s*\d{1,2}\b", t)
     if m:
         return expand_group_range(m.group(0), "U")
 
+    # single U10
     m = re.search(r"\bU(\d{1,2})\b", t, flags=re.I)
     if m:
         return [f"U{int(m.group(1))}"]
@@ -403,6 +399,7 @@ def extract_u_groups_from_text(text: str):
     return []
 
 def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
+    # SPORT: prefer grade/age column; else fallback to team text. NO athletics-default.
     if cat_norm == "sport":
         g = str(grade_raw or "").strip()
         m = expand_group_range(g, "U") if g else extract_u_groups_from_text(team_raw)
@@ -410,6 +407,7 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
 
+    # CULTURE/ACADEMICS
     g = str(grade_raw or "").strip()
     if not g:
         return "", []
@@ -418,6 +416,7 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
+# ---------- TEXT CLEANUP / NO DUPLICATE GROUP ----------
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
@@ -440,7 +439,7 @@ def tidy_team_text(s: str) -> str:
     t = t.replace("&amp;", "&")
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
-    t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)
+    t = re.sub(r"([A-Za-z])(?=U\d)", r"\1 ", t)  # TennisU11B -> Tennis U11B
     t = re.sub(r"\b(U\d{1,2})(Boys|Girls)\b", r"\1 \2", t, flags=re.I)
     t = fix_boys_girls_combo(t)
     t = re.sub(r"\s{2,}", " ", t).strip()
@@ -450,10 +449,15 @@ def build_title(cat_val: str, act_val: str, team_val: str, grade_val: str) -> st
     cn = normalize_category(cat_val)
     act_txt = norm_gender_words(normalize_activity(act_val))
     grp_disp, _ = group_for_row(cn, grade_val, team_val)
+
     team_clean = strip_group_tokens(team_val)
     team_clean = tidy_team_text(norm_gender_words(team_clean))
-    if grp_disp and grp_disp.lower() in team_clean.lower():
-        return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+
+    if grp_disp:
+        if grp_disp.lower() in team_clean.lower():
+            return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+        return re.sub(r"\s{2,}", " ", f"{act_txt} {grp_disp} {team_clean}".strip())
+
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
 # =============================
@@ -540,7 +544,7 @@ grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
 # =============================
-# VIEW (KEYED)
+# VIEW TOGGLES (WITH KEY + STATE)
 # =============================
 view_mode = st.radio(
     "View",
@@ -551,7 +555,7 @@ view_mode = st.radio(
 )
 
 # =============================
-# FILTERS
+# FILTERS (SIDEBAR) + PERSIST
 # =============================
 st.sidebar.markdown("## Filters")
 
@@ -611,43 +615,15 @@ selected_gr = st.sidebar.multiselect(
 selected_u_set = set(st.session_state.u_choice)
 selected_gr_set = set(st.session_state.gr_choice)
 
-# Reset button clears URL + state
-if st.sidebar.button("🧹 Reset filters"):
-    st.session_state.view_mode = "Upcoming"
-    st.session_state.cat_choice = []
-    st.session_state.act_choice = []
-    st.session_state.u_choice = []
-    st.session_state.gr_choice = []
-    st.session_state.search_text = ""
-    st.query_params.clear()
-    st.rerun()
-
-# =============================
-# WRITE STATE -> QUERY PARAMS (EVERY RUN, BUT ONLY IF CHANGED)
-# =============================
-payload = {
-    "view": st.session_state.view_mode,
-    "cat": st.session_state.cat_choice,
-    "act": st.session_state.act_choice,
-    "u": st.session_state.u_choice,
-    "gr": st.session_state.gr_choice,
-    "q": st.session_state.search_text,
-}
-
-if st.session_state.get("_last_qp_payload") != payload:
-    st.session_state["_last_qp_payload"] = payload
-    qp_set_from_state(payload)
-
-# =============================
-# SAVED LINK BOX (for Home Screen users who can't see URL)
-# =============================
-saved_qs = build_saved_link(payload)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔗 Saved link (share / bookmark)")
-st.sidebar.caption("If you saved the app to your Home Screen and can’t see the URL, copy this link after selecting filters.")
-st.sidebar.text_input("Your filtered link", value=saved_qs, key="saved_link_box")
-st.sidebar.button("📋 Copy (tap, then copy)", help="On iPhone: tap inside the box, Select All, then Copy.")
+# Persist to URL query params every run (only if changed)
+qp_set_if_changed(
+    view=st.session_state.view_mode,
+    cat=st.session_state.cat_choice,
+    act=st.session_state.act_choice,
+    u=st.session_state.u_choice,
+    gr=st.session_state.gr_choice,
+    q=st.session_state.search_text,
+)
 
 # =============================
 # NEW UPDATE TRACKING (badge)
@@ -667,8 +643,8 @@ if "row_updated_at" not in st.session_state:
 if "seen_once" not in st.session_state:
     st.session_state.seen_once = False
 
-BADGE_VISIBLE_HOURS = 1
-BADGE_ANIMATE_MINUTES = 10
+BADGE_VISIBLE_HOURS = 1     # show for 1 hour
+BADGE_ANIMATE_MINUTES = 10  # pulse dot for first 10 minutes
 
 # =============================
 # BUILD RESULTS
@@ -693,6 +669,7 @@ for i in range(len(df)):
     d_raw = str(date_s.iloc[i]).strip()
     d_dt = parse_date_sa(d_raw)
 
+    # date filters
     if d_dt and d_dt.date() < today:
         continue
 
@@ -708,12 +685,14 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+    # Sport filter
     if cn == "sport" and selected_u_set:
         if grp_matches and not any(x in selected_u_set for x in grp_matches):
             continue
         if not grp_matches:
             continue
 
+    # Grade filter
     if cn in ["culture", "academics"] and selected_gr_set:
         if grp_matches and not any(x in selected_gr_set for x in grp_matches):
             continue
@@ -722,22 +701,26 @@ for i in range(len(df)):
 
     title = build_title(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
 
+    # search filter
     if st.session_state.search_text:
         needle = st.session_state.search_text.lower().replace(" ", "")
         hay = title.lower().replace(" ", "")
         if needle not in hay:
             continue
 
+    # update tracking (IMPORTANT: no badges on first ever view)
     sig = row_signature(i)
     prev = st.session_state.row_hashes.get(i)
 
     if prev is None:
         st.session_state.row_hashes[i] = sig
+        # do NOT set updated_at on first load
     elif prev != sig:
         st.session_state.row_hashes[i] = sig
         st.session_state.row_updated_at[i] = now_dt
 
     updated_at = st.session_state.row_updated_at.get(i)
+
     show_new = False
     if st.session_state.seen_once and updated_at:
         if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
@@ -753,10 +736,13 @@ for i in range(len(df)):
         "term": term_flag,
         "new": show_new,
         "grade": grade_raw_for_sort,
+        "grp_disp": grp_disp,
     })
 
+# After building once, mark session as "seen" so future changes can badge
 st.session_state.seen_once = True
 
+# Sorting: term first alpha; then date -> title -> grade
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
 res_sorted = term_items + other_items
@@ -768,7 +754,7 @@ st.markdown("## 📅 Events")
 pin = "&#128205;"
 
 if not res_sorted:
-    st.info("No items match your filters.")
+    st.info("Niks pas by jou filters nie.")
 else:
     for item in res_sorted:
         i = item["i"]
@@ -780,6 +766,7 @@ else:
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
 
+        # group meta (under title) - light + safe for layout
         grp_disp, _ = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
         group_meta = grp_disp.strip()
 
@@ -831,6 +818,9 @@ else:
         if info_text:
             notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
+        if "revue" in (title.lower() + " " + info_raw.lower()):
+            notes_parts.append("<b>Note:</b><br>Revue")
+
         notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
 
         btn_html = ""
@@ -841,6 +831,7 @@ else:
 
         ribbon = ""
         if item["new"]:
+            # animate dot only for first X minutes (optional)
             upd = st.session_state.row_updated_at.get(i)
             dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
