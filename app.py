@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-import requests, io, re, pytz, hashlib
+import requests, io, re, pytz
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
 
@@ -19,6 +19,7 @@ today = now_dt.date()
 
 VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
 NEW_UPDATES_HOURS = 8
+BADGE_ANIMATE_MINUTES = 10
 
 # ============================================================
 # QUERY PARAMS HELPERS (kept so URL updates with filters)
@@ -210,12 +211,9 @@ def split_info_text_and_links(info: str):
 
 def normalize_category(v: str) -> str:
     s = str(v or "").strip().lower()
-    if "sport" in s:
-        return "sport"
-    if "culture" in s or "kultuur" in s:
-        return "culture"
-    if "academic" in s or "academics" in s or "akadem" in s:
-        return "academics"
+    if "sport" in s: return "sport"
+    if "culture" in s or "kultuur" in s: return "culture"
+    if "academic" in s or "academics" in s or "akadem" in s: return "academics"
     return s
 
 def normalize_activity(v: str) -> str:
@@ -225,24 +223,15 @@ def normalize_activity(v: str) -> str:
         return "Afrikaans Hooftaal"
     if s in ["eat", "afrikaans eat"] or "eerste addisionele" in s:
         return "Afrikaans Eerste Addisionele Taal"
-    if "wiskunde" in s:
-        return "Math"
-    if "atletiek" in s or "athletics" in s:
-        return "Athletics"
-    if "swem" in s or "swimming" in s or "gala" in s:
-        return "Swimming"
-    if "tennis" in s:
-        return "Tennis"
-    if "rugby" in s:
-        return "Rugby"
-    if "hockey" in s:
-        return "Hockey"
-    if "netbal" in s or "netball" in s:
-        return "Netball"
-    if "koor" in s or "choir" in s:
-        return "Choir"
-    if "revue" in s:
-        return "Revue"
+    if "wiskunde" in s: return "Math"
+    if "atletiek" in s or "athletics" in s: return "Athletics"
+    if "swem" in s or "swimming" in s or "gala" in s: return "Swimming"
+    if "tennis" in s: return "Tennis"
+    if "rugby" in s: return "Rugby"
+    if "hockey" in s: return "Hockey"
+    if "netbal" in s or "netball" in s: return "Netball"
+    if "koor" in s or "choir" in s: return "Choir"
+    if "revue" in s: return "Revue"
     return s.title()
 
 def is_afrikaans_subject(b_raw: str) -> bool:
@@ -261,26 +250,24 @@ def norm_gender_words(text: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 MONTHS = {
-    "jan": "January", "january": "January",
-    "feb": "February", "february": "February",
-    "mar": "March", "march": "March",
-    "apr": "April", "april": "April",
+    "jan": "January","january": "January",
+    "feb": "February","february": "February",
+    "mar": "March","march": "March",
+    "apr": "April","april": "April",
     "may": "May",
-    "jun": "June", "june": "June",
-    "jul": "July", "july": "July",
-    "aug": "August", "august": "August",
-    "sep": "September", "september": "September",
-    "oct": "October", "october": "October",
-    "nov": "November", "november": "November",
-    "dec": "December", "december": "December",
+    "jun": "June","june": "June",
+    "jul": "July","july": "July",
+    "aug": "August","august": "August",
+    "sep": "September","september": "September",
+    "oct": "October","october": "October",
+    "nov": "November","november": "November",
+    "dec": "December","december": "December",
 }
 
 def parse_date_sa(s):
-    if s is None:
-        return None
+    if s is None: return None
     raw = str(s).strip()
-    if raw == "" or raw.lower() in ["nan", "none"]:
-        return None
+    if raw == "" or raw.lower() in ["nan", "none"]: return None
 
     if re.fullmatch(r"\d+(\.\d+)?", raw):
         try:
@@ -306,19 +293,16 @@ def parse_date_sa(s):
     cleaned = re.sub(r"\s+", " ", cleaned)
 
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1):
-        return d1.to_pydatetime()
+    if not pd.isnull(d1): return d1.to_pydatetime()
 
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2):
-        return d2.to_pydatetime()
+    if not pd.isnull(d2): return d2.to_pydatetime()
 
     return None
 
 def format_date_long_sa(s) -> str:
     dt = parse_date_sa(s)
-    if not dt:
-        return str(s or "").strip()
+    if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
 
 VENUE_MAP = {
@@ -346,13 +330,35 @@ def normalize_venue(v: str) -> str:
     return s
 
 # =============================
+# TIMESTAMP (for stable “New Updates”)
+# =============================
+def pick_timestamp_column(df_: pd.DataFrame) -> str:
+    cols = [str(c).strip() for c in df_.columns]
+    for c in cols:
+        if c.lower() == "timestamp":
+            return c
+    return df_.columns[0] if len(df_.columns) else ""
+
+def parse_sheet_timestamp(x):
+    s = str(x or "").strip()
+    if not s:
+        return None
+    dt = pd.to_datetime(s, dayfirst=True, errors="coerce")
+    if pd.isnull(dt):
+        return None
+    py = dt.to_pydatetime()
+    try:
+        return TZ.localize(py) if py.tzinfo is None else py.astimezone(TZ)
+    except Exception:
+        return py
+
+# =============================
 # AGE GROUP / GRADE PARSING
 # =============================
 def expand_group_range(raw: str, kind: str):
     s = str(raw or "").strip()
     if not s:
         return []
-
     s = s.replace("–", "-").replace("—", "-")
     s = re.sub(r"\s*(/|&|\+|and|en|to)\s*", ",", s, flags=re.I)
 
@@ -412,7 +418,6 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         m = expand_group_range(g, "U") if g else []
         if not m:
             m = extract_u_groups_from_text(team_raw)
-
         if len(m) >= 2:
             return f"{m[0]}-{m[-1]}", m
         return (m[0] if m else ""), m
@@ -544,10 +549,13 @@ info_s    = s(COL_INFO)
 grade_s   = s(COL_GRADE)
 term_s    = s(COL_TERM)
 
+TS_COL = pick_timestamp_column(df)
+ts_s = s(TS_COL)
+
 # =============================
 # VIEW
 # =============================
-view_mode = st.radio(
+st.radio(
     "View",
     VIEW_OPTIONS,
     index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "Upcoming"))
@@ -643,27 +651,6 @@ if st.session_state.get("_last_qp_payload") != payload:
     qp_set_from_state(payload)
 
 # =============================
-# NEW UPDATE TRACKING (badge + New Updates view)
-# =============================
-def row_signature(i: int) -> str:
-    parts = [
-        cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i],
-        prog_s.iloc[i], teamlnk_s.iloc[i], conf_s.iloc[i], info_s.iloc[i],
-        grade_s.iloc[i], term_s.iloc[i],
-    ]
-    return hashlib.sha256(("||".join(map(str, parts))).encode("utf-8")).hexdigest()
-
-if "row_hashes" not in st.session_state:
-    st.session_state.row_hashes = {}
-if "row_updated_at" not in st.session_state:
-    st.session_state.row_updated_at = {}
-if "seen_once" not in st.session_state:
-    st.session_state.seen_once = False
-
-BADGE_VISIBLE_HOURS = NEW_UPDATES_HOURS
-BADGE_ANIMATE_MINUTES = 10
-
-# =============================
 # BUILD RESULTS
 # =============================
 res = []
@@ -681,6 +668,20 @@ for i in range(len(df)):
         continue
     if st.session_state.act_choice and act_norm not in st.session_state.act_choice:
         continue
+
+    # Stable "new" based on sheet timestamp
+    created_dt = parse_sheet_timestamp(ts_s.iloc[i])
+    is_recent = False
+    if created_dt:
+        try:
+            is_recent = (now_dt - created_dt) <= timedelta(hours=NEW_UPDATES_HOURS)
+        except Exception:
+            is_recent = False
+
+    # View mode: New Updates (based on timestamp, not session memory)
+    if st.session_state.view_mode == "New Updates":
+        if not is_recent:
+            continue
 
     term_val = str(term_s.iloc[i]).strip().lower()
     looks_like_term_doc = any(
@@ -707,7 +708,7 @@ for i in range(len(df)):
 
     grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-    # ✅ Sport: overlap match (normalized tokens)
+    # Sport: overlap match (normalized tokens)
     if cn == "sport" and selected_u_norm:
         if not grp_matches:
             continue
@@ -715,7 +716,7 @@ for i in range(len(df)):
         if not (selected_u_norm & grp_norm):
             continue
 
-    # ✅ Culture/Academics: overlap match (normalized tokens)
+    # Culture/Academics: overlap match (normalized tokens)
     if cn in ["culture", "academics"] and selected_gr_norm:
         if not grp_matches:
             continue
@@ -731,27 +732,6 @@ for i in range(len(df)):
         if needle not in hay:
             continue
 
-    # --- update tracking ---
-    sig = row_signature(i)
-    prev = st.session_state.row_hashes.get(i)
-
-    if prev is None:
-        st.session_state.row_hashes[i] = sig
-    elif prev != sig:
-        st.session_state.row_hashes[i] = sig
-        st.session_state.row_updated_at[i] = now_dt
-
-    updated_at = st.session_state.row_updated_at.get(i)
-    show_new = False
-    if st.session_state.seen_once and updated_at:
-        if (now_dt - updated_at) <= timedelta(hours=BADGE_VISIBLE_HOURS):
-            show_new = True
-
-    # View mode: New Updates (only show recently updated)
-    if st.session_state.view_mode == "New Updates":
-        if not show_new:
-            continue
-
     sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
     grade_raw_for_sort = str(grade_s.iloc[i] or "").strip()
 
@@ -760,11 +740,10 @@ for i in range(len(df)):
         "dt": sort_dt,
         "title": title.lower(),
         "term": term_flag,
-        "new": show_new,
+        "new": is_recent,
+        "created_dt": created_dt,
         "grade": grade_raw_for_sort,
     })
-
-st.session_state.seen_once = True
 
 term_items = sorted([x for x in res if x["term"]], key=lambda x: (x["title"], x["grade"]))
 other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"], x["grade"]))
@@ -789,11 +768,7 @@ else:
         d_raw = str(date_s.iloc[i]).strip()
         date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
-        group_meta = grp_disp.strip()
-
-        # ✅ Avoid repeating U11 / Gr5 twice (we show Ages/Grades lines below)
-        show_submeta = ""  # hide group_meta to prevent duplication
+        _grp_disp, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
         ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
@@ -853,11 +828,17 @@ else:
 
         ribbon = ""
         if item["new"]:
-            upd = st.session_state.row_updated_at.get(i)
-            dot = "<span class='rDot'></span>" if (upd and (now_dt - upd) <= timedelta(minutes=BADGE_ANIMATE_MINUTES)) else "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
+            created_dt = item.get("created_dt")
+            dot = "<span class='rDot'></span>"
+            if created_dt:
+                try:
+                    if (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
+                        dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
+                except Exception:
+                    pass
             ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-        # Clear “why is this showing” lines
+        # Clear “why is this showing” lines (no duplicate U/Gr)
         sport_age_line = ""
         grade_line = ""
         if cn == "sport" and grp_matches:
@@ -870,7 +851,6 @@ else:
 <div class="card">
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
-  {f"<div class='card-submeta'>{safe_txt(show_submeta)}</div>" if show_submeta else ""}
   {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {sport_age_line}
   {grade_line}
