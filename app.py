@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
@@ -93,7 +92,7 @@ if "qp_loaded" not in st.session_state:
     st.session_state.search_text = qp_get("q", "")
 
 # =============================
-# STYLE (arrow big/bold + "Filter here" + themed buttons)
+# STYLE
 # =============================
 st.markdown(
     """
@@ -110,23 +109,17 @@ div[data-testid="stSidebar"] span{
   white-space:normal !important;
   word-break:break-word !important;
 }
-
-/* ✅ Make the sidebar arrow button BIG + BOLD */
 button[data-testid="collapsedControl"],
 button[data-testid="stSidebarCollapseButton"]{
   transform: scale(1.18);
   transform-origin: left center;
   font-weight: 900 !important;
 }
-
-/* ✅ Make the arrow icon bigger (SVG) */
 button[data-testid="collapsedControl"] svg,
 button[data-testid="stSidebarCollapseButton"] svg{
   width: 26px !important;
   height: 26px !important;
 }
-
-/* ✅ Put text "Filter here" next to the arrow, BIG + BOLD */
 button[data-testid="collapsedControl"]::after{
   content:"  Filter here";
   font-weight: 1000;
@@ -141,8 +134,6 @@ button[data-testid="stSidebarCollapseButton"]::after{
   color: var(--teal);
   margin-left: 8px;
 }
-
-/* ✅ Make Streamlit primary buttons match teal */
 div[data-testid="stBaseButton-primary"] > button{
   background: var(--teal) !important;
   border: 1px solid rgba(0,0,0,0.08) !important;
@@ -156,8 +147,6 @@ div[data-testid="stBaseButton-secondary"] > button{
   padding: 0.8rem 1rem !important;
   border-radius: 14px !important;
 }
-
-/* ✅ Banner + cards */
 .topBanner{
   margin-top:14px;
   border-radius:22px;
@@ -177,7 +166,6 @@ div[data-testid="stBaseButton-secondary"] > button{
 }
 .longLogo img{width:100%;height:auto;display:block;}
 .hubText{font-weight:900;font-size:1.65rem;letter-spacing:.3px;}
-
 .card{
   border:1px solid var(--line);
   background:#fff;
@@ -190,14 +178,12 @@ div[data-testid="stBaseButton-secondary"] > button{
 }
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
-
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
   background:rgba(0,128,128,0.08);
   border:1px solid rgba(0,128,128,0.25);
   color:#0f172a;font-size:.95rem;line-height:1.35;
 }
-
 .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 .btn{
   display:inline-block;background:var(--teal);color:white !important;
@@ -205,7 +191,6 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
-
 .ribbon{
   position:absolute; right:12px; bottom:12px;
   background:#FFD400;
@@ -251,10 +236,20 @@ def is_http(u: str) -> bool:
     s = str(u or "").strip().lower()
     return s.startswith("http://") or s.startswith("https://")
 
+def extract_urls(v: str):
+    raw = str(v or "").strip()
+    if not raw:
+        return []
+    return [u.strip() for u in URL_RE.findall(raw) if u.strip()]
+
+def urls_signature_part(v: str) -> str:
+    # Stable signature for matching New Updates, even if there are 2 links
+    links = extract_urls(v)
+    return "|".join(links[:2])  # keep it short but consistent
+
 def first_url(v: str) -> str:
-    s = str(v or "").replace("\n", " ").strip()
-    m = re.search(r"https?://\S+", s)
-    return m.group(0) if m else ""
+    links = extract_urls(v)
+    return links[0] if links else ""
 
 def split_info_text_and_links(info: str):
     raw = str(info or "").strip()
@@ -288,6 +283,10 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
     return re.sub(r"\s+", " ", s).strip()
 
+def is_math_activity(activity_raw: str) -> bool:
+    s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
+    return ("wiskunde" in s) or ("mathematics" in s) or ("maths" in s) or (s == "math") or ("math " in s)
+
 # =============================
 # ACTIVITY: display vs filter
 # =============================
@@ -304,7 +303,7 @@ def display_activity(cat_norm: str, activity_raw: str) -> str:
         return "Afrikaans Eerste Addisionele Taal"
 
     # ✅ Always refer to Mathematics (not Maths)
-    if "wiskunde" in sl or "mathematics" in sl or sl == "math" or "maths" in sl:
+    if is_math_activity(sl):
         return "Mathematics"
 
     return s.title()
@@ -544,7 +543,7 @@ def row_signature(category, activity, team_assessment, due_date, venue, programm
         norm_token(team_assessment),
         norm_token(due_date),
         norm_token(venue),
-        norm_token(first_url(programme_link)),
+        norm_token(urls_signature_part(programme_link)),
     ]
     return hashlib.sha256("||".join(parts).encode("utf-8")).hexdigest()
 
@@ -574,7 +573,7 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
             sig_to_created[sig] = created_dt
 
 # =============================
-# TOP ACTION BUTTONS (reliable)
+# TOP ACTION BUTTONS
 # =============================
 top_left, top_right = st.columns([3, 2])
 
@@ -609,6 +608,17 @@ selected_gr_norm = set()
 force_sport = False
 force_grades = False
 new_hours = NEW_UPDATES_DEFAULT_HOURS
+
+TARGET_GRADES_MATH = {"gr4", "gr5", "gr6", "gr7"}
+
+def selected_grade_tokens_to_labels(sel_norm: set):
+    # sel_norm has tokens like "gr4"
+    out = []
+    for t in sorted(sel_norm):
+        m = re.match(r"gr(\d+)", t)
+        if m:
+            out.append(f"Gr {int(m.group(1))}")
+    return out
 
 def render_filters_main():
     global wanted, selected_u_norm, selected_gr_norm, force_sport, force_grades, new_hours
@@ -800,6 +810,10 @@ if st.session_state.screen_mode == "Events":
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+        # ===== HARD RULE: Mathematics must work for Gr 4–7 even if grade field is blank/odd =====
+        math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
+        selected_has_target_grades = bool(selected_gr_norm & TARGET_GRADES_MATH)
+
         if cn == "sport" and selected_u_norm:
             if not grp_matches:
                 continue
@@ -808,11 +822,16 @@ if st.session_state.screen_mode == "Events":
                 continue
 
         if cn in ["culture", "academics"] and selected_gr_norm:
-            if not grp_matches:
-                continue
-            grp_norm = {norm_token(x) for x in grp_matches}
-            if not (selected_gr_norm & grp_norm):
-                continue
+            if grp_matches:
+                grp_norm = {norm_token(x) for x in grp_matches}
+                if not (selected_gr_norm & grp_norm):
+                    # If it's a Maths row and user selected Gr4-7, allow it through
+                    if not (math_row and selected_has_target_grades):
+                        continue
+            else:
+                # No grade info in row: only allow if it's Maths and grades include Gr4-7
+                if not (math_row and selected_has_target_grades):
+                    continue
 
         sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
         created_dt = sig_to_created.get(sig)
@@ -862,9 +881,17 @@ if st.session_state.screen_mode == "Events":
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+            # If this is Maths and user selected grades (Gr4-7) but row grades are empty,
+            # show the selected grades on the card
+            math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
+            if math_row and not grp_matches and (selected_gr_norm & TARGET_GRADES_MATH):
+                inferred = selected_grade_tokens_to_labels(selected_gr_norm & TARGET_GRADES_MATH)
+                grp_matches = inferred
+
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-            prog_link = first_url(prog_s.iloc[i])
+            # ✅ Programme / Document links: allow 2 (or more) and label Programme 1/2 or Documents 1/2
+            prog_links = extract_urls(prog_s.iloc[i])
             teams_link = first_url(teamlnk_s.iloc[i])
             confirm_link = first_url(conf_s.iloc[i])
 
@@ -877,19 +904,26 @@ if st.session_state.screen_mode == "Events":
             if cn == "academics":
                 b_docs = "Dokumente" if afr else "Documents"
                 b_info = "Inligting" if afr else "Information"
-                if prog_link and is_http(prog_link):
-                    buttons.append((b_docs, prog_link))
+
+                for idx, lk in enumerate(prog_links, start=1):
+                    if is_http(lk):
+                        buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
+
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
             else:
-                if prog_link and is_http(prog_link):
-                    buttons.append(("Programme", prog_link))
+                for idx, lk in enumerate(prog_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
+
                 if teams_link and is_http(teams_link):
                     buttons.append(("Teams", teams_link))
+
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
+
                 if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
                     buttons.append(("Confirm", confirm_link))
 
