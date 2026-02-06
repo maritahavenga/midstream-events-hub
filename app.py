@@ -1,4 +1,22 @@
 # -*- coding: utf-8 -*-
+# =============================
+# HARD RULES ADDED (Feb 2026)
+# =============================
+# 1) Assessment Schedule: if 2 documents are uploaded under Programme / Document Link,
+#    show BOTH buttons:
+#       1st button label = English
+#       2nd button label = Afrikaans
+#    (If more than 2 links, label extra as Document 3, Document 4...)
+#
+# 2) If 2+ links are uploaded under:
+#    - Programme / Document Link  -> Documents / Documents 2 (Academics) OR Programme / Programme 2 (Others)
+#    - Team                       -> Team / Team 2 / Team 3 ...
+#    - Confirm                    -> Confirm / Confirm 2 / Confirm 3 ...
+#
+# 3) REMOVE any "whole term / term" pinning to top:
+#    Everything is handled ONLY by Due Date (Date / Due Date) then alphabetical.
+# =============================
+
 import streamlit as st
 import pandas as pd
 import requests, io, re, pytz, hashlib
@@ -240,16 +258,20 @@ def extract_urls(v: str):
     raw = str(v or "").strip()
     if not raw:
         return []
-    return [u.strip() for u in URL_RE.findall(raw) if u.strip()]
+    urls = [u.strip() for u in URL_RE.findall(raw) if u.strip()]
+    # de-dupe but preserve order
+    seen = set()
+    out = []
+    for u in urls:
+        if u not in seen:
+            out.append(u)
+            seen.add(u)
+    return out
 
 def urls_signature_part(v: str) -> str:
     # Stable signature for matching New Updates, even if there are 2 links
     links = extract_urls(v)
     return "|".join(links[:2])  # keep it short but consistent
-
-def first_url(v: str) -> str:
-    links = extract_urls(v)
-    return links[0] if links else ""
 
 def split_info_text_and_links(info: str):
     raw = str(info or "").strip()
@@ -273,6 +295,10 @@ def normalize_category(v: str) -> str:
 def is_afrikaans_subject(b_raw: str) -> bool:
     s = str(b_raw or "").strip().lower()
     return ("afrikaans" in s) or (s in ["ht", "eat"]) or ("hooftaal" in s) or ("eerste addisionele" in s)
+
+def is_assessment_schedule(activity_raw: str, team_raw: str) -> bool:
+    s = (str(activity_raw or "") + " " + str(team_raw or "")).strip().lower()
+    return "assessment schedule" in s
 
 def norm_gender_words(text: str) -> str:
     s = str(text or "").strip().replace("_", " ")
@@ -612,7 +638,6 @@ new_hours = NEW_UPDATES_DEFAULT_HOURS
 TARGET_GRADES_MATH = {"gr4", "gr5", "gr6", "gr7"}
 
 def selected_grade_tokens_to_labels(sel_norm: set):
-    # sel_norm has tokens like "gr4"
     out = []
     for t in sorted(sel_norm):
         m = re.match(r"gr(\d+)", t)
@@ -671,7 +696,6 @@ def render_filters_main():
         key="u_choice",
     ) if (not wanted or "sport" in wanted) else []
 
-    # ✅ Grades filter for Gr 4–7
     grade_options = [f"Gr {i}" for i in range(4, 8)]
     selected_gr = st.multiselect(
         "Grades (Culture/Academics)",
@@ -683,7 +707,6 @@ def render_filters_main():
     selected_u_norm = {norm_token(x) for x in set(selected_u)}
     selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 
-    # Auto-scope when Category is empty
     force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
@@ -714,11 +737,9 @@ def render_filters_main():
             st.session_state.screen_mode = "Events"
             st.rerun()
 
-# Render filters only if on Filter screen
 if st.session_state.screen_mode == "Filter":
     render_filters_main()
 
-# If on Events screen, compute filter variables from session_state (no widgets)
 if st.session_state.screen_mode == "Events":
     wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
     selected_u_norm = {norm_token(x) for x in set(st.session_state.u_choice)}
@@ -810,7 +831,6 @@ if st.session_state.screen_mode == "Events":
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-        # ===== HARD RULE: Mathematics must work for Gr 4–7 even if grade field is blank/odd =====
         math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
         selected_has_target_grades = bool(selected_gr_norm & TARGET_GRADES_MATH)
 
@@ -825,11 +845,9 @@ if st.session_state.screen_mode == "Events":
             if grp_matches:
                 grp_norm = {norm_token(x) for x in grp_matches}
                 if not (selected_gr_norm & grp_norm):
-                    # If it's a Maths row and user selected Gr4-7, allow it through
                     if not (math_row and selected_has_target_grades):
                         continue
             else:
-                # No grade info in row: only allow if it's Maths and grades include Gr4-7
                 if not (math_row and selected_has_target_grades):
                     continue
 
@@ -854,14 +872,12 @@ if st.session_state.screen_mode == "Events":
             "i": i,
             "dt": sort_dt,
             "title": title.lower(),
-            "term": term_flag,
             "new": is_recent,
             "created_dt": created_dt,
         })
 
-    term_items = sorted([x for x in res if x["term"]], key=lambda x: x["title"])
-    other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"]))
-    res_sorted = term_items + other_items
+    # ✅ NO TERM PINNING: sort everything by Due Date then alphabetical
+    res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
     pin = "&#128205;"
@@ -881,8 +897,6 @@ if st.session_state.screen_mode == "Events":
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-            # If this is Maths and user selected grades (Gr4-7) but row grades are empty,
-            # show the selected grades on the card
             math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
             if math_row and not grp_matches and (selected_gr_norm & TARGET_GRADES_MATH):
                 inferred = selected_grade_tokens_to_labels(selected_gr_norm & TARGET_GRADES_MATH)
@@ -890,10 +904,10 @@ if st.session_state.screen_mode == "Events":
 
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-            # ✅ Programme / Document links: allow 2 (or more) and label Programme 1/2 or Documents 1/2
-            prog_links = extract_urls(prog_s.iloc[i])
-            teams_link = first_url(teamlnk_s.iloc[i])
-            confirm_link = first_url(conf_s.iloc[i])
+            # ✅ MULTI-LINK SUPPORT (Programme/Docs, Team, Confirm)
+            prog_links = extract_urls(prog_s.iloc[i])          # documents/programme can be 2+
+            team_links = extract_urls(teamlnk_s.iloc[i])       # Team can be 2+
+            confirm_links = extract_urls(conf_s.iloc[i])       # Confirm can be 2+
 
             info_raw = str(info_s.iloc[i]).strip().replace("_", " ")
             info_text, info_links = split_info_text_and_links(info_raw)
@@ -901,31 +915,64 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
+            # Special case: Assessment Schedule docs -> English / Afrikaans
+            is_assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
+
             if cn == "academics":
                 b_docs = "Dokumente" if afr else "Documents"
                 b_info = "Inligting" if afr else "Information"
 
-                for idx, lk in enumerate(prog_links, start=1):
-                    if is_http(lk):
-                        buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
+                if is_assess and len(prog_links) >= 1:
+                    # 1st = English, 2nd = Afrikaans
+                    if is_http(prog_links[0]):
+                        buttons.append(("English", prog_links[0]))
+                    if len(prog_links) >= 2 and is_http(prog_links[1]):
+                        buttons.append(("Afrikaans", prog_links[1]))
+                    # extras (if someone pasted more)
+                    for idx in range(3, len(prog_links) + 1):
+                        lk = prog_links[idx - 1]
+                        if is_http(lk):
+                            buttons.append((f"Document {idx}", lk))
+                else:
+                    # Normal academics documents: Documents, Documents 2, Documents 3...
+                    for idx, lk in enumerate(prog_links, start=1):
+                        if is_http(lk):
+                            buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
 
+                # Academics info links: Information, Information 2...
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
+
+                # Also allow Team / Confirm links in Academics if present (rule)
+                for idx, lk in enumerate(team_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
+
+                for idx, lk in enumerate(confirm_links, start=1):
+                    if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
+                        buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
+
             else:
+                # Non-academics: Programme links: Programme, Programme 2...
                 for idx, lk in enumerate(prog_links, start=1):
                     if is_http(lk):
                         buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
 
-                if teams_link and is_http(teams_link):
-                    buttons.append(("Teams", teams_link))
+                # Team links: Team, Team 2...
+                for idx, lk in enumerate(team_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
+                # Info links: Information, Information 2...
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
 
-                if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
-                    buttons.append(("Confirm", confirm_link))
+                # Confirm links: Confirm, Confirm 2...
+                for idx, lk in enumerate(confirm_links, start=1):
+                    if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
+                        buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
@@ -948,6 +995,7 @@ if st.session_state.screen_mode == "Events":
 
             btn_html = ""
             if buttons:
+                # keep only first 4 buttons like before
                 btn_html = "<div class='btnRow'>" + "".join(
                     [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
                 ) + "</div>"
