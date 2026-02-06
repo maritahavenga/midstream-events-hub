@@ -1,24 +1,28 @@
 # -*- coding: utf-8 -*-
 # =============================
-# HARD RULES (Feb 2026)
+# LMCP HUB (Feb 2026)
 # =============================
-# 1) Assessment Schedule:
-#    - If 2 documents are uploaded under Programme / Document Link:
-#         1st button label = English
-#         2nd button label = Afrikaans
-#      (If more than 2 links, label extra as Document 3, Document 4...)
+# Views:
+#   - All
+#   - Next 7 Days
+#   - Term Documents
+#   - Assessment Schedule
+#   - New Updates
 #
-# 2) If 2+ links are uploaded under:
-#    - Programme / Document Link  -> Documents / Documents 2 (Academics) OR Programme / Programme 2 (Others)
-#    - Team                       -> Team / Team 2 / Team 3 ...
-#    - Confirm                    -> Confirm / Confirm 2 / Confirm 3 ...
-#    - Information text links      -> Information / Information 2 ...
+# Sorting:
+#   - ALWAYS by Due Date then alphabetical (no "term items pinned at top")
 #
-# 3) REMOVE any "whole term / term" pinning to top:
-#    Everything is handled ONLY by Due Date (Date / Due Date) then alphabetical.
+# Links:
+#   - Programme/Document Link supports multiple URLs
+#   - Team supports multiple URLs -> Team, Team 2, ...
+#   - Confirm supports multiple URLs -> Confirm, Confirm 2, ...
+#   - Information supports multiple URLs inside text -> Information, Information 2, ...
 #
-# 4) NEW: View option "Assessment Schedule" (Option A)
-#    - When View = Assessment Schedule, only show Assessment Schedule items.
+# Assessment Schedule special:
+#   - If Programme/Document Link has 2 URLs -> buttons are English (1) and Afrikaans (2)
+#
+# Quick Grade preset (clean dropdown on Events screen):
+#   - Prefills BOTH Grade + Sport Age Group, but filters remain separate in FILTER screen
 # =============================
 
 import streamlit as st
@@ -44,11 +48,21 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-# ✅ Option A added here:
-VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "Assessment Schedule", "New Updates"]
-
+VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
+
+# =============================
+# QUICK GRADE PRESET (clean dropdown)
+# =============================
+QUICK_GRADE_OPTIONS = ["Off", "Gr 1-3", "Gr 4", "Gr 5", "Gr 6", "Gr 7"]
+GRADE_TO_U_MAP = {
+    "Gr 1-3": ["U7", "U8", "U9"],
+    "Gr 4": ["U10"],
+    "Gr 5": ["U11"],
+    "Gr 6": ["U12"],
+    "Gr 7": ["U13"],
+}
 
 # =============================
 # QUERY PARAMS HELPERS
@@ -88,13 +102,17 @@ def ss_init(key, default):
     if key not in st.session_state:
         st.session_state[key] = default
 
-ss_init("screen_mode", "Events")  # Events | Filter
-ss_init("view_mode", "Upcoming")
+ss_init("screen_mode", "Events")          # Events | Filter
+ss_init("view_mode", "All")               # default All
 ss_init("cat_choice", [])
 ss_init("act_choice", [])
 ss_init("u_choice", [])
 ss_init("gr_choice", [])
 ss_init("search_text", "")
+
+# Quick preset state
+ss_init("quick_grade", "Off")
+ss_init("_qg_applied", "Off")
 
 # =============================
 # INITIAL LOAD FROM QUERY PARAMS (ONCE)
@@ -114,6 +132,11 @@ if "qp_loaded" not in st.session_state:
     st.session_state.u_choice = qp_get_list("u")
     st.session_state.gr_choice = qp_get_list("gr")
     st.session_state.search_text = qp_get("q", "")
+
+    qg = qp_get("qg", "Off")
+    if qg in QUICK_GRADE_OPTIONS:
+        st.session_state.quick_grade = qg
+        st.session_state._qg_applied = "Off"  # allow apply once
 
 # =============================
 # STYLE
@@ -144,13 +167,7 @@ button[data-testid="stSidebarCollapseButton"] svg{
   width: 26px !important;
   height: 26px !important;
 }
-button[data-testid="collapsedControl"]::after{
-  content:"  Filter here";
-  font-weight: 1000;
-  font-size: 1.05rem;
-  color: var(--teal);
-  margin-left: 8px;
-}
+button[data-testid="collapsedControl"]::after,
 button[data-testid="stSidebarCollapseButton"]::after{
   content:"  Filter here";
   font-weight: 1000;
@@ -230,6 +247,8 @@ div[data-testid="stBaseButton-secondary"] > button{
 }
 .rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
+.smallTopRow div[data-baseweb="select"]{max-width:240px;}
+.smallTopRow .stCaptionContainer{margin-top:-10px;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -516,7 +535,7 @@ def safe_load(url: str):
 
 df = safe_load(UPCOMING_CSV_URL)
 if df.empty:
-    st.error("No data loaded from the Upcoming sheet.")
+    st.error("No data loaded from the sheet.")
     st.stop()
 
 sub_df = safe_load(SUBMISSIONS_CSV_URL)
@@ -599,9 +618,49 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
             sig_to_created[sig] = created_dt
 
 # =============================
-# TOP ACTION BUTTONS
+# TOP BAR: Quick Grade + Filter button
 # =============================
-top_left, top_right = st.columns([3, 2])
+top_left, top_mid, top_right = st.columns([2.0, 1.0, 1.2])
+
+with top_left:
+    if st.session_state.screen_mode == "Events":
+        st.markdown("<div class='smallTopRow'>", unsafe_allow_html=True)
+        st.selectbox(
+            "Grade shortcut",
+            QUICK_GRADE_OPTIONS,
+            index=QUICK_GRADE_OPTIONS.index(st.session_state.quick_grade) if st.session_state.quick_grade in QUICK_GRADE_OPTIONS else 0,
+            key="quick_grade",
+            label_visibility="collapsed",
+        )
+        st.caption("Grade shortcut")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+with top_mid:
+    # Apply preset ONLY when changed (Events screen)
+    if st.session_state.screen_mode == "Events":
+        qg = st.session_state.quick_grade
+        if qg in QUICK_GRADE_OPTIONS and qg != st.session_state._qg_applied:
+            if qg == "Off":
+                st.session_state._qg_applied = "Off"
+            else:
+                if qg == "Gr 1-3":
+                    st.session_state.gr_choice = ["Gr 1", "Gr 2", "Gr 3"]
+                else:
+                    st.session_state.gr_choice = [qg]
+                st.session_state.u_choice = GRADE_TO_U_MAP.get(qg, [])
+                st.session_state._qg_applied = qg
+
+                payload_now = {
+                    "view": st.session_state.view_mode,
+                    "cat": st.session_state.cat_choice,
+                    "act": st.session_state.act_choice,
+                    "u": st.session_state.u_choice,
+                    "gr": st.session_state.gr_choice,
+                    "q": st.session_state.search_text,
+                    "qg": st.session_state.quick_grade,
+                }
+                qp_set_from_state(payload_now)
+                st.rerun()
 
 with top_right:
     if st.session_state.screen_mode == "Events":
@@ -614,13 +673,13 @@ with top_right:
             st.rerun()
 
 # =============================
-# VIEW (still on top)
+# VIEW (top)
 # =============================
 st.radio(
-    "View",
+    "Show",
     VIEW_OPTIONS,
-    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "Upcoming"))
-    if st.session_state.get("view_mode", "Upcoming") in VIEW_OPTIONS else 0,
+    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "All"))
+    if st.session_state.get("view_mode", "All") in VIEW_OPTIONS else 0,
     horizontal=True,
     key="view_mode",
 )
@@ -696,7 +755,7 @@ def render_filters_main():
         key="u_choice",
     ) if (not wanted or "sport" in wanted) else []
 
-    grade_options = [f"Gr {i}" for i in range(4, 8)]
+    grade_options = [f"Gr {i}" for i in range(1, 8)]
     selected_gr = st.multiselect(
         "Grades (Culture/Academics)",
         grade_options,
@@ -727,6 +786,7 @@ def render_filters_main():
                 "u": st.session_state.u_choice,
                 "gr": st.session_state.gr_choice,
                 "q": st.session_state.search_text,
+                "qg": st.session_state.quick_grade,
             }
             qp_set_from_state(payload_now)
             st.session_state.screen_mode = "Events"
@@ -740,10 +800,11 @@ def render_filters_main():
 if st.session_state.screen_mode == "Filter":
     render_filters_main()
 
+# If on Events screen, compute filter variables from session_state (no widgets)
 if st.session_state.screen_mode == "Events":
     wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
     selected_u_norm = {norm_token(x) for x in set(st.session_state.u_choice)}
-    grade_options = [f"Gr {i}" for i in range(4, 8)]
+    grade_options = [f"Gr {i}" for i in range(1, 8)]
     selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.gr_choice if g in grade_options])}
 
     force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
@@ -760,6 +821,7 @@ payload = {
     "u": st.session_state.u_choice,
     "gr": st.session_state.gr_choice,
     "q": st.session_state.search_text,
+    "qg": st.session_state.quick_grade,
 }
 if st.session_state.get("_last_qp_payload") != payload:
     st.session_state["_last_qp_payload"] = payload
@@ -805,9 +867,10 @@ if st.session_state.screen_mode == "Events":
         if st.session_state.act_choice and row_act_key not in st.session_state.act_choice:
             continue
 
-        # Due date parse & past filter
         d_raw = str(date_s.iloc[i]).strip()
         d_dt = parse_date_sa(d_raw)
+
+        # Past items hidden for all views
         if d_dt and d_dt.date() < today:
             continue
 
@@ -830,13 +893,13 @@ if st.session_state.screen_mode == "Events":
             if not term_flag:
                 continue
 
-        # ✅ Option A view filter:
         if st.session_state.view_mode == "Assessment Schedule":
             if not is_assessment_schedule(act_s.iloc[i], team_s.iloc[i]):
                 continue
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+        # Maths hard rule (Gr4-7)
         math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
         selected_has_target_grades = bool(selected_gr_norm & TARGET_GRADES_MATH)
 
@@ -882,7 +945,7 @@ if st.session_state.screen_mode == "Events":
             "created_dt": created_dt,
         })
 
-    # ✅ NO TERM PINNING: sort everything by Due Date then alphabetical
+    # Sort always by date then title
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
@@ -903,6 +966,7 @@ if st.session_state.screen_mode == "Events":
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+            # If Maths and grades missing, show selected grades (Gr4-7) on card
             math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
             if math_row and not grp_matches and (selected_gr_norm & TARGET_GRADES_MATH):
                 inferred = selected_grade_tokens_to_labels(selected_gr_norm & TARGET_GRADES_MATH)
@@ -910,7 +974,6 @@ if st.session_state.screen_mode == "Events":
 
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-            # ✅ MULTI-LINK SUPPORT (Programme/Docs, Team, Confirm)
             prog_links = extract_urls(prog_s.iloc[i])
             team_links = extract_urls(teamlnk_s.iloc[i])
             confirm_links = extract_urls(conf_s.iloc[i])
@@ -942,16 +1005,17 @@ if st.session_state.screen_mode == "Events":
                         if is_http(lk):
                             buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
 
+                # Information links -> Information / Information 2
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
 
-                # Team links: Team / Team 2 ...
+                # Team links -> Team / Team 2
                 for idx, lk in enumerate(team_links, start=1):
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-                # Confirm links: Confirm / Confirm 2 ...
+                # Confirm links -> Confirm / Confirm 2
                 for idx, lk in enumerate(confirm_links, start=1):
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
