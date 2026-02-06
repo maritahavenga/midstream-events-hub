@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 # =============================
-# HARD RULES ADDED (Feb 2026)
+# HARD RULES (Feb 2026)
 # =============================
-# 1) Assessment Schedule: if 2 documents are uploaded under Programme / Document Link,
-#    show BOTH buttons:
-#       1st button label = English
-#       2nd button label = Afrikaans
-#    (If more than 2 links, label extra as Document 3, Document 4...)
+# 1) Assessment Schedule:
+#    - If 2 documents are uploaded under Programme / Document Link:
+#         1st button label = English
+#         2nd button label = Afrikaans
+#      (If more than 2 links, label extra as Document 3, Document 4...)
 #
 # 2) If 2+ links are uploaded under:
 #    - Programme / Document Link  -> Documents / Documents 2 (Academics) OR Programme / Programme 2 (Others)
 #    - Team                       -> Team / Team 2 / Team 3 ...
 #    - Confirm                    -> Confirm / Confirm 2 / Confirm 3 ...
+#    - Information text links      -> Information / Information 2 ...
 #
 # 3) REMOVE any "whole term / term" pinning to top:
 #    Everything is handled ONLY by Due Date (Date / Due Date) then alphabetical.
+#
+# 4) NEW: View option "Assessment Schedule" (Option A)
+#    - When View = Assessment Schedule, only show Assessment Schedule items.
 # =============================
 
 import streamlit as st
@@ -40,7 +44,9 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
+# ✅ Option A added here:
+VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "Assessment Schedule", "New Updates"]
+
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
 
@@ -259,7 +265,6 @@ def extract_urls(v: str):
     if not raw:
         return []
     urls = [u.strip() for u in URL_RE.findall(raw) if u.strip()]
-    # de-dupe but preserve order
     seen = set()
     out = []
     for u in urls:
@@ -269,9 +274,8 @@ def extract_urls(v: str):
     return out
 
 def urls_signature_part(v: str) -> str:
-    # Stable signature for matching New Updates, even if there are 2 links
     links = extract_urls(v)
-    return "|".join(links[:2])  # keep it short but consistent
+    return "|".join(links[:2])
 
 def split_info_text_and_links(info: str):
     raw = str(info or "").strip()
@@ -317,7 +321,6 @@ def is_math_activity(activity_raw: str) -> bool:
 # ACTIVITY: display vs filter
 # =============================
 def display_activity(cat_norm: str, activity_raw: str) -> str:
-    """What shows in the CARD title."""
     s = str(activity_raw or "").strip()
     if cat_norm == "sport":
         return s
@@ -328,14 +331,12 @@ def display_activity(cat_norm: str, activity_raw: str) -> str:
     if sl in ["eat", "afrikaans eat"] or "eerste addisionele" in sl:
         return "Afrikaans Eerste Addisionele Taal"
 
-    # ✅ Always refer to Mathematics (not Maths)
     if is_math_activity(sl):
         return "Mathematics"
 
     return s.title()
 
 def sport_base_activity(activity_raw: str) -> str:
-    """What shows in the Activity filter for sport (basic labels only)."""
     s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
     if "swim" in s or "swem" in s or "gala" in s: return "Swimming"
     if "athlet" in s or "atletiek" in s: return "Athletics"
@@ -479,7 +480,6 @@ def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> s
     act_txt = norm_gender_words(display_activity(cat_norm, act_val))
     team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
 
-    # ✅ Sport: if team blank, include age range in title
     if cat_norm == "sport" and not team_clean:
         grp_disp, _ = group_for_row("sport", grade_val, team_val)
         return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
@@ -805,6 +805,19 @@ if st.session_state.screen_mode == "Events":
         if st.session_state.act_choice and row_act_key not in st.session_state.act_choice:
             continue
 
+        # Due date parse & past filter
+        d_raw = str(date_s.iloc[i]).strip()
+        d_dt = parse_date_sa(d_raw)
+        if d_dt and d_dt.date() < today:
+            continue
+
+        # View filters
+        if st.session_state.view_mode == "Next 7 Days":
+            if not d_dt:
+                continue
+            if d_dt.date() > (today + timedelta(days=7)):
+                continue
+
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -813,20 +826,13 @@ if st.session_state.screen_mode == "Events":
         )
         term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
-        d_raw = str(date_s.iloc[i]).strip()
-        d_dt = parse_date_sa(d_raw)
-
-        if d_dt and d_dt.date() < today:
-            continue
-
-        if st.session_state.view_mode == "Next 7 Days":
-            if not d_dt:
-                continue
-            if d_dt.date() > (today + timedelta(days=7)):
-                continue
-
         if st.session_state.view_mode == "Term Documents":
             if not term_flag:
+                continue
+
+        # ✅ Option A view filter:
+        if st.session_state.view_mode == "Assessment Schedule":
+            if not is_assessment_schedule(act_s.iloc[i], team_s.iloc[i]):
                 continue
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
@@ -905,9 +911,9 @@ if st.session_state.screen_mode == "Events":
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
             # ✅ MULTI-LINK SUPPORT (Programme/Docs, Team, Confirm)
-            prog_links = extract_urls(prog_s.iloc[i])          # documents/programme can be 2+
-            team_links = extract_urls(teamlnk_s.iloc[i])       # Team can be 2+
-            confirm_links = extract_urls(conf_s.iloc[i])       # Confirm can be 2+
+            prog_links = extract_urls(prog_s.iloc[i])
+            team_links = extract_urls(teamlnk_s.iloc[i])
+            confirm_links = extract_urls(conf_s.iloc[i])
 
             info_raw = str(info_s.iloc[i]).strip().replace("_", " ")
             info_text, info_links = split_info_text_and_links(info_raw)
@@ -915,61 +921,54 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            # Special case: Assessment Schedule docs -> English / Afrikaans
             is_assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
 
             if cn == "academics":
                 b_docs = "Dokumente" if afr else "Documents"
                 b_info = "Inligting" if afr else "Information"
 
+                # Assessment Schedule docs -> English / Afrikaans
                 if is_assess and len(prog_links) >= 1:
-                    # 1st = English, 2nd = Afrikaans
                     if is_http(prog_links[0]):
                         buttons.append(("English", prog_links[0]))
                     if len(prog_links) >= 2 and is_http(prog_links[1]):
                         buttons.append(("Afrikaans", prog_links[1]))
-                    # extras (if someone pasted more)
                     for idx in range(3, len(prog_links) + 1):
                         lk = prog_links[idx - 1]
                         if is_http(lk):
                             buttons.append((f"Document {idx}", lk))
                 else:
-                    # Normal academics documents: Documents, Documents 2, Documents 3...
                     for idx, lk in enumerate(prog_links, start=1):
                         if is_http(lk):
                             buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
 
-                # Academics info links: Information, Information 2...
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
 
-                # Also allow Team / Confirm links in Academics if present (rule)
+                # Team links: Team / Team 2 ...
                 for idx, lk in enumerate(team_links, start=1):
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
+                # Confirm links: Confirm / Confirm 2 ...
                 for idx, lk in enumerate(confirm_links, start=1):
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
             else:
-                # Non-academics: Programme links: Programme, Programme 2...
                 for idx, lk in enumerate(prog_links, start=1):
                     if is_http(lk):
                         buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
 
-                # Team links: Team, Team 2...
                 for idx, lk in enumerate(team_links, start=1):
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-                # Info links: Information, Information 2...
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
 
-                # Confirm links: Confirm, Confirm 2...
                 for idx, lk in enumerate(confirm_links, start=1):
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
@@ -995,7 +994,6 @@ if st.session_state.screen_mode == "Events":
 
             btn_html = ""
             if buttons:
-                # keep only first 4 buttons like before
                 btn_html = "<div class='btnRow'>" + "".join(
                     [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
                 ) + "</div>"
