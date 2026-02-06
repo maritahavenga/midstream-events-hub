@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
@@ -11,21 +10,32 @@ from requests.exceptions import RequestException, Timeout
 # =============================
 st.set_page_config(page_title="LMCP Hub", page_icon="📌", layout="wide")
 
-# ✅ Upcoming sheet you display (published CSV)
 UPCOMING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW1BP7Gds7hz04Gdrqrigq2SEVrUB_cmkkMo6Bh-4hci-YcjK3Ww9tVr7-GmKbWDPkCSwd0SLW2Ai8/pub?gid=37057995&single=true&output=csv"
-
-# ✅ Responses sheet (Timestamp column) - CSV export
 SUBMISSIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/1jB78iGRp3pmwib7k_MfdwzMC402QY9MPtHKC3TAAlPQ/export?format=csv&gid=1864466191"
-
 LOGO_URL = "https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg"
 
 TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-VIEW_OPTIONS = ["Upcoming", "Next 7 Days", "Term Documents", "New Updates"]
+VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
+
+# =============================
+# QUICK SELECT (clean dropdown)
+# =============================
+QUICK_GRADE_PLACEHOLDER = "Select a grade…"
+QUICK_GRADE_CLEAR = "Clear selection"
+QUICK_GRADE_OPTIONS = [QUICK_GRADE_PLACEHOLDER, "Gr 1-3", "Gr 4", "Gr 5", "Gr 6", "Gr 7", QUICK_GRADE_CLEAR]
+
+GRADE_TO_U_MAP = {
+    "Gr 1-3": ["U7", "U8", "U9"],
+    "Gr 4": ["U10"],
+    "Gr 5": ["U11"],
+    "Gr 6": ["U12"],
+    "Gr 7": ["U13"],
+}
 
 # =============================
 # QUERY PARAMS HELPERS
@@ -66,12 +76,16 @@ def ss_init(key, default):
         st.session_state[key] = default
 
 ss_init("screen_mode", "Events")  # Events | Filter
-ss_init("view_mode", "Upcoming")
+ss_init("view_mode", "All")
 ss_init("cat_choice", [])
 ss_init("act_choice", [])
 ss_init("u_choice", [])
 ss_init("gr_choice", [])
 ss_init("search_text", "")
+
+# quick select
+ss_init("quick_grade", QUICK_GRADE_PLACEHOLDER)
+ss_init("_qg_applied", QUICK_GRADE_PLACEHOLDER)
 
 # =============================
 # INITIAL LOAD FROM QUERY PARAMS (ONCE)
@@ -92,112 +106,64 @@ if "qp_loaded" not in st.session_state:
     st.session_state.gr_choice = qp_get_list("gr")
     st.session_state.search_text = qp_get("q", "")
 
+    qg = qp_get("qg", QUICK_GRADE_PLACEHOLDER)
+    if qg in QUICK_GRADE_OPTIONS:
+        st.session_state.quick_grade = qg
+        st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+
 # =============================
-# STYLE (arrow big/bold + "Filter here" + themed buttons)
+# STYLE
 # =============================
 st.markdown(
     """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
 html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
-:root{
-  --maroon:#800000; --teal:#008080; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06);
-}
+:root{ --maroon:#800000; --teal:#008080; --line:#e8edf5; --shadow:0 10px 30px rgba(0,0,0,.06); }
 .block-container{padding-top:1.35rem;}
-div[data-testid="stSidebar"] label,
-div[data-testid="stSidebar"] p,
-div[data-testid="stSidebar"] span{
-  white-space:normal !important;
-  word-break:break-word !important;
+div[data-testid="stSidebar"] label, div[data-testid="stSidebar"] p, div[data-testid="stSidebar"] span{
+  white-space:normal !important; word-break:break-word !important;
 }
-
-/* ✅ Make the sidebar arrow button BIG + BOLD */
-button[data-testid="collapsedControl"],
-button[data-testid="stSidebarCollapseButton"]{
-  transform: scale(1.18);
-  transform-origin: left center;
-  font-weight: 900 !important;
+button[data-testid="collapsedControl"], button[data-testid="stSidebarCollapseButton"]{
+  transform: scale(1.18); transform-origin: left center; font-weight: 900 !important;
 }
-
-/* ✅ Make the arrow icon bigger (SVG) */
-button[data-testid="collapsedControl"] svg,
-button[data-testid="stSidebarCollapseButton"] svg{
-  width: 26px !important;
-  height: 26px !important;
+button[data-testid="collapsedControl"] svg, button[data-testid="stSidebarCollapseButton"] svg{
+  width: 26px !important; height: 26px !important;
 }
-
-/* ✅ Put text "Filter here" next to the arrow, BIG + BOLD */
-button[data-testid="collapsedControl"]::after{
-  content:"  Filter here";
-  font-weight: 1000;
-  font-size: 1.05rem;
-  color: var(--teal);
-  margin-left: 8px;
+button[data-testid="collapsedControl"]::after, button[data-testid="stSidebarCollapseButton"]::after{
+  content:"  Filter here"; font-weight: 1000; font-size: 1.05rem; color: var(--teal); margin-left: 8px;
 }
-button[data-testid="stSidebarCollapseButton"]::after{
-  content:"  Filter here";
-  font-weight: 1000;
-  font-size: 1.05rem;
-  color: var(--teal);
-  margin-left: 8px;
-}
-
-/* ✅ Make Streamlit primary buttons match teal */
 div[data-testid="stBaseButton-primary"] > button{
-  background: var(--teal) !important;
-  border: 1px solid rgba(0,0,0,0.08) !important;
-  font-weight: 1000 !important;
-  padding: 0.8rem 1rem !important;
-  border-radius: 14px !important;
+  background: var(--teal) !important; border: 1px solid rgba(0,0,0,0.08) !important;
+  font-weight: 1000 !important; padding: 0.8rem 1rem !important; border-radius: 14px !important;
 }
 div[data-testid="stBaseButton-primary"] > button:hover{opacity:.92;}
 div[data-testid="stBaseButton-secondary"] > button{
-  font-weight: 900 !important;
-  padding: 0.8rem 1rem !important;
-  border-radius: 14px !important;
+  font-weight: 900 !important; padding: 0.8rem 1rem !important; border-radius: 14px !important;
 }
-
-/* ✅ Banner + cards */
 .topBanner{
-  margin-top:14px;
-  border-radius:22px;
-  padding:18px 18px 16px 18px;
-  margin-bottom:14px;
-  background:#008080;
-  box-shadow:var(--shadow);
-  color:#fff;
+  margin-top:14px; border-radius:22px; padding:18px 18px 16px 18px; margin-bottom:14px;
+  background:#008080; box-shadow:var(--shadow); color:#fff;
 }
 .topBannerInner{display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center;}
 .longLogo{
-  width:min(900px, 100%);
-  border-radius:16px;
-  background:#fff;
-  padding:10px 12px;
+  width:min(900px, 100%); border-radius:16px; background:#fff; padding:10px 12px;
   border:2px solid rgba(255,255,255,0.35);
 }
 .longLogo img{width:100%;height:auto;display:block;}
 .hubText{font-weight:900;font-size:1.65rem;letter-spacing:.3px;}
-
 .card{
-  border:1px solid var(--line);
-  background:#fff;
-  box-shadow:var(--shadow);
-  border-radius:18px;
-  padding:14px 14px 12px 14px;
-  margin-bottom:14px;
-  border-left:10px solid var(--maroon);
-  position:relative;
+  border:1px solid var(--line); background:#fff; box-shadow:var(--shadow);
+  border-radius:18px; padding:14px 14px 12px 14px; margin-bottom:14px;
+  border-left:10px solid var(--maroon); position:relative;
 }
 .card-title{font-weight:900;color:var(--maroon);font-size:1.15rem;line-height:1.2;}
 .meta{color:#64748b;margin-top:8px;font-size:.95rem;}
-
 .noteBlock{
   margin-top:12px;padding:12px;border-radius:14px;
-  background:rgba(0,128,128,0.08);
-  border:1px solid rgba(0,128,128,0.25);
+  background:rgba(0,128,128,0.08); border:1px solid rgba(0,128,128,0.25);
   color:#0f172a;font-size:.95rem;line-height:1.35;
 }
-
 .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 .btn{
   display:inline-block;background:var(--teal);color:white !important;
@@ -205,22 +171,16 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
-
 .ribbon{
-  position:absolute; right:12px; bottom:12px;
-  background:#FFD400;
-  color:#B00000;
-  font-weight:1000;
-  font-size:.78rem;
-  padding:6px 10px;
-  border-radius:999px;
-  border:1px solid rgba(176,0,0,0.25);
-  box-shadow:0 8px 16px rgba(0,0,0,0.10);
-  display:flex;align-items:center;gap:8px;
-  z-index:5;
+  position:absolute; right:12px; bottom:12px; background:#FFD400; color:#B00000;
+  font-weight:1000; font-size:.78rem; padding:6px 10px; border-radius:999px;
+  border:1px solid rgba(176,0,0,0.25); box-shadow:0 8px 16px rgba(0,0,0,0.10);
+  display:flex;align-items:center;gap:8px; z-index:5;
 }
 .rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
+.smallTopRow div[data-baseweb="select"]{max-width:280px;}
+.smallTopHelp{font-size:.85rem;color:#64748b;margin-top:-8px;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -251,10 +211,21 @@ def is_http(u: str) -> bool:
     s = str(u or "").strip().lower()
     return s.startswith("http://") or s.startswith("https://")
 
-def first_url(v: str) -> str:
-    s = str(v or "").replace("\n", " ").strip()
-    m = re.search(r"https?://\S+", s)
-    return m.group(0) if m else ""
+def extract_urls(v: str):
+    raw = str(v or "").strip()
+    if not raw:
+        return []
+    urls = [u.strip() for u in URL_RE.findall(raw) if u.strip()]
+    seen, out = set(), []
+    for u in urls:
+        if u not in seen:
+            out.append(u)
+            seen.add(u)
+    return out
+
+def urls_signature_part(v: str) -> str:
+    links = extract_urls(v)
+    return "|".join(links[:2])
 
 def split_info_text_and_links(info: str):
     raw = str(info or "").strip()
@@ -279,6 +250,10 @@ def is_afrikaans_subject(b_raw: str) -> bool:
     s = str(b_raw or "").strip().lower()
     return ("afrikaans" in s) or (s in ["ht", "eat"]) or ("hooftaal" in s) or ("eerste addisionele" in s)
 
+def is_assessment_schedule(activity_raw: str, team_raw: str) -> bool:
+    s = (str(activity_raw or "") + " " + str(team_raw or "")).strip().lower()
+    return "assessment schedule" in s
+
 def norm_gender_words(text: str) -> str:
     s = str(text or "").strip().replace("_", " ")
     s = re.sub(r"\s+", " ", s).strip()
@@ -288,11 +263,14 @@ def norm_gender_words(text: str) -> str:
     s = re.sub(r"\bboys\b", "Boys", s, flags=re.I)
     return re.sub(r"\s+", " ", s).strip()
 
+def is_math_activity(activity_raw: str) -> bool:
+    s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
+    return ("wiskunde" in s) or ("mathematics" in s) or ("maths" in s) or (s == "math") or ("math " in s)
+
 # =============================
 # ACTIVITY: display vs filter
 # =============================
 def display_activity(cat_norm: str, activity_raw: str) -> str:
-    """What shows in the CARD title."""
     s = str(activity_raw or "").strip()
     if cat_norm == "sport":
         return s
@@ -303,14 +281,12 @@ def display_activity(cat_norm: str, activity_raw: str) -> str:
     if sl in ["eat", "afrikaans eat"] or "eerste addisionele" in sl:
         return "Afrikaans Eerste Addisionele Taal"
 
-    # ✅ Always refer to Mathematics (not Maths)
-    if "wiskunde" in sl or "mathematics" in sl or sl == "math" or "maths" in sl:
+    if is_math_activity(sl):
         return "Mathematics"
 
     return s.title()
 
 def sport_base_activity(activity_raw: str) -> str:
-    """What shows in the Activity filter for sport (basic labels only)."""
     s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
     if "swim" in s or "swem" in s or "gala" in s: return "Swimming"
     if "athlet" in s or "atletiek" in s: return "Athletics"
@@ -454,7 +430,6 @@ def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> s
     act_txt = norm_gender_words(display_activity(cat_norm, act_val))
     team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
 
-    # ✅ Sport: if team blank, include age range in title
     if cat_norm == "sport" and not team_clean:
         grp_disp, _ = group_for_row("sport", grade_val, team_val)
         return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
@@ -491,7 +466,7 @@ def safe_load(url: str):
 
 df = safe_load(UPCOMING_CSV_URL)
 if df.empty:
-    st.error("No data loaded from the Upcoming sheet.")
+    st.error("No data loaded from the sheet.")
     st.stop()
 
 sub_df = safe_load(SUBMISSIONS_CSV_URL)
@@ -544,7 +519,7 @@ def row_signature(category, activity, team_assessment, due_date, venue, programm
         norm_token(team_assessment),
         norm_token(due_date),
         norm_token(venue),
-        norm_token(first_url(programme_link)),
+        norm_token(urls_signature_part(programme_link)),
     ]
     return hashlib.sha256("||".join(parts).encode("utf-8")).hexdigest()
 
@@ -574,9 +549,68 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
             sig_to_created[sig] = created_dt
 
 # =============================
-# TOP ACTION BUTTONS (reliable)
+# TOP BAR: Quick select + Filter button
 # =============================
-top_left, top_right = st.columns([3, 2])
+top_left, top_mid, top_right = st.columns([2.2, 1.0, 1.2])
+
+with top_left:
+    if st.session_state.screen_mode == "Events":
+        st.markdown("<div class='smallTopRow'>", unsafe_allow_html=True)
+        st.selectbox(
+            "Quick select",
+            QUICK_GRADE_OPTIONS,
+            index=QUICK_GRADE_OPTIONS.index(st.session_state.quick_grade) if st.session_state.quick_grade in QUICK_GRADE_OPTIONS else 0,
+            key="quick_grade",
+            label_visibility="collapsed",
+        )
+        st.markdown("<div class='smallTopHelp'><b>Select a grade</b> to auto-set Grade + Sport Age Group.</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+with top_mid:
+    # Apply preset ONLY when changed (Events screen)
+    if st.session_state.screen_mode == "Events":
+        qg = st.session_state.quick_grade
+        if qg in QUICK_GRADE_OPTIONS and qg != st.session_state._qg_applied:
+            # Clear selection = only reset dropdown (do NOT wipe filters)
+            if qg == QUICK_GRADE_CLEAR:
+                st.session_state.quick_grade = QUICK_GRADE_PLACEHOLDER
+                st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+                payload_now = {
+                    "view": st.session_state.view_mode,
+                    "cat": st.session_state.cat_choice,
+                    "act": st.session_state.act_choice,
+                    "u": st.session_state.u_choice,
+                    "gr": st.session_state.gr_choice,
+                    "q": st.session_state.search_text,
+                    "qg": st.session_state.quick_grade,
+                }
+                qp_set_from_state(payload_now)
+                st.rerun()
+
+            # Placeholder: do nothing
+            if qg == QUICK_GRADE_PLACEHOLDER:
+                st.session_state._qg_applied = qg
+
+            # Apply grade shortcut
+            if qg not in [QUICK_GRADE_PLACEHOLDER, QUICK_GRADE_CLEAR]:
+                if qg == "Gr 1-3":
+                    st.session_state.gr_choice = ["Gr 1", "Gr 2", "Gr 3"]
+                else:
+                    st.session_state.gr_choice = [qg]
+                st.session_state.u_choice = GRADE_TO_U_MAP.get(qg, [])
+                st.session_state._qg_applied = qg
+
+                payload_now = {
+                    "view": st.session_state.view_mode,
+                    "cat": st.session_state.cat_choice,
+                    "act": st.session_state.act_choice,
+                    "u": st.session_state.u_choice,
+                    "gr": st.session_state.gr_choice,
+                    "q": st.session_state.search_text,
+                    "qg": st.session_state.quick_grade,
+                }
+                qp_set_from_state(payload_now)
+                st.rerun()
 
 with top_right:
     if st.session_state.screen_mode == "Events":
@@ -589,19 +623,19 @@ with top_right:
             st.rerun()
 
 # =============================
-# VIEW (still on top)
+# VIEW
 # =============================
 st.radio(
-    "View",
+    "Show",
     VIEW_OPTIONS,
-    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "Upcoming"))
-    if st.session_state.get("view_mode", "Upcoming") in VIEW_OPTIONS else 0,
+    index=VIEW_OPTIONS.index(st.session_state.get("view_mode", "All"))
+    if st.session_state.get("view_mode", "All") in VIEW_OPTIONS else 0,
     horizontal=True,
     key="view_mode",
 )
 
 # =============================
-# FILTERS (Filter screen)
+# FILTERS
 # =============================
 wanted = set()
 selected_u_norm = set()
@@ -610,10 +644,60 @@ force_sport = False
 force_grades = False
 new_hours = NEW_UPDATES_DEFAULT_HOURS
 
+TARGET_GRADES_MATH = {"gr4", "gr5", "gr6", "gr7"}
+
+def selected_grade_tokens_to_labels(sel_norm: set):
+    out = []
+    for t in sorted(sel_norm):
+        m = re.match(r"gr(\d+)", t)
+        if m:
+            out.append(f"Gr {int(m.group(1))}")
+    return out
+
+def clear_all_filters():
+    st.session_state.cat_choice = []
+    st.session_state.act_choice = []
+    st.session_state.u_choice = []
+    st.session_state.gr_choice = []
+    st.session_state.search_text = ""
+    st.session_state.quick_grade = QUICK_GRADE_PLACEHOLDER
+    st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+    st.query_params.from_dict({})
+    st.rerun()
+
+def save_and_back():
+    payload_now = {
+        "view": st.session_state.view_mode,
+        "cat": st.session_state.cat_choice,
+        "act": st.session_state.act_choice,
+        "u": st.session_state.u_choice,
+        "gr": st.session_state.gr_choice,
+        "q": st.session_state.search_text,
+        "qg": st.session_state.quick_grade,
+    }
+    qp_set_from_state(payload_now)
+    st.session_state.screen_mode = "Events"
+    st.rerun()
+
 def render_filters_main():
     global wanted, selected_u_norm, selected_gr_norm, force_sport, force_grades, new_hours
 
     st.markdown("## 🔎 Filters")
+
+    # TOP action row (requested)
+    a1, a2, a3 = st.columns([1, 1, 1])
+    with a1:
+        if st.button("✅ Save filters & Back to Events", key="save_back_top", type="primary", use_container_width=True):
+            save_and_back()
+    with a2:
+        if st.button("🧹 Clear all filters", key="clear_all_top", type="secondary", use_container_width=True):
+            clear_all_filters()
+    with a3:
+        if st.button("⬅ Back (no changes)", key="back_no_save_top", type="secondary", use_container_width=True):
+            st.session_state.screen_mode = "Events"
+            st.rerun()
+
+    st.markdown("---")
 
     st.multiselect(
         "Category",
@@ -661,8 +745,7 @@ def render_filters_main():
         key="u_choice",
     ) if (not wanted or "sport" in wanted) else []
 
-    # ✅ Grades filter for Gr 4–7
-    grade_options = [f"Gr {i}" for i in range(4, 8)]
+    grade_options = [f"Gr {i}" for i in range(1, 8)]
     selected_gr = st.multiselect(
         "Grades (Culture/Academics)",
         grade_options,
@@ -673,7 +756,6 @@ def render_filters_main():
     selected_u_norm = {norm_token(x) for x in set(selected_u)}
     selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 
-    # Auto-scope when Category is empty
     force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
@@ -683,45 +765,34 @@ def render_filters_main():
         new_hours = NEW_UPDATES_DEFAULT_HOURS
 
     st.markdown("---")
-    c1, c2 = st.columns([1, 1])
 
-    with c1:
-        if st.button("✅ Save filters & Back to Events", key="save_back", type="primary", use_container_width=True):
-            payload_now = {
-                "view": st.session_state.view_mode,
-                "cat": st.session_state.cat_choice,
-                "act": st.session_state.act_choice,
-                "u": st.session_state.u_choice,
-                "gr": st.session_state.gr_choice,
-                "q": st.session_state.search_text,
-            }
-            qp_set_from_state(payload_now)
+    # BOTTOM action row (requested)
+    b1, b2, b3 = st.columns([1, 1, 1])
+    with b1:
+        if st.button("✅ Save filters & Back to Events", key="save_back_bottom", type="primary", use_container_width=True):
+            save_and_back()
+    with b2:
+        if st.button("🧹 Clear all filters", key="clear_all_bottom", type="secondary", use_container_width=True):
+            clear_all_filters()
+    with b3:
+        if st.button("⬅ Back (no changes)", key="back_no_save_bottom", type="secondary", use_container_width=True):
             st.session_state.screen_mode = "Events"
             st.rerun()
 
-    with c2:
-        if st.button("⬅ Back (no changes)", key="back_no_save", type="secondary", use_container_width=True):
-            st.session_state.screen_mode = "Events"
-            st.rerun()
-
-# Render filters only if on Filter screen
 if st.session_state.screen_mode == "Filter":
     render_filters_main()
 
-# If on Events screen, compute filter variables from session_state (no widgets)
+# Compute filter vars on Events screen
 if st.session_state.screen_mode == "Events":
     wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
     selected_u_norm = {norm_token(x) for x in set(st.session_state.u_choice)}
-    grade_options = [f"Gr {i}" for i in range(4, 8)]
+    grade_options = [f"Gr {i}" for i in range(1, 8)]
     selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.gr_choice if g in grade_options])}
-
     force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
     new_hours = NEW_UPDATES_DEFAULT_HOURS
 
-# =============================
-# WRITE STATE -> QUERY PARAMS
-# =============================
+# Keep URL synced
 payload = {
     "view": st.session_state.view_mode,
     "cat": st.session_state.cat_choice,
@@ -729,13 +800,14 @@ payload = {
     "u": st.session_state.u_choice,
     "gr": st.session_state.gr_choice,
     "q": st.session_state.search_text,
+    "qg": st.session_state.quick_grade,
 }
 if st.session_state.get("_last_qp_payload") != payload:
     st.session_state["_last_qp_payload"] = payload
     qp_set_from_state(payload)
 
 # =============================
-# BUILD RESULTS (only show on Events screen)
+# EVENTS OUTPUT
 # =============================
 window_start = now_dt - timedelta(hours=new_hours)
 
@@ -754,9 +826,6 @@ def cat_ok(i: int) -> bool:
         or ("academics" in wanted and cn == "academics")
     )
 
-# =============================
-# EVENTS SCREEN OUTPUT
-# =============================
 if st.session_state.screen_mode == "Events":
     res = []
     for i in range(len(df)):
@@ -774,6 +843,21 @@ if st.session_state.screen_mode == "Events":
         if st.session_state.act_choice and row_act_key not in st.session_state.act_choice:
             continue
 
+        d_raw = str(date_s.iloc[i]).strip()
+        d_dt = parse_date_sa(d_raw)
+
+        # hide past items
+        if d_dt and d_dt.date() < today:
+            continue
+
+        # view filters
+        if st.session_state.view_mode == "Next 7 Days":
+            if not d_dt:
+                continue
+            if d_dt.date() > (today + timedelta(days=7)):
+                continue
+
+        # term docs detection
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -782,23 +866,19 @@ if st.session_state.screen_mode == "Events":
         )
         term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
-        d_raw = str(date_s.iloc[i]).strip()
-        d_dt = parse_date_sa(d_raw)
-
-        if d_dt and d_dt.date() < today:
-            continue
-
-        if st.session_state.view_mode == "Next 7 Days":
-            if not d_dt:
-                continue
-            if d_dt.date() > (today + timedelta(days=7)):
-                continue
-
         if st.session_state.view_mode == "Term Documents":
             if not term_flag:
                 continue
 
+        if st.session_state.view_mode == "Assessment Schedule":
+            if not is_assessment_schedule(act_s.iloc[i], team_s.iloc[i]):
+                continue
+
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+
+        # maths hard rule (Gr4-7)
+        math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
+        selected_has_target_grades = bool(selected_gr_norm & TARGET_GRADES_MATH)
 
         if cn == "sport" and selected_u_norm:
             if not grp_matches:
@@ -808,11 +888,14 @@ if st.session_state.screen_mode == "Events":
                 continue
 
         if cn in ["culture", "academics"] and selected_gr_norm:
-            if not grp_matches:
-                continue
-            grp_norm = {norm_token(x) for x in grp_matches}
-            if not (selected_gr_norm & grp_norm):
-                continue
+            if grp_matches:
+                grp_norm = {norm_token(x) for x in grp_matches}
+                if not (selected_gr_norm & grp_norm):
+                    if not (math_row and selected_has_target_grades):
+                        continue
+            else:
+                if not (math_row and selected_has_target_grades):
+                    continue
 
         sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
         created_dt = sig_to_created.get(sig)
@@ -835,20 +918,18 @@ if st.session_state.screen_mode == "Events":
             "i": i,
             "dt": sort_dt,
             "title": title.lower(),
-            "term": term_flag,
             "new": is_recent,
             "created_dt": created_dt,
         })
 
-    term_items = sorted([x for x in res if x["term"]], key=lambda x: x["title"])
-    other_items = sorted([x for x in res if not x["term"]], key=lambda x: (x["dt"], x["title"]))
-    res_sorted = term_items + other_items
+    # ALWAYS sort by date then alphabetical
+    res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
     pin = "&#128205;"
 
     if not res_sorted:
-        st.info("No items match your filters. Click **🔎 FILTER** at the top to change filters.")
+        st.warning("No items match your filters. Try **FILTER → Clear all filters**.")
     else:
         for item in res_sorted:
             i = item["i"]
@@ -856,17 +937,21 @@ if st.session_state.screen_mode == "Events":
             afr = is_afrikaans_subject(act_s.iloc[i])
 
             title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
-
             d_raw = str(date_s.iloc[i]).strip()
             date_line = format_date_long_sa(d_raw) if d_raw else ""
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
+            # maths + missing grades: show selected grades
+            math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
+            if math_row and not grp_matches and (selected_gr_norm & TARGET_GRADES_MATH):
+                grp_matches = selected_grade_tokens_to_labels(selected_gr_norm & TARGET_GRADES_MATH)
+
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-            prog_link = first_url(prog_s.iloc[i])
-            teams_link = first_url(teamlnk_s.iloc[i])
-            confirm_link = first_url(conf_s.iloc[i])
+            prog_links = extract_urls(prog_s.iloc[i])
+            team_links = extract_urls(teamlnk_s.iloc[i])
+            confirm_links = extract_urls(conf_s.iloc[i])
 
             info_raw = str(info_s.iloc[i]).strip().replace("_", " ")
             info_text, info_links = split_info_text_and_links(info_raw)
@@ -874,24 +959,55 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
+            is_assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
+
             if cn == "academics":
                 b_docs = "Dokumente" if afr else "Documents"
                 b_info = "Inligting" if afr else "Information"
-                if prog_link and is_http(prog_link):
-                    buttons.append((b_docs, prog_link))
+
+                # Assessment Schedule: 2 docs => English/Afrikaans
+                if is_assess and len(prog_links) >= 1:
+                    if is_http(prog_links[0]):
+                        buttons.append(("English", prog_links[0]))
+                    if len(prog_links) >= 2 and is_http(prog_links[1]):
+                        buttons.append(("Afrikaans", prog_links[1]))
+                    for idx in range(3, len(prog_links) + 1):
+                        lk = prog_links[idx - 1]
+                        if is_http(lk):
+                            buttons.append((f"Document {idx}", lk))
+                else:
+                    for idx, lk in enumerate(prog_links, start=1):
+                        if is_http(lk):
+                            buttons.append((b_docs if idx == 1 else f"{b_docs} {idx}", lk))
+
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append((b_info if idx == 1 else f"{b_info} {idx}", lk))
+
+                for idx, lk in enumerate(team_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
+
+                for idx, lk in enumerate(confirm_links, start=1):
+                    if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
+                        buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
+
             else:
-                if prog_link and is_http(prog_link):
-                    buttons.append(("Programme", prog_link))
-                if teams_link and is_http(teams_link):
-                    buttons.append(("Teams", teams_link))
+                for idx, lk in enumerate(prog_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
+
+                for idx, lk in enumerate(team_links, start=1):
+                    if is_http(lk):
+                        buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
+
                 for idx, lk in enumerate(info_links, start=1):
                     if is_http(lk):
                         buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
-                if confirm_link and is_http(confirm_link) and ("forms.gle" in confirm_link.lower() or "docs.google.com/forms" in confirm_link.lower()):
-                    buttons.append(("Confirm", confirm_link))
+
+                for idx, lk in enumerate(confirm_links, start=1):
+                    if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
+                        buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
