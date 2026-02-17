@@ -18,14 +18,15 @@ SUBMISSIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/1jB78iGRp3pmwib7k_
 
 LOGO_URL = "https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg"
 
-# ✅ Facilities map PDF for campus venues
+# ✅ Facilities map for campus venues
 FACILITIES_MAP_URL = "https://drive.google.com/file/d/1PR-o4unbkpy7wq0Rg3nUf3wP1gHn_662/view?usp=sharing"
 
 TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "New Updates"]
+# ✅ Added "Test Breakdown" as a RADIO option (view)
+VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
 
@@ -90,7 +91,7 @@ ss_init("u_choice", [])
 ss_init("gr_choice", [])
 ss_init("search_text", "")
 
-# quick select safe state (separate widget key)
+# quick select safe state
 ss_init("quick_grade_ui", QUICK_GRADE_PLACEHOLDER)
 ss_init("_qg_applied", QUICK_GRADE_PLACEHOLDER)
 ss_init("_pending_qg_reset", False)
@@ -190,7 +191,6 @@ div[data-testid="stBaseButton-secondary"] > button{
 }
 .longLogo img{width:100%;height:auto;display:block;}
 .hubText{font-weight:900;font-size:1.65rem;letter-spacing:.3px;}
-.smallTopRow div[data-baseweb="select"]{max-width:280px;}
 .smallTopHelp{font-size:.85rem;color:#e6fffb;margin-top:-6px;}
 .card{
   border:1px solid var(--line);
@@ -319,28 +319,49 @@ def is_math_activity(activity_raw: str) -> bool:
     s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
     return ("wiskunde" in s) or ("mathematics" in s) or ("maths" in s) or (s == "math") or ("math " in s)
 
-# ✅ Detect "Test Breakdown" from the INFORMATION cell itself (works for Maths/any subject)
-def info_has_test_breakdown(info_raw: str) -> bool:
-    return "test breakdown" in str(info_raw or "").lower()
+# ✅ Robust Test Breakdown detector: Activity OR Team/Assessment OR Information
+def is_test_breakdown_row(activity_raw: str, team_raw: str, info_raw_full: str) -> bool:
+    a = str(activity_raw or "").lower()
+    t = str(team_raw or "").lower()
+    inf = str(info_raw_full or "").lower()
+    return ("test breakdown" in a) or ("test breakdown" in t) or ("test breakdown" in inf)
+
+# ✅ For activity display/filter: remove "Test Breakdown" from the SUBJECT name
+# So "Science and Technology Test Breakdown" becomes "Science and Technology"
+def strip_test_breakdown_label(s: str) -> str:
+    raw = str(s or "").strip()
+    if not raw:
+        return ""
+    # remove the phrase + tidy separators/spaces
+    out = re.sub(r"\btest\s*breakdown\b", "", raw, flags=re.I)
+    out = re.sub(r"[-–|:]+$", "", out).strip()
+    out = re.sub(r"\s{2,}", " ", out).strip(" -–|:")
+    return out
 
 # =============================
 # ACTIVITY: display vs filter
 # =============================
 def display_activity(cat_norm: str, activity_raw: str) -> str:
     s = str(activity_raw or "").strip()
+
     if cat_norm == "sport":
         return s
 
+    # normalise Afrikaans language codes
     sl = re.sub(r"\s+", " ", s.lower().strip())
     if sl in ["ht", "afrikaans ht"] or "hooftaal" in sl:
         return "Afrikaans Hooftaal"
     if sl in ["eat", "afrikaans eat"] or "eerste addisionele" in sl:
         return "Afrikaans Eerste Addisionele Taal"
 
+    # Maths normalisation
     if is_math_activity(sl):
         return "Mathematics"
 
-    return s.title()
+    # ✅ remove TB from display subject
+    s = strip_test_breakdown_label(s)
+
+    return s.title() if s else ""
 
 def sport_base_activity(activity_raw: str) -> str:
     s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
@@ -356,10 +377,14 @@ def sport_base_activity(activity_raw: str) -> str:
     return str(activity_raw or "").strip().split(" ")[0].title() if str(activity_raw or "").strip() else ""
 
 def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
-    return sport_base_activity(activity_raw) if cat_norm == "sport" else display_activity(cat_norm, activity_raw)
+    # sport: keep sport base
+    if cat_norm == "sport":
+        return sport_base_activity(activity_raw)
+    # culture/academics: filter by SUBJECT only (without "Test Breakdown")
+    return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (Due dates)
+# DATE PARSING
 # =============================
 def parse_date_sa(s):
     raw = str(s or "").strip()
@@ -416,7 +441,6 @@ def normalize_venue(v: str) -> str:
             return vv
     return s
 
-# ✅ Campus venue rule (link to Facilities Map even if "Midstream" not in text)
 CAMPUS_VENUE_LABELS = {
     "music room", "hall", "auditorium", "field", "bondev field", "swimming pool",
     "tennis courts", "netball courts", "cricket oval"
@@ -490,17 +514,14 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
 
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
-
-    # U ranges + lists + singles
+    # U tokens
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
     t = re.sub(r"\bU\d{1,2}\b", "", t, flags=re.I)
-
-    # Gr ranges + lists + singles
+    # Gr tokens
     t = re.sub(r"\bGr\.?\s*\d{1,2}\s*[-–]\s*Gr\.?\s*\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bGr\.?\s*\d{1,2}(?:\s*,\s*Gr\.?\s*\d{1,2}){1,}\b", "", t, flags=re.I)
     t = re.sub(r"\bGr\.?\s*\d{1,2}\b", "", t, flags=re.I)
-
     return re.sub(r"\s{2,}", " ", t).strip(" -–|,")
 
 def tidy_team_text(s: str) -> str:
@@ -511,21 +532,33 @@ def tidy_team_text(s: str) -> str:
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
     return re.sub(r"\s{2,}", " ", t).strip()
 
+# ✅ Title rules:
+# - Tennis: age group in heading
+# - Academics: ALWAYS add grade in heading (if available)
 def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> str:
     act_txt = norm_gender_words(display_activity(cat_norm, act_val))
     team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
 
-    grp_disp, _ = group_for_row("sport", grade_val, team_val) if cat_norm == "sport" else ("", [])
+    if cat_norm == "sport":
+        grp_disp, _ = group_for_row("sport", grade_val, team_val)
+        if sport_base_activity(act_val) == "Tennis":
+            base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+            return f"{base} ({grp_disp})".strip() if grp_disp else base
+        if not team_clean:
+            return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
+        return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
-    # ✅ Tennis: ALWAYS show age group in heading as well
-    if cat_norm == "sport" and sport_base_activity(act_val) == "Tennis":
-        base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
-        return f"{base} ({grp_disp})".strip() if grp_disp else base
-
-    if cat_norm == "sport" and not team_clean:
-        return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
-
-    return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+    base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+    if cat_norm == "academics":
+        g_disp, g_list = group_for_row("academics", grade_val, team_val)
+        if g_list:
+            if len(g_list) >= 2:
+                g_disp = f"{g_list[0]}–{g_list[-1]}"
+            else:
+                g_disp = g_list[0]
+        if g_disp:
+            return f"{base} ({g_disp})".strip()
+    return base
 
 # =============================
 # LOAD CSV
@@ -630,7 +663,7 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
     sub_date  = sub_col(COL_DATE)
     sub_ven   = sub_col(COL_VENUE)
     sub_prog  = sub_col(COL_PROGRAMME)
-    sub_email = sub_col("Email address")  # Google Forms default
+    sub_email = sub_col("Email address")
 
     for j in range(len(sub_df)):
         created_dt = parse_form_timestamp(sub_ts.iloc[j])
@@ -698,7 +731,7 @@ with top_right:
             st.rerun()
 
 # =============================
-# VIEW RADIO
+# VIEW RADIO  (includes Test Breakdown)
 # =============================
 st.radio(
     "Show",
@@ -801,14 +834,20 @@ def render_filters_main():
             or ("academics" in wanted and cn == "academics")
         )
 
+    # Build activity options from SUBJECTS (without "Test Breakdown")
     act_opts = sorted({
         activity_filter_key(normalize_category(cat_s.iloc[i]), act_s.iloc[i])
         for i in range(len(df))
         if str(act_s.iloc[i]).strip() and cat_ok_local(i)
     })
 
+    # Keep Mathematics available (parents expect it)
     if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
         act_opts = sorted(set(act_opts) | {"Mathematics"})
+
+    # ✅ Add special activity option "Test Breakdown" so it can be filtered directly (union logic)
+    if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
+        act_opts = sorted(set(act_opts) | {"Test Breakdown"})
 
     st.multiselect(
         "Activity/Subject",
@@ -929,13 +968,29 @@ if st.session_state.screen_mode == "Events":
         if wanted and not cat_ok(i):
             continue
 
-        row_act_key = activity_filter_key(cn, act_s.iloc[i])
-        if st.session_state.act_choice and row_act_key not in st.session_state.act_choice:
+        info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
+        row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
+
+        # ✅ View mode: Test Breakdown (radio)
+        if st.session_state.view_mode == "Test Breakdown" and not row_is_tb:
             continue
+
+        row_act_key = activity_filter_key(cn, act_s.iloc[i])
+
+        # ✅ Activity multiselect UNION logic:
+        # - normal subject selection OR
+        # - "Test Breakdown" selected and this row is TB
+        if st.session_state.act_choice:
+            has_tb_pick = ("Test Breakdown" in st.session_state.act_choice)
+            subject_match = (row_act_key in st.session_state.act_choice)
+            tb_match = (has_tb_pick and row_is_tb)
+            if not (subject_match or tb_match):
+                continue
 
         d_raw = str(date_s.iloc[i]).strip()
         d_dt = parse_date_sa(d_raw)
 
+        # hide past items (if date exists)
         if d_dt and d_dt.date() < today:
             continue
 
@@ -948,8 +1003,8 @@ if st.session_state.screen_mode == "Events":
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
-            k in (act_disp_for_term.lower() + " " + str(team_s.iloc[i]).lower())
-            for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse"]
+            k in (act_disp_for_term.lower() + " " + str(team_s.iloc[i]).lower() + " " + info_raw_full.lower())
+            for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse", "test breakdown"]
         )
         term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
 
@@ -971,6 +1026,7 @@ if st.session_state.screen_mode == "Events":
             if not (selected_u_norm & grp_norm):
                 continue
 
+        # ✅ Grade filtering still applies to Test Breakdown (as requested)
         if cn in ["culture", "academics"] and selected_gr_norm:
             if grp_matches:
                 grp_norm = {norm_token(x) for x in grp_matches}
@@ -998,13 +1054,7 @@ if st.session_state.screen_mode == "Events":
 
         sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
 
-        res.append({
-            "i": i,
-            "dt": sort_dt,
-            "title": title.lower(),
-            "new": is_recent,
-            "created_dt": created_dt,
-        })
+        res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
 
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
@@ -1034,17 +1084,16 @@ if st.session_state.screen_mode == "Events":
             team_links = extract_urls(teamlnk_s.iloc[i])
             confirm_links = extract_urls(conf_s.iloc[i])
 
-            # ✅ Keep the RAW info so we can detect Test Breakdown reliably
             info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
             info_text, info_links = split_info_text_and_links(info_raw_full)
-            is_tb = info_has_test_breakdown(info_raw_full)  # ✅ key fix
+
+            row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
+            assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
 
             buttons = []
             notes_parts = []
 
-            assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
-
-            # Contact email (always show if present; show nothing if empty)
+            # Contact email
             sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
             contact_email = (sig_to_email.get(sig, "") or "").strip()
             contact_line = ""
@@ -1055,32 +1104,28 @@ if st.session_state.screen_mode == "Events":
                     f"{safe_txt(contact_email)}</a></div>"
                 )
 
-            # ---------- BUTTON NAMING RULES ----------
+            # ---------------- BUTTONS ----------------
             if cn == "academics":
-                # Assessment Schedule: doc1 English, doc2 Afrikaans
+                # Assessment Schedule: Programme links -> English/Afrikaans
                 if assess and len(prog_links) >= 1:
-                    if is_http(prog_links[0]):
-                        buttons.append(("English", prog_links[0]))
-                    if len(prog_links) >= 2 and is_http(prog_links[1]):
-                        buttons.append(("Afrikaans", prog_links[1]))
+                    if is_http(prog_links[0]): buttons.append(("English", prog_links[0]))
+                    if len(prog_links) >= 2 and is_http(prog_links[1]): buttons.append(("Afrikaans", prog_links[1]))
                     for idx in range(3, len(prog_links) + 1):
                         lk = prog_links[idx - 1]
-                        if is_http(lk):
-                            buttons.append((f"Document {idx}", lk))
+                        if is_http(lk): buttons.append((f"Document {idx}", lk))
                 else:
                     base_docs = "Dokumente" if afr else "Documents"
                     for idx, lk in enumerate(prog_links, start=1):
                         if is_http(lk):
                             buttons.append((base_docs if idx == 1 else f"{base_docs} {idx}", lk))
 
-                # ✅ Test Breakdown (detected from Information cell): info1 English, info2 Afrikaans
-                if is_tb and len(info_links) >= 1:
-                    if is_http(info_links[0]):
-                        buttons.append(("English", info_links[0]))
-                    if len(info_links) >= 2 and is_http(info_links[1]):
-                        buttons.append(("Afrikaans", info_links[1]))
-                    for idx in range(3, len(info_links) + 1):
-                        lk = info_links[idx - 1]
+                # ✅ Test Breakdown: Information links (fallback to Programme if info empty)
+                if row_is_tb:
+                    src_links = info_links if len(info_links) >= 1 else prog_links
+                    if len(src_links) >= 1 and is_http(src_links[0]): buttons.append(("English", src_links[0]))
+                    if len(src_links) >= 2 and is_http(src_links[1]): buttons.append(("Afrikaans", src_links[1]))
+                    for idx in range(3, len(src_links) + 1):
+                        lk = src_links[idx - 1]
                         if is_http(lk):
                             buttons.append((f"Information {idx}", lk))
                 else:
@@ -1098,14 +1143,13 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-                # ✅ If (for any reason) Test Breakdown appears outside Academics, still label links correctly
-                if is_tb and len(info_links) >= 1:
-                    if is_http(info_links[0]):
-                        buttons.append(("English", info_links[0]))
-                    if len(info_links) >= 2 and is_http(info_links[1]):
-                        buttons.append(("Afrikaans", info_links[1]))
-                    for idx in range(3, len(info_links) + 1):
-                        lk = info_links[idx - 1]
+                # If TB appears outside academics, still force Eng/Afr for info links (fallback)
+                if row_is_tb:
+                    src_links = info_links if len(info_links) >= 1 else prog_links
+                    if len(src_links) >= 1 and is_http(src_links[0]): buttons.append(("English", src_links[0]))
+                    if len(src_links) >= 2 and is_http(src_links[1]): buttons.append(("Afrikaans", src_links[1]))
+                    for idx in range(3, len(src_links) + 1):
+                        lk = src_links[idx - 1]
                         if is_http(lk):
                             buttons.append((f"Information {idx}", lk))
                 else:
@@ -1117,7 +1161,7 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
-            # Venue line
+            # Venue line (campus -> facilities map)
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
                 notes_parts.append("<b>Venue:</b><br>See programme")
@@ -1130,7 +1174,7 @@ if st.session_state.screen_mode == "Events":
                     f"{safe_txt(ven_norm).upper()}</a></div>"
                 )
 
-            # Notes: NEVER include links here (they are stripped already)
+            # Notes text only (links removed already)
             if info_text:
                 notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
