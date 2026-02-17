@@ -18,6 +18,9 @@ SUBMISSIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/1jB78iGRp3pmwib7k_
 
 LOGO_URL = "https://midstream-primary.co.za/wp-content/uploads/2025/12/LMCP-Logo-JPEG.jpg"
 
+# ✅ Facilities map PDF (Midstream campus venues must link here)
+FACILITIES_MAP_URL = "https://drive.google.com/file/d/1PR-o4unbkpy7wq0Rg3nUf3wP1gHn_662/view?usp=sharing"
+
 TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
@@ -265,7 +268,6 @@ def extract_urls(v: str):
     if not raw:
         return []
     urls = [u.strip() for u in URL_RE.findall(raw) if u.strip()]
-    # de-dupe
     seen, out = set(), []
     for u in urls:
         if u not in seen:
@@ -303,6 +305,11 @@ def is_afrikaans_subject(b_raw: str) -> bool:
 def is_assessment_schedule(activity_raw: str, team_raw: str) -> bool:
     s = (str(activity_raw or "") + " " + str(team_raw or "")).strip().lower()
     return "assessment schedule" in s
+
+# ✅ Test Breakdown naming rule helper
+def is_test_breakdown(activity_raw: str, team_raw: str) -> bool:
+    s = (str(activity_raw or "") + " " + str(team_raw or "")).strip().lower()
+    return ("test breakdown" in s) and ("academy" in s)
 
 def norm_gender_words(text: str) -> str:
     s = str(text or "").strip().replace("_", " ")
@@ -410,6 +417,47 @@ def normalize_venue(v: str) -> str:
             return vv
     return s
 
+# ✅ Campus venue rule: link to Facilities Map for these venues even if "Midstream" isn't in the text
+CAMPUS_VENUE_LABELS = {
+    "music room",
+    "hall",
+    "auditorium",
+    "field",
+    "bondev field",
+    "swimming pool",
+    "tennis courts",
+    "netball courts",
+    "cricket oval",
+}
+CAMPUS_VENUE_KEYWORDS = [
+    "midstream",
+    "midstream college",
+    "lmcp",
+    "primary",
+    "college",
+    "auditorium",
+    "hall",
+    "music room",
+    "field",
+    "bondev",
+    "pool",
+    "swimming",
+    "tennis",
+    "netball",
+    "cricket",
+    "oval",
+    "court",
+    "courts",
+]
+
+def is_midstream_campus_venue(ven_norm: str) -> bool:
+    v = str(ven_norm or "").strip().lower()
+    if not v:
+        return False
+    if v in CAMPUS_VENUE_LABELS:
+        return True
+    return any(k in v for k in CAMPUS_VENUE_KEYWORDS)
+
 # =============================
 # AGE GROUP / GRADE PARSING
 # =============================
@@ -462,10 +510,20 @@ def group_for_row(cat_norm: str, grade_raw: str, team_raw: str):
         return f"{m[0]}–{m[-1]}", m
     return (m[0] if m else ""), m
 
+# ✅ strip BOTH U tokens and Gr tokens from team text
 def strip_group_tokens(text: str) -> str:
     t = str(text or "")
+
+    # U ranges + lists + singles
     t = re.sub(r"\bU?\d{1,2}\s*[-–]\s*U?\d{1,2}\b", "", t, flags=re.I)
     t = re.sub(r"\bU?\d{1,2}(?:\s*,\s*U?\d{1,2}){1,}\b", "", t, flags=re.I)
+    t = re.sub(r"\bU\d{1,2}\b", "", t, flags=re.I)
+
+    # Gr ranges + lists + singles
+    t = re.sub(r"\bGr\.?\s*\d{1,2}\s*[-–]\s*Gr\.?\s*\d{1,2}\b", "", t, flags=re.I)
+    t = re.sub(r"\bGr\.?\s*\d{1,2}(?:\s*,\s*Gr\.?\s*\d{1,2}){1,}\b", "", t, flags=re.I)
+    t = re.sub(r"\bGr\.?\s*\d{1,2}\b", "", t, flags=re.I)
+
     return re.sub(r"\s{2,}", " ", t).strip(" -–|,")
 
 def tidy_team_text(s: str) -> str:
@@ -476,12 +534,18 @@ def tidy_team_text(s: str) -> str:
     t = re.sub(r"(U\d{1,2})(Girls|Boys)\b", r"\1 \2", t, flags=re.I)
     return re.sub(r"\s{2,}", " ", t).strip()
 
+# ✅ Tennis: show age group in heading as well
 def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> str:
     act_txt = norm_gender_words(display_activity(cat_norm, act_val))
     team_clean = tidy_team_text(norm_gender_words(strip_group_tokens(team_val)))
 
+    grp_disp, _ = group_for_row("sport", grade_val, team_val) if cat_norm == "sport" else ("", [])
+
+    if cat_norm == "sport" and sport_base_activity(act_val) == "Tennis":
+        base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
+        return f"{base} ({grp_disp})".strip() if grp_disp else base
+
     if cat_norm == "sport" and not team_clean:
-        grp_disp, _ = group_for_row("sport", grade_val, team_val)
         return f"{act_txt} ({grp_disp})".strip() if grp_disp else act_txt
 
     return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
@@ -601,7 +665,6 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
 # =============================
 # TOP BAR (Quick Select + Filter)
 # =============================
-# Apply pending reset BEFORE widget is created
 if st.session_state.get("_pending_qg_reset", False):
     st.session_state.quick_grade_ui = QUICK_GRADE_PLACEHOLDER
     st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
@@ -624,18 +687,14 @@ with top_mid:
     if st.session_state.screen_mode == "Events":
         qg = st.session_state.quick_grade_ui
         if qg in QUICK_GRADE_OPTIONS and qg != st.session_state._qg_applied:
-
             if qg == QUICK_GRADE_CLEAR:
                 st.session_state._pending_qg_reset = True
                 st.session_state._qg_applied = QUICK_GRADE_CLEAR
                 st.session_state._request_qp_sync = True
                 st.session_state._request_rerun = True
-
             elif qg == QUICK_GRADE_PLACEHOLDER:
                 st.session_state._qg_applied = qg
-
             else:
-                # Apply grade shortcut (sets BOTH grade + age group)
                 if qg == "Gr 1-3":
                     st.session_state.gr_choice = ["Gr 1", "Gr 2", "Gr 3"]
                 else:
@@ -719,7 +778,6 @@ def render_filters_main():
 
     st.markdown("## 🔎 Filters")
 
-    # TOP action row
     a1, a2, a3 = st.columns([1, 1, 1])
     with a1:
         if st.button("✅ Save filters & Back to Events", key="save_back_top", type="primary", use_container_width=True):
@@ -766,6 +824,10 @@ def render_filters_main():
         if str(act_s.iloc[i]).strip() and cat_ok_local(i)
     })
 
+    # ✅ always include Mathematics in activity filter (culture/academics context)
+    if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
+        act_opts = sorted(set(act_opts) | {"Mathematics"})
+
     st.multiselect(
         "Activity/Subject",
         act_opts,
@@ -780,7 +842,6 @@ def render_filters_main():
         key="u_choice",
     ) if (not wanted or "sport" in wanted) else []
 
-    # Grades filter
     grade_options = [f"Gr {i}" for i in range(1, 8)]
     selected_gr = st.multiselect(
         "Grades (Culture/Academics)",
@@ -792,7 +853,6 @@ def render_filters_main():
     selected_u_norm = {norm_token(x) for x in set(selected_u)}
     selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
 
-    # Auto-scope when Category is empty
     force_sport  = (not wanted) and bool(selected_u_norm)  and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
@@ -803,7 +863,6 @@ def render_filters_main():
 
     st.markdown("---")
 
-    # BOTTOM action row
     b1, b2, b3 = st.columns([1, 1, 1])
     with b1:
         if st.button("✅ Save filters & Back to Events", key="save_back_bottom", type="primary", use_container_width=True):
@@ -819,7 +878,6 @@ def render_filters_main():
 if st.session_state.screen_mode == "Filter":
     render_filters_main()
 
-# If on Events screen, compute filter vars from session_state (no widgets)
 if st.session_state.screen_mode == "Events":
     wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
     selected_u_norm = {norm_token(x) for x in set(st.session_state.u_choice)}
@@ -831,7 +889,7 @@ if st.session_state.screen_mode == "Events":
     new_hours = NEW_UPDATES_DEFAULT_HOURS
 
 # =============================
-# SAFE URL SYNC + RERUN (after widgets exist)
+# SAFE URL SYNC + RERUN
 # =============================
 payload = {
     "view": st.session_state.view_mode,
@@ -896,18 +954,15 @@ if st.session_state.screen_mode == "Events":
         d_raw = str(date_s.iloc[i]).strip()
         d_dt = parse_date_sa(d_raw)
 
-        # hide past items (if date exists)
         if d_dt and d_dt.date() < today:
             continue
 
-        # View filters
         if st.session_state.view_mode == "Next 7 Days":
             if not d_dt:
                 continue
             if d_dt.date() > (today + timedelta(days=7)):
                 continue
 
-        # Term documents detection + filtering (but DO NOT pin to top)
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -922,7 +977,6 @@ if st.session_state.screen_mode == "Events":
         if st.session_state.view_mode == "Assessment Schedule" and not is_assessment_schedule(act_s.iloc[i], team_s.iloc[i]):
             continue
 
-        # Group matching
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
         math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
@@ -970,7 +1024,6 @@ if st.session_state.screen_mode == "Events":
             "created_dt": created_dt,
         })
 
-    # ✅ ALWAYS sort by due date then alphabetical
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
@@ -990,7 +1043,6 @@ if st.session_state.screen_mode == "Events":
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-            # maths + missing grades: show selected grades
             if (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i]) and not grp_matches and (selected_gr_norm & TARGET_GRADES_MATH):
                 grp_matches = selected_grade_tokens_to_labels(selected_gr_norm & TARGET_GRADES_MATH)
 
@@ -1016,22 +1068,31 @@ if st.session_state.screen_mode == "Events":
                         buttons.append(("English", prog_links[0]))
                     if len(prog_links) >= 2 and is_http(prog_links[1]):
                         buttons.append(("Afrikaans", prog_links[1]))
-                    # extra docs beyond 2
                     for idx in range(3, len(prog_links) + 1):
                         lk = prog_links[idx - 1]
                         if is_http(lk):
                             buttons.append((f"Document {idx}", lk))
                 else:
-                    # Normal academics docs
                     base_docs = "Dokumente" if afr else "Documents"
                     for idx, lk in enumerate(prog_links, start=1):
                         if is_http(lk):
                             buttons.append((base_docs if idx == 1 else f"{base_docs} {idx}", lk))
 
-                base_info = "Inligting" if afr else "Information"
-                for idx, lk in enumerate(info_links, start=1):
-                    if is_http(lk):
-                        buttons.append((base_info if idx == 1 else f"{base_info} {idx}", lk))
+                # ✅ Test Breakdown (Academy): info1 English, info2 Afrikaans
+                if is_test_breakdown(act_s.iloc[i], team_s.iloc[i]) and len(info_links) >= 1:
+                    if is_http(info_links[0]):
+                        buttons.append(("English", info_links[0]))
+                    if len(info_links) >= 2 and is_http(info_links[1]):
+                        buttons.append(("Afrikaans", info_links[1]))
+                    for idx in range(3, len(info_links) + 1):
+                        lk = info_links[idx - 1]
+                        if is_http(lk):
+                            buttons.append((f"Information {idx}", lk))
+                else:
+                    base_info = "Inligting" if afr else "Information"
+                    for idx, lk in enumerate(info_links, start=1):
+                        if is_http(lk):
+                            buttons.append((base_info if idx == 1 else f"{base_info} {idx}", lk))
 
             else:
                 # Programme links
@@ -1059,13 +1120,13 @@ if st.session_state.screen_mode == "Events":
             if ven_norm == "SEE_PROGRAMME":
                 notes_parts.append("<b>Venue:</b><br>See programme")
             elif ven_norm:
-                q = ven_norm
-                if "midstream" in ven_norm.lower():
-                    q = f"{ven_norm} Midstream College"
-                map_url = f"https://www.google.com/maps/search/?api=1&query={q.replace(' ', '+')}"
+                # ✅ Campus rule: use Facilities Map for campus venues, otherwise Google Maps
+                venue_href = FACILITIES_MAP_URL if is_midstream_campus_venue(ven_norm) else \
+                    f"https://www.google.com/maps/search/?api=1&query={ven_norm.replace(' ', '+')}"
+
                 venue_line = (
                     f"<div class='meta'>{pin} "
-                    f"<a href='{map_url}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
+                    f"<a href='{venue_href}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
                     f"{safe_txt(ven_norm).upper()}</a></div>"
                 )
 
