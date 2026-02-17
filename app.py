@@ -20,7 +20,6 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-# ✅ Added "Test Breakdown" as a RADIO option (view)
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
@@ -313,14 +312,12 @@ def is_math_activity(activity_raw: str) -> bool:
     s = re.sub(r"\s+", " ", str(activity_raw or "").strip().lower())
     return ("wiskunde" in s) or ("mathematics" in s) or ("maths" in s) or (s == "math") or ("math " in s)
 
-# ✅ Test Breakdown detector
 def is_test_breakdown_row(activity_raw: str, team_raw: str, info_raw_full: str) -> bool:
     a = str(activity_raw or "").lower()
     t = str(team_raw or "").lower()
     inf = str(info_raw_full or "").lower()
     return ("test breakdown" in a) or ("test breakdown" in t) or ("test breakdown" in inf)
 
-# ✅ remove "Test Breakdown" from subject display/filter
 def strip_test_breakdown_label(s: str) -> str:
     raw = str(s or "").strip()
     if not raw:
@@ -735,14 +732,6 @@ new_hours = NEW_UPDATES_DEFAULT_HOURS
 
 TARGET_GRADES_MATH = {"gr4", "gr5", "gr6", "gr7"}
 
-def selected_grade_tokens_to_labels(sel_norm: set):
-    out = []
-    for t in sorted(sel_norm):
-        m = re.match(r"gr(\d+)", t)
-        if m:
-            out.append(f"Gr {int(m.group(1))}")
-    return out
-
 def clear_all_filters():
     st.session_state.cat_choice = []
     st.session_state.act_choice = []
@@ -946,13 +935,11 @@ if st.session_state.screen_mode == "Events":
         info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
         row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
 
-        # View mode: Test Breakdown
         if st.session_state.view_mode == "Test Breakdown" and not row_is_tb:
             continue
 
         row_act_key = activity_filter_key(cn, act_s.iloc[i])
 
-        # Activity multiselect UNION logic (subjects OR Test Breakdown)
         if st.session_state.act_choice:
             has_tb_pick = ("Test Breakdown" in st.session_state.act_choice)
             subject_match = (row_act_key in st.session_state.act_choice)
@@ -988,9 +975,6 @@ if st.session_state.screen_mode == "Events":
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-        math_row = (cn in ["culture", "academics"]) and is_math_activity(act_s.iloc[i])
-        selected_has_target_grades = bool(selected_gr_norm & TARGET_GRADES_MATH)
-
         if cn == "sport" and selected_u_norm:
             if not grp_matches:
                 continue
@@ -1002,10 +986,6 @@ if st.session_state.screen_mode == "Events":
             if grp_matches:
                 grp_norm = {norm_token(x) for x in grp_matches}
                 if not (selected_gr_norm & grp_norm):
-                    if not (math_row and selected_has_target_grades):
-                        continue
-            else:
-                if not (math_row and selected_has_target_grades):
                     continue
 
         sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
@@ -1060,30 +1040,29 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            # ✅ Contact person: show ONLY "Contact person" as the clickable mailto link
+            # ✅ Mail label depends on category
             sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
             contact_email = (sig_to_email.get(sig, "") or "").strip()
             contact_line = ""
             if contact_email and "@" in contact_email:
+                mail_label = "Mail Teacher" if cn == "academics" else "Mail Organiser"
                 contact_line = (
                     "<div class='meta'>"
                     f"<a href='mailto:{safe_txt(contact_email)}' style='color:#008080;font-weight:900;text-decoration:none;'>"
-                    "Contact person</a></div>"
+                    f"{mail_label}</a></div>"
                 )
 
             # ---------------- BUTTONS ----------------
             if cn == "academics":
-                # ✅ Test Breakdown: ONLY show English + Afrikaans (from Information, fallback Programme)
+                # ✅ Test Breakdown: ONLY English + Afrikaans (from Information, fallback Programme)
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
                     if len(src_links) >= 1 and is_http(src_links[0]):
                         buttons.append(("English", src_links[0]))
                     if len(src_links) >= 2 and is_http(src_links[1]):
                         buttons.append(("Afrikaans", src_links[1]))
-                    # no other buttons for TB rows
-
                 else:
-                    # Assessment Schedule: Programme links -> English/Afrikaans
+                    # Assessment Schedule
                     if assess and len(prog_links) >= 1:
                         if is_http(prog_links[0]):
                             buttons.append(("English", prog_links[0]))
@@ -1109,7 +1088,6 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-                # If TB appears outside academics, enforce English/Afrikaans only
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
                     if len(src_links) >= 1 and is_http(src_links[0]):
@@ -1125,7 +1103,7 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
-            # Venue line (campus -> facilities map)
+            # Venue line
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
                 notes_parts.append("<b>Venue:</b><br>See programme")
@@ -1138,7 +1116,6 @@ if st.session_state.screen_mode == "Events":
                     f"{safe_txt(ven_norm).upper()}</a></div>"
                 )
 
-            # Notes text only (links removed already)
             if info_text:
                 notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
