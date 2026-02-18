@@ -203,6 +203,7 @@ div[data-testid="stBaseButton-secondary"] > button{
   background:rgba(0,128,128,0.08);
   border:1px solid rgba(0,128,128,0.25);
   color:#0f172a;font-size:.95rem;line-height:1.35;
+  white-space:normal;
 }
 .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 .btn{
@@ -247,7 +248,8 @@ st.markdown(
 # =============================
 # HELPERS
 # =============================
-URL_RE = re.compile(r"(https?://[^\s\)\]\}<>\"']+)", re.IGNORECASE)
+# ✅ stronger URL match
+URL_RE = re.compile(r"(https?://[^\s<>\"]+)", re.IGNORECASE)
 
 def safe_txt(x) -> str:
     s = str(x or "")
@@ -261,13 +263,16 @@ def extract_urls(v: str):
     raw = str(v or "").strip()
     if not raw:
         return []
+
     raw_unescaped = html.unescape(raw)
     found = [u.strip() for u in URL_RE.findall(raw_unescaped) if u.strip()]
 
     def clean(u: str) -> str:
         u = u.strip()
-        u = u.rstrip(".,;:!?) ]}>\"'")
-        return u
+        u = u.rstrip(".,;:!?) ]}>\"'”’")
+        if u.endswith(")") and u.count("(") < u.count(")"):
+            u = u[:-1]
+        return u.strip()
 
     seen, out = set(), []
     for u in found:
@@ -283,25 +288,25 @@ def urls_signature_part(v: str) -> str:
 
 def split_info_text_and_links(info: str):
     """
-    - Keeps Enter/Alt+Enter line breaks for notes
-    - Removes links from note text so they don't show in notes
-    - Keeps blank lines (optional): NO (we remove empty lines for neat spacing)
+    - Keeps Enter/Alt+Enter line breaks
+    - Extracts links into buttons
+    - Removes ALL links cleanly from notes (no leftovers)
     """
     raw = str(info or "")
     if not raw.strip():
         return "", []
 
     raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+    raw_unescaped = html.unescape(raw)
 
-    links = extract_urls(raw)
+    links = extract_urls(raw_unescaped)
 
-    text = raw
+    text_unescaped = raw_unescaped
     for u in links:
-        text = text.replace(u, "")
-        text = text.replace(html.escape(u, quote=False), "")
+        text_unescaped = re.sub(re.escape(u), "", text_unescaped)
 
     lines = []
-    for line in text.split("\n"):
+    for line in text_unescaped.split("\n"):
         ln = line.replace("\t", " ")
         ln = re.sub(r"[ ]{2,}", " ", ln).strip(" -|")
         if ln.strip():
@@ -1009,7 +1014,15 @@ if st.session_state.screen_mode == "Events":
                 if not (selected_gr_norm & grp_norm):
                     continue
 
-        sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
+        sig = hashlib.sha256("||".join([
+            normalize_category(cat_s.iloc[i]),
+            norm_token(act_s.iloc[i]),
+            norm_token(team_s.iloc[i]),
+            norm_token(date_s.iloc[i]),
+            norm_token(ven_s.iloc[i]),
+            norm_token(urls_signature_part(prog_s.iloc[i])),
+        ]).encode("utf-8")).hexdigest()
+
         created_dt = sig_to_created.get(sig)
         is_recent = bool(created_dt and (window_start <= created_dt <= now_dt))
 
@@ -1045,7 +1058,6 @@ if st.session_state.screen_mode == "Events":
             date_line = format_date_long_sa(d_raw) if d_raw else ""
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
-
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
             prog_links = extract_urls(prog_s.iloc[i])
@@ -1061,7 +1073,6 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            # Mail label depends on category, do NOT display email address
             sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
             contact_email = (sig_to_email.get(sig, "") or "").strip()
             contact_line = ""
@@ -1073,7 +1084,6 @@ if st.session_state.screen_mode == "Events":
                     f"{mail_label}</a></div>"
                 )
 
-            # BUTTONS
             if cn == "academics":
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
@@ -1122,7 +1132,6 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
-            # Venue line (campus -> facilities map)
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
                 notes_parts.append("<b>Venue:</b><br>See programme")
@@ -1135,7 +1144,6 @@ if st.session_state.screen_mode == "Events":
                     f"{safe_txt(ven_norm).upper()}</a></div>"
                 )
 
-            # Notes: keep Enter/Alt+Enter newlines
             if info_text:
                 notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text).replace('\\n','<br>')}")
 
