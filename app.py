@@ -21,7 +21,6 @@ TZ = pytz.timezone("Africa/Johannesburg")
 now_dt = datetime.now(TZ)
 today = now_dt.date()
 
-# ✅ includes Test Breakdown view
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
 BADGE_ANIMATE_MINUTES = 10
@@ -262,15 +261,11 @@ def extract_urls(v: str):
     raw = str(v or "").strip()
     if not raw:
         return []
-
-    # Convert HTML entities (&amp; etc) back
     raw_unescaped = html.unescape(raw)
-
     found = [u.strip() for u in URL_RE.findall(raw_unescaped) if u.strip()]
 
     def clean(u: str) -> str:
         u = u.strip()
-        # strip common trailing punctuation/brackets pasted after links
         u = u.rstrip(".,;:!?) ]}>\"'")
         return u
 
@@ -288,9 +283,9 @@ def urls_signature_part(v: str) -> str:
 
 def split_info_text_and_links(info: str):
     """
-    - Keeps Alt+Enter line breaks for notes
-    - Removes links from note text so they don't "leak" into notes
-    - Returns (clean_text, links[])
+    - Keeps Enter/Alt+Enter line breaks for notes
+    - Removes links from note text so they don't show in notes
+    - Keeps blank lines (optional): NO (we remove empty lines for neat spacing)
     """
     raw = str(info or "")
     if not raw.strip():
@@ -300,19 +295,18 @@ def split_info_text_and_links(info: str):
 
     links = extract_urls(raw)
 
-    # Remove links from text (handle both escaped and unescaped)
     text = raw
     for u in links:
         text = text.replace(u, "")
         text = text.replace(html.escape(u, quote=False), "")
 
-    # Clean each line without killing newlines
     lines = []
     for line in text.split("\n"):
         ln = line.replace("\t", " ")
         ln = re.sub(r"[ ]{2,}", " ", ln).strip(" -|")
         if ln.strip():
             lines.append(ln)
+
     return "\n".join(lines).strip(), links
 
 def norm_token(x: str) -> str:
@@ -553,7 +547,6 @@ def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> s
 
     if cat_norm == "sport":
         grp_disp, _ = group_for_row("sport", grade_val, team_val)
-        # ✅ Tennis: always show age group in heading too
         if sport_base_activity(act_val) == "Tennis":
             base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
             return f"{base} ({grp_disp})".strip() if grp_disp else base
@@ -562,7 +555,6 @@ def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> s
         return re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
 
     base = re.sub(r"\s{2,}", " ", f"{act_txt} {team_clean}".strip())
-    # ✅ Academics: always include grade next to heading
     if cat_norm == "academics":
         g_disp, g_list = group_for_row("academics", grade_val, team_val)
         if g_list:
@@ -839,7 +831,6 @@ def render_filters_main():
         if str(act_s.iloc[i]).strip() and cat_ok_local(i)
     })
 
-    # allow Test Breakdown selection even if not present in sheet values
     if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
         act_opts = sorted(set(act_opts) | {"Test Breakdown"})
 
@@ -965,13 +956,11 @@ if st.session_state.screen_mode == "Events":
         info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
         row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
 
-        # View mode: Test Breakdown
         if st.session_state.view_mode == "Test Breakdown" and not row_is_tb:
             continue
 
         row_act_key = activity_filter_key(cn, act_s.iloc[i])
 
-        # Activity multiselect UNION logic (subjects OR Test Breakdown)
         if st.session_state.act_choice:
             has_tb_pick = ("Test Breakdown" in st.session_state.act_choice)
             subject_match = (row_act_key in st.session_state.act_choice)
@@ -982,18 +971,15 @@ if st.session_state.screen_mode == "Events":
         d_raw = str(date_s.iloc[i]).strip()
         d_dt = parse_date_sa(d_raw)
 
-        # hide past items (if date exists)
         if d_dt and d_dt.date() < today:
             continue
 
-        # View filters
         if st.session_state.view_mode == "Next 7 Days":
             if not d_dt:
                 continue
             if d_dt.date() > (today + timedelta(days=7)):
                 continue
 
-        # Term docs detection (no pin)
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -1010,7 +996,6 @@ if st.session_state.screen_mode == "Events":
 
         _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-        # group matching
         if cn == "sport" and selected_u_norm:
             if not grp_matches:
                 continue
@@ -1042,7 +1027,6 @@ if st.session_state.screen_mode == "Events":
         sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
         res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
 
-    # ✅ always sort by due date then alphabetical
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
@@ -1077,7 +1061,7 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            # ✅ Mail label depends on category, do NOT display email address
+            # Mail label depends on category, do NOT display email address
             sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
             contact_email = (sig_to_email.get(sig, "") or "").strip()
             contact_line = ""
@@ -1089,9 +1073,8 @@ if st.session_state.screen_mode == "Events":
                     f"{mail_label}</a></div>"
                 )
 
-            # ---------------- BUTTONS ----------------
+            # BUTTONS
             if cn == "academics":
-                # ✅ Test Breakdown: ONLY English + Afrikaans (from Information, fallback Programme)
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
                     if len(src_links) >= 1 and is_http(src_links[0]):
@@ -1099,7 +1082,6 @@ if st.session_state.screen_mode == "Events":
                     if len(src_links) >= 2 and is_http(src_links[1]):
                         buttons.append(("Afrikaans", src_links[1]))
                 else:
-                    # Assessment Schedule
                     if assess and len(prog_links) >= 1:
                         if is_http(prog_links[0]):
                             buttons.append(("English", prog_links[0]))
@@ -1125,7 +1107,6 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk):
                         buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-                # If TB appears outside academics, enforce English/Afrikaans only
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
                     if len(src_links) >= 1 and is_http(src_links[0]):
@@ -1154,7 +1135,7 @@ if st.session_state.screen_mode == "Events":
                     f"{safe_txt(ven_norm).upper()}</a></div>"
                 )
 
-            # ✅ Notes: keep Alt+Enter newlines
+            # Notes: keep Enter/Alt+Enter newlines
             if info_text:
                 notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text).replace('\\n','<br>')}")
 
@@ -1174,7 +1155,6 @@ if st.session_state.screen_mode == "Events":
                     dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
                 ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
-            # Age/Grade lines
             sport_age_line = ""
             grade_line = ""
             if cn == "sport" and grp_matches:
