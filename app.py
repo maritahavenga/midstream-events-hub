@@ -868,37 +868,42 @@ force_grades = False
 new_hours = NEW_UPDATES_DEFAULT_HOURS
 
 def clear_all_filters():
-    st.session_state.cat_choice = []
-    st.session_state.act_choice = []
-    st.session_state.u_choice = []
-    st.session_state.gr_choice = []
-    st.session_state.search_text = ""
-    st.session_state.quick_grade_ui = QUICK_GRADE_PLACEHOLDER
-    st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+    # IMPORTANT: use dict-style to avoid Streamlit widget-key locking issues
+    st.session_state["cat_choice"] = []
+    st.session_state["act_choice"] = []
+    st.session_state["u_choice"] = []
+    st.session_state["gr_choice"] = []
+    st.session_state["search_text"] = ""
+    st.session_state["quick_grade_ui"] = QUICK_GRADE_PLACEHOLDER
+    st.session_state["_qg_applied"] = QUICK_GRADE_PLACEHOLDER
 
-    # ✅ wipe query params AND prevent auto-rewrite on next run
+    # wipe query params AND prevent auto-rewrite on next run
     st.query_params.from_dict({})
-    if "_last_qp_payload" in st.session_state:
-        del st.session_state["_last_qp_payload"]
-    st.session_state._skip_qp_sync_once = True
+    st.session_state.pop("_last_qp_payload", None)
+    st.session_state["_skip_qp_sync_once"] = True
 
-    st.session_state.screen_mode = "Events"
-    st.rerun()
+    # go back
+    st.session_state["screen_mode"] = "Events"
+    # NO st.rerun() inside callback
 
 def save_and_back():
     payload_now = {
-        "view": st.session_state.view_mode,
-        "cat": st.session_state.cat_choice,
-        "act": st.session_state.act_choice,
-        "u": st.session_state.u_choice,
-        "gr": st.session_state.gr_choice,
-        "q": st.session_state.search_text,
-        "qg": st.session_state.quick_grade_ui,
+        "view": st.session_state.get("view_mode", "All"),
+        "cat": st.session_state.get("cat_choice", []),
+        "act": st.session_state.get("act_choice", []),
+        "u": st.session_state.get("u_choice", []),
+        "gr": st.session_state.get("gr_choice", []),
+        "q": st.session_state.get("search_text", ""),
+        "qg": st.session_state.get("quick_grade_ui", QUICK_GRADE_PLACEHOLDER),
     }
     qp_set_from_state(payload_now)
-    st.session_state._request_qp_sync = False
-    st.session_state.screen_mode = "Events"
-    st.rerun()
+    st.session_state["_request_qp_sync"] = False
+    st.session_state["screen_mode"] = "Events"
+    # NO st.rerun() inside callback
+
+def back_no_save():
+    st.session_state["screen_mode"] = "Events"
+    # NO st.rerun() needed
 
 def render_filters_main():
     global wanted, selected_u_norm, selected_gr_norm, force_sport, force_grades, new_hours
@@ -907,33 +912,47 @@ def render_filters_main():
 
     a1, a2, a3 = st.columns([1, 1, 1])
     with a1:
-        if st.button("✅ Save filters & Back to Events", key="save_back_top", type="primary", use_container_width=True):
-            save_and_back()
+        st.button(
+            "✅ Save filters & Back to Events",
+            key="save_back_top",
+            type="primary",
+            use_container_width=True,
+            on_click=save_and_back,
+        )
     with a2:
-        if st.button("🧹 Clear all filters", key="clear_all_top", type="secondary", use_container_width=True):
-            clear_all_filters()
+        st.button(
+            "🧹 Clear all filters",
+            key="clear_all_top",
+            type="secondary",
+            use_container_width=True,
+            on_click=clear_all_filters,
+        )
     with a3:
-        if st.button("⬅ Back (no changes)", key="back_no_save_top", type="secondary", use_container_width=True):
-            st.session_state.screen_mode = "Events"
-            st.rerun()
+        st.button(
+            "⬅ Back (no changes)",
+            key="back_no_save_top",
+            type="secondary",
+            use_container_width=True,
+            on_click=back_no_save,
+        )
 
     st.markdown("---")
 
     st.multiselect(
         "Category",
         ["Sport", "Culture", "Academics"],
-        default=st.session_state.cat_choice,
+        default=st.session_state.get("cat_choice", []),
         key="cat_choice",
     )
 
     st.text_input(
         "Whole school search",
-        value=st.session_state.search_text,
+        value=st.session_state.get("search_text", ""),
         placeholder="Type to filter...",
         key="search_text",
     )
 
-    wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
+    wanted = {c.lower() for c in st.session_state.get("cat_choice", [])} if st.session_state.get("cat_choice") else set()
 
     def cat_ok_local(i: int) -> bool:
         if not wanted:
@@ -954,23 +973,23 @@ def render_filters_main():
     if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
         act_opts = sorted(set(act_opts) | {"Test Breakdown"})
 
-    # ✅ remove hidden/old selections BEFORE rendering
-    st.session_state.act_choice = [a for a in st.session_state.act_choice if a in act_opts]
+    # ✅ do NOT write to session_state.act_choice here (it is a widget key)
+    act_default = [a for a in st.session_state.get("act_choice", []) if a in act_opts]
 
     st.multiselect(
         "Activity/Subject",
         act_opts,
-        default=st.session_state.act_choice,
+        default=act_default,
         key="act_choice",
     )
 
     u_opts = [f"U{i}" for i in range(7, 14)]
     if (not wanted or "sport" in wanted):
-        st.session_state.u_choice = [u for u in st.session_state.u_choice if u in u_opts]
+        u_default = [u for u in st.session_state.get("u_choice", []) if u in u_opts]
         selected_u = st.multiselect(
             "Age Groups (Sport)",
             u_opts,
-            default=st.session_state.u_choice,
+            default=u_default,
             key="u_choice",
         )
     else:
@@ -978,11 +997,11 @@ def render_filters_main():
 
     grade_options = [f"Gr {i}" for i in range(1, 8)]
     if (not wanted or "culture" in wanted or "academics" in wanted):
-        st.session_state.gr_choice = [g for g in st.session_state.gr_choice if g in grade_options]
+        g_default = [g for g in st.session_state.get("gr_choice", []) if g in grade_options]
         selected_gr = st.multiselect(
             "Grades (Culture/Academics)",
             grade_options,
-            default=st.session_state.gr_choice,
+            default=g_default,
             key="gr_choice",
         )
     else:
@@ -994,7 +1013,7 @@ def render_filters_main():
     force_sport  = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
 
-    if st.session_state.view_mode == "New Updates":
+    if st.session_state.get("view_mode") == "New Updates":
         new_hours = st.slider("New Updates window (hours)", 1, 336, NEW_UPDATES_DEFAULT_HOURS)
     else:
         new_hours = NEW_UPDATES_DEFAULT_HOURS
@@ -1003,29 +1022,42 @@ def render_filters_main():
 
     b1, b2, b3 = st.columns([1, 1, 1])
     with b1:
-        if st.button("✅ Save filters & Back to Events", key="save_back_bottom", type="primary", use_container_width=True):
-            save_and_back()
+        st.button(
+            "✅ Save filters & Back to Events",
+            key="save_back_bottom",
+            type="primary",
+            use_container_width=True,
+            on_click=save_and_back,
+        )
     with b2:
-        if st.button("🧹 Clear all filters", key="clear_all_bottom", type="secondary", use_container_width=True):
-            clear_all_filters()
+        st.button(
+            "🧹 Clear all filters",
+            key="clear_all_bottom",
+            type="secondary",
+            use_container_width=True,
+            on_click=clear_all_filters,
+        )
     with b3:
-        if st.button("⬅ Back (no changes)", key="back_no_save_bottom", type="secondary", use_container_width=True):
-            st.session_state.screen_mode = "Events"
-            st.rerun()
+        st.button(
+            "⬅ Back (no changes)",
+            key="back_no_save_bottom",
+            type="secondary",
+            use_container_width=True,
+            on_click=back_no_save,
+        )
 
 if st.session_state.screen_mode == "Filter":
     render_filters_main()
 
 if st.session_state.screen_mode == "Events":
-    wanted = {c.lower() for c in st.session_state.cat_choice} if st.session_state.cat_choice else set()
-    selected_u_norm = {norm_token(x) for x in set(st.session_state.u_choice)}
+    wanted = {c.lower() for c in st.session_state.get("cat_choice", [])} if st.session_state.get("cat_choice") else set()
+    selected_u_norm = {norm_token(x) for x in set(st.session_state.get("u_choice", []))}
     grade_options = [f"Gr {i}" for i in range(1, 8)]
-    selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.gr_choice if g in grade_options])}
+    selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.get("gr_choice", []) if g in grade_options])}
 
     force_sport  = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
     force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
     new_hours = NEW_UPDATES_DEFAULT_HOURS
-
 # =============================
 # SAFE URL SYNC + RERUN
 # =============================
