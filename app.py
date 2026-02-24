@@ -248,7 +248,6 @@ st.markdown(
 # =============================
 # HELPERS
 # =============================
-# ✅ stronger URL match
 URL_RE = re.compile(r"(https?://[^\s<>\"]+)", re.IGNORECASE)
 
 def safe_txt(x) -> str:
@@ -430,7 +429,7 @@ def parse_form_timestamp(x):
         return py
 
 # =============================
-# VENUE
+# VENUE  ✅ UPDATED (Bondev/Meerkat + Indoor/Outdoor Pool + Hub)
 # =============================
 VENUE_MAP = {
     "musiekkamer": "Music Room",
@@ -438,32 +437,84 @@ VENUE_MAP = {
     "saal": "Hall",
     "ouditorium": "Auditorium",
     "veld": "Field",
-    "bondev": "Bondev Field",
     "swembad": "Swimming Pool",
     "tennis bane": "Tennis Courts",
     "netbal bane": "Netball Courts",
     "cricket oval": "Cricket Oval",
+
+    # ✅ FIELD specific only (NO broad "bondev" mapping!)
+    "bondev field": "Bondev Field",
+    "bondevveld": "Bondev Field",
+    "meerkat field": "Meerkat Field",
+    "meerkatveld": "Meerkat Field",
+
+    # ✅ Pools (optional extra Afrikaans variations)
+    "indoor pool": "Indoor Pool",
+    "binne swembad": "Indoor Pool",
+    "outdoor pool": "Outdoor Pool",
+    "buite swembad": "Outdoor Pool",
+
+    # ✅ Hub (optional variations)
+    "the hub": "The Hub",
+    "lmcp hub": "The Hub",
 }
 
 def normalize_venue(v: str) -> str:
     s = re.sub(r"\s+", " ", str(v or "").strip().replace("_", " "))
     sl = s.lower()
+
     if "see programme" in sl or "see program" in sl or "sien program" in sl or "sien programme" in sl:
         return "SEE_PROGRAMME"
+
+    # ✅ Hub
+    if "hub" in sl:
+        return "The Hub"
+
+    # ✅ Astros (more specific if they mention Bondev/Meerkat)
+    if "astro" in sl:
+        if "bondev" in sl:
+            return "Bondev Astro"
+        if "meerkat" in sl:
+            return "Meerkat Astro"
+        return "Astro"  # allow "Astro" to stay as Astro
+
+    # ✅ Fields (exact)
+    if "bondev field" in sl or "bondevveld" in sl:
+        return "Bondev Field"
+    if "meerkat field" in sl or "meerkatveld" in sl:
+        return "Meerkat Field"
+
+    # ✅ Pools (exact)
+    if "indoor pool" in sl or "binne swembad" in sl:
+        return "Indoor Pool"
+    if "outdoor pool" in sl or "buite swembad" in sl:
+        return "Outdoor Pool"
+
+    # ✅ Normal mapping (safe)
     for k, vv in VENUE_MAP.items():
         if k in sl:
             return vv
+
     return s
 
+# ✅ These are treated as “on campus” -> open FACILITIES_MAP_URL
 CAMPUS_VENUE_LABELS = {
-    "music room", "hall", "auditorium", "field", "bondev field", "swimming pool",
-    "tennis courts", "netball courts", "cricket oval"
+    "music room", "hall", "auditorium", "field",
+    "bondev field", "meerkat field",
+    "swimming pool", "indoor pool", "outdoor pool",
+    "tennis courts", "netball courts", "cricket oval",
+    "the hub",
+    "bondev astro", "meerkat astro", "astro",
 }
+
+# ✅ Keywords for “on campus” (extra safety for odd typing)
 CAMPUS_VENUE_KEYWORDS = [
     "midstream", "midstream college", "lmcp", "primary", "college",
-    "auditorium", "hall", "music room", "field", "bondev",
-    "pool", "swimming", "tennis", "netball", "cricket", "oval",
-    "court", "courts"
+    "auditorium", "hall", "music room", "field", "bondev", "meerkat",
+    "pool", "swimming", "indoor", "outdoor",
+    "tennis", "netball", "cricket", "oval",
+    "court", "courts",
+    "hub", "astro",
 ]
 
 def is_midstream_campus_venue(ven_norm: str) -> bool:
