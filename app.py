@@ -23,7 +23,7 @@ today = now_dt.date()
 
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
-BADGE_ANIMATE_MINUTES = 10  # after this, stop pulsing
+BADGE_ANIMATE_MINUTES = 10
 
 # =============================
 # QUICK SELECT (clean dropdown)
@@ -391,46 +391,43 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (✅ supports: 27-28/02/2026 AND normal dates/ranges)
+# DATE PARSING (✅ fixed for 27-28/02/2026 + normal formats)
 # =============================
 def parse_date_sa_single(s: str):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
-
+    # Let pandas handle -, /, .
     cleaned = re.sub(r"\s+", " ", raw.replace(".", "/")).strip()
-
-    d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1):
-        return d1.to_pydatetime()
-
-    d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2):
-        return d2.to_pydatetime()
-
+    dt = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
+    if not pd.isnull(dt):
+        return dt.to_pydatetime()
+    dt2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
+    if not pd.isnull(dt2):
+        return dt2.to_pydatetime()
     return None
 
 def parse_date_range_sa(s: str):
     """
+    Extracts dates even if extra text is inside the cell.
     Supports:
-      - "27/02/2026"
-      - "27-02-2026"
-      - "2026-02-27"
-      - "27/02/2026 - 28/02/2026"
-      - "27/02/2026–28/02/2026"
-      - "27/02/2026 to 28/02/2026"
-      - ✅ "27-28/02/2026"   (day range, same month/year)
-    Returns: (start_dt, end_dt) where end_dt may equal start_dt.
+      - 27-28/02/2026
+      - 27/02/2026 - 28/02/2026
+      - 27/02/2026
+      - 27-02-2026
+      - 2026-02-27
+    Returns (start_dt, end_dt).
     """
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return (None, None)
 
-    norm = raw.replace("—", "–")
-    norm = re.sub(r"\s+", " ", norm).strip()
+    txt = raw.replace("—", "–")
+    txt = re.sub(r"\s+", " ", txt).strip()
 
-    # ✅ Special format: 27-28/02/2026 (same month/year)
-    m = re.match(r"^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})\s*$", norm)
+    # ✅ 1) Special: 27-28/02/2026 (day range, same month/year)
+    # allow extra text before/after
+    m = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})", txt)
     if m:
         d1 = int(m.group(1))
         d2 = int(m.group(2))
@@ -442,35 +439,43 @@ def parse_date_range_sa(s: str):
             b = datetime(yy, mm, hi)
             return (a, b)
         except Exception:
-            pass  # fall through to other parsing
+            pass
 
-    # Only split on a dash when it's clearly a RANGE separator: " - " (spaces) or "–"
-    parts = re.split(r"\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*", norm, flags=re.I)
-    parts = [p.strip() for p in parts if p.strip()]
-
-    if len(parts) >= 2:
-        a = parse_date_sa_single(parts[0])
-        b = parse_date_sa_single(parts[1])
+    # ✅ 2) Full range: dd/mm/yyyy - dd/mm/yyyy (or with en-dash / "to")
+    m2 = re.search(
+        r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})",
+        txt,
+        flags=re.I
+    )
+    if m2:
+        a = parse_date_sa_single(m2.group(1))
+        b = parse_date_sa_single(m2.group(2))
         if a and b:
             if b < a:
                 a, b = b, a
             return (a, b)
 
-        one = parse_date_sa_single(norm)
+    # ✅ 3) Single date: first date-looking token anywhere
+    m3 = re.search(r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})", txt)
+    if m3:
+        one = parse_date_sa_single(m3.group(1))
         return (one, one) if one else (None, None)
 
-    one = parse_date_sa_single(norm)
+    # fallback: try whole string
+    one = parse_date_sa_single(txt)
     return (one, one) if one else (None, None)
 
 def format_date_long_sa(s) -> str:
     start_dt, end_dt = parse_date_range_sa(s)
     if not start_dt:
+        # show whatever the teacher typed if we can't parse it
         return str(s or "").strip()
 
     if end_dt and end_dt.date() != start_dt.date():
         if start_dt.year == end_dt.year and start_dt.month == end_dt.month:
             return f"{start_dt.day}–{end_dt.day} {start_dt.strftime('%B %Y')}"
         return f"{start_dt.day} {start_dt.strftime('%B %Y')} – {end_dt.day} {end_dt.strftime('%B %Y')}"
+
     return f"{start_dt.day} {start_dt.strftime('%B %Y')}"
 
 def parse_form_timestamp(x):
@@ -1075,11 +1080,11 @@ if st.session_state.screen_mode == "Events":
         d_raw = str(date_s.iloc[i]).strip()
         d_start, d_end = parse_date_range_sa(d_raw)
 
-        # ✅ Skip only if END is in the past
+        # ✅ Past check: only skip if END of range is in the past
         if d_end and d_end.date() < today:
             continue
 
-        # ✅ Next 7 Days = range overlaps window
+        # ✅ Next 7 Days: range overlaps window
         if st.session_state.view_mode == "Next 7 Days":
             if not d_start:
                 continue
@@ -1087,6 +1092,7 @@ if st.session_state.screen_mode == "Events":
             if (d_end or d_start).date() < today or d_start.date() > window_end:
                 continue
 
+        # Term docs logic (unchanged)
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -1175,8 +1181,8 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
-            contact_email = (sig_to_email.get(sig, "") or "").strip()
+            sig2 = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
+            contact_email = (sig_to_email.get(sig2, "") or "").strip()
             contact_line = ""
             if contact_email and "@" in contact_email:
                 mail_label = "Mail Teacher" if cn == "academics" else "Mail Organiser"
