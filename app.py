@@ -23,8 +23,6 @@ today = now_dt.date()
 
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
-
-# NEW badge behavior
 BADGE_ANIMATE_MINUTES = 10  # after this, stop pulsing
 
 # =============================
@@ -266,7 +264,6 @@ def extract_urls(v: str):
     raw = str(v or "").strip()
     if not raw:
         return []
-
     raw_unescaped = html.unescape(raw)
     found = [u.strip() for u in URL_RE.findall(raw_unescaped) if u.strip()]
 
@@ -290,18 +287,11 @@ def urls_signature_part(v: str) -> str:
     return "|".join(links[:2])
 
 def split_info_text_and_links(info: str):
-    """
-    - Keeps Enter/Alt+Enter line breaks
-    - Extracts links into buttons
-    - Removes ALL links cleanly from notes (no leftovers)
-    """
     raw = str(info or "")
     if not raw.strip():
         return "", []
-
     raw = raw.replace("\r\n", "\n").replace("\r", "\n")
     raw_unescaped = html.unescape(raw)
-
     links = extract_urls(raw_unescaped)
 
     text_unescaped = raw_unescaped
@@ -401,38 +391,61 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (✅ supports date ranges)
+# DATE PARSING (✅ supports: 27-28/02/2026 AND normal dates/ranges)
 # =============================
 def parse_date_sa_single(s: str):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
-    cleaned = re.sub(r"\s+", " ", raw.replace(".", "/").replace("-", "/"))
+
+    cleaned = re.sub(r"\s+", " ", raw.replace(".", "/")).strip()
+
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
     if not pd.isnull(d1):
         return d1.to_pydatetime()
+
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
     if not pd.isnull(d2):
         return d2.to_pydatetime()
+
     return None
 
 def parse_date_range_sa(s: str):
     """
     Supports:
       - "27/02/2026"
+      - "27-02-2026"
+      - "2026-02-27"
       - "27/02/2026 - 28/02/2026"
       - "27/02/2026–28/02/2026"
       - "27/02/2026 to 28/02/2026"
+      - ✅ "27-28/02/2026"   (day range, same month/year)
     Returns: (start_dt, end_dt) where end_dt may equal start_dt.
     """
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return (None, None)
 
-    norm = raw.replace("–", "-").replace("—", "-")
+    norm = raw.replace("—", "–")
     norm = re.sub(r"\s+", " ", norm).strip()
 
-    parts = re.split(r"\s*(?:-|to|until|till|tot)\s*", norm, flags=re.I)
+    # ✅ Special format: 27-28/02/2026 (same month/year)
+    m = re.match(r"^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})\s*$", norm)
+    if m:
+        d1 = int(m.group(1))
+        d2 = int(m.group(2))
+        mm = int(m.group(3))
+        yy = int(m.group(4))
+        lo, hi = sorted([d1, d2])
+        try:
+            a = datetime(yy, mm, lo)
+            b = datetime(yy, mm, hi)
+            return (a, b)
+        except Exception:
+            pass  # fall through to other parsing
+
+    # Only split on a dash when it's clearly a RANGE separator: " - " (spaces) or "–"
+    parts = re.split(r"\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*", norm, flags=re.I)
     parts = [p.strip() for p in parts if p.strip()]
 
     if len(parts) >= 2:
@@ -442,6 +455,7 @@ def parse_date_range_sa(s: str):
             if b < a:
                 a, b = b, a
             return (a, b)
+
         one = parse_date_sa_single(norm)
         return (one, one) if one else (None, None)
 
@@ -449,12 +463,6 @@ def parse_date_range_sa(s: str):
     return (one, one) if one else (None, None)
 
 def format_date_long_sa(s) -> str:
-    """
-    Range display:
-      - Same month/year: "27–28 February 2026"
-      - Different month/year: "27 February 2026 – 2 March 2026"
-      - Single: "27 February 2026"
-    """
     start_dt, end_dt = parse_date_range_sa(s)
     if not start_dt:
         return str(s or "").strip()
@@ -463,7 +471,6 @@ def format_date_long_sa(s) -> str:
         if start_dt.year == end_dt.year and start_dt.month == end_dt.month:
             return f"{start_dt.day}–{end_dt.day} {start_dt.strftime('%B %Y')}"
         return f"{start_dt.day} {start_dt.strftime('%B %Y')} – {end_dt.day} {end_dt.strftime('%B %Y')}"
-
     return f"{start_dt.day} {start_dt.strftime('%B %Y')}"
 
 def parse_form_timestamp(x):
@@ -493,19 +500,16 @@ VENUE_MAP = {
     "netbal bane": "Netball Courts",
     "cricket oval": "Cricket Oval",
 
-    # ✅ FIELD specific only (NO broad "bondev" mapping!)
     "bondev field": "Bondev Field",
     "bondevveld": "Bondev Field",
     "meerkat field": "Meerkat Field",
     "meerkatveld": "Meerkat Field",
 
-    # ✅ Pools (optional extra Afrikaans variations)
     "indoor pool": "Indoor Pool",
     "binne swembad": "Indoor Pool",
     "outdoor pool": "Outdoor Pool",
     "buite swembad": "Outdoor Pool",
 
-    # ✅ Hub (optional variations)
     "the hub": "The Hub",
     "lmcp hub": "The Hub",
 }
@@ -517,38 +521,32 @@ def normalize_venue(v: str) -> str:
     if "see programme" in sl or "see program" in sl or "sien program" in sl or "sien programme" in sl:
         return "SEE_PROGRAMME"
 
-    # ✅ Hub
     if "hub" in sl:
         return "The Hub"
 
-    # ✅ Astros (more specific if they mention Bondev/Meerkat)
     if "astro" in sl:
         if "bondev" in sl:
             return "Bondev Astro"
         if "meerkat" in sl:
             return "Meerkat Astro"
-        return "Astro"  # allow "Astro" to stay as Astro
+        return "Astro"
 
-    # ✅ Fields (exact)
     if "bondev field" in sl or "bondevveld" in sl:
         return "Bondev Field"
     if "meerkat field" in sl or "meerkatveld" in sl:
         return "Meerkat Field"
 
-    # ✅ Pools (exact)
     if "indoor pool" in sl or "binne swembad" in sl:
         return "Indoor Pool"
     if "outdoor pool" in sl or "buite swembad" in sl:
         return "Outdoor Pool"
 
-    # ✅ Normal mapping (safe)
     for k, vv in VENUE_MAP.items():
         if k in sl:
             return vv
 
     return s
 
-# ✅ These are treated as “on campus” -> open FACILITIES_MAP_URL
 CAMPUS_VENUE_LABELS = {
     "music room", "hall", "auditorium", "field",
     "bondev field", "meerkat field",
@@ -558,7 +556,6 @@ CAMPUS_VENUE_LABELS = {
     "bondev astro", "meerkat astro", "astro",
 }
 
-# ✅ Keywords for “on campus” (extra safety for odd typing)
 CAMPUS_VENUE_KEYWORDS = [
     "midstream", "midstream college", "lmcp", "primary", "college",
     "auditorium", "hall", "music room", "field", "bondev", "meerkat",
@@ -1078,11 +1075,11 @@ if st.session_state.screen_mode == "Events":
         d_raw = str(date_s.iloc[i]).strip()
         d_start, d_end = parse_date_range_sa(d_raw)
 
-        # ✅ Past check: only skip if END of range is in the past
+        # ✅ Skip only if END is in the past
         if d_end and d_end.date() < today:
             continue
 
-        # ✅ Next 7 Days: keep if range overlaps the window
+        # ✅ Next 7 Days = range overlaps window
         if st.session_state.view_mode == "Next 7 Days":
             if not d_start:
                 continue
@@ -1142,7 +1139,6 @@ if st.session_state.screen_mode == "Events":
             if needle not in hay:
                 continue
 
-        # ✅ Sort by start date of range
         sort_dt = d_start if d_start else datetime(2099, 1, 1)
         res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
 
@@ -1261,7 +1257,6 @@ if st.session_state.screen_mode == "Events":
                     [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
                 ) + "</div>"
 
-            # ✅ NEW badge: small & only says "NEW"
             ribbon = ""
             if item["new"]:
                 created_dt = item.get("created_dt")
