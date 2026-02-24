@@ -92,6 +92,9 @@ ss_init("_pending_qg_reset", False)
 ss_init("_request_rerun", False)
 ss_init("_request_qp_sync", False)
 
+# ✅ used to prevent qp auto-writing after clear
+ss_init("_skip_qp_sync_once", False)
+
 # =============================
 # INITIAL LOAD FROM QUERY PARAMS (ONCE)
 # =============================
@@ -212,7 +215,6 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
-
 /* ✅ NEW badge: small + compact */
 .ribbon{
   position:absolute; right:12px; top:12px;
@@ -391,13 +393,12 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (✅ fixed for 27-28/02/2026 + normal formats)
+# DATE PARSING (supports 27-28/02/2026 and 27–28/02/2026)
 # =============================
 def parse_date_sa_single(s: str):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
-    # Let pandas handle -, /, .
     cleaned = re.sub(r"\s+", " ", raw.replace(".", "/")).strip()
     dt = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
     if not pd.isnull(dt):
@@ -408,16 +409,6 @@ def parse_date_sa_single(s: str):
     return None
 
 def parse_date_range_sa(s: str):
-    """
-    Extracts dates even if extra text is inside the cell.
-    Supports:
-      - 27-28/02/2026
-      - 27/02/2026 - 28/02/2026
-      - 27/02/2026
-      - 27-02-2026
-      - 2026-02-27
-    Returns (start_dt, end_dt).
-    """
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return (None, None)
@@ -425,23 +416,18 @@ def parse_date_range_sa(s: str):
     txt = raw.replace("—", "–")
     txt = re.sub(r"\s+", " ", txt).strip()
 
-    # ✅ 1) Special: 27-28/02/2026 (day range, same month/year)
-    # allow extra text before/after
-    m = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})", txt)
+    # ✅ Special: 27-28/02/2026 OR 27–28/02/2026
+    m = re.search(r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})", txt)
     if m:
-        d1 = int(m.group(1))
-        d2 = int(m.group(2))
-        mm = int(m.group(3))
-        yy = int(m.group(4))
+        d1 = int(m.group(1)); d2 = int(m.group(2))
+        mm = int(m.group(3)); yy = int(m.group(4))
         lo, hi = sorted([d1, d2])
         try:
-            a = datetime(yy, mm, lo)
-            b = datetime(yy, mm, hi)
-            return (a, b)
+            return (datetime(yy, mm, lo), datetime(yy, mm, hi))
         except Exception:
             pass
 
-    # ✅ 2) Full range: dd/mm/yyyy - dd/mm/yyyy (or with en-dash / "to")
+    # ✅ Full range: dd/mm/yyyy - dd/mm/yyyy (or en-dash / to)
     m2 = re.search(
         r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})",
         txt,
@@ -455,20 +441,18 @@ def parse_date_range_sa(s: str):
                 a, b = b, a
             return (a, b)
 
-    # ✅ 3) Single date: first date-looking token anywhere
+    # ✅ Single date anywhere
     m3 = re.search(r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})", txt)
     if m3:
         one = parse_date_sa_single(m3.group(1))
         return (one, one) if one else (None, None)
 
-    # fallback: try whole string
     one = parse_date_sa_single(txt)
     return (one, one) if one else (None, None)
 
 def format_date_long_sa(s) -> str:
     start_dt, end_dt = parse_date_range_sa(s)
     if not start_dt:
-        # show whatever the teacher typed if we can't parse it
         return str(s or "").strip()
 
     if end_dt and end_dt.date() != start_dt.date():
@@ -716,22 +700,43 @@ with st.sidebar:
     st.caption("Use the **FILTER** button at the top to set filters.")
 
 # =============================
-# COLUMNS
+# COLUMN RESOLVER (fixes header mismatches = dates showing blank)
 # =============================
-COL_CATEGORY  = "Category"
-COL_ACTIVITY  = "Activity/Subject Name"
-COL_TEAM      = "Team / Assessment"
-COL_DATE      = "Date / Due Date"
-COL_VENUE     = "Venue"
-COL_PROGRAMME = "Programme / Document Link"
-COL_TEAMS_LNK = "Team"
-COL_CONFIRM   = "Confirm"
-COL_INFO      = "Information"
-COL_GRADE     = "Age Group (9,10) / Grade (1,2,3)"
-COL_TERM      = "Display Duration"
+def pick_col(df_: pd.DataFrame, candidates):
+    cols = list(df_.columns)
+    norm = {re.sub(r"\s+", " ", c.strip().lower()): c for c in cols}
+
+    for cand in candidates:
+        k = re.sub(r"\s+", " ", str(cand).strip().lower())
+        if k in norm:
+            return norm[k]
+
+    for cand in candidates:
+        k = re.sub(r"\s+", " ", str(cand).strip().lower())
+        for nk, orig in norm.items():
+            if k in nk:
+                return orig
+    return None
+
+# =============================
+# COLUMNS (robust)
+# =============================
+COL_CATEGORY  = pick_col(df, ["Category"])
+COL_ACTIVITY  = pick_col(df, ["Activity/Subject Name", "Activity", "Subject"])
+COL_TEAM      = pick_col(df, ["Team / Assessment", "Team/Assessment", "Team"])
+COL_DATE      = pick_col(df, ["Date / Due Date", "Date/Due Date", "Date", "Due Date"])
+COL_VENUE     = pick_col(df, ["Venue"])
+COL_PROGRAMME = pick_col(df, ["Programme / Document Link", "Programme", "Programme Link", "Document Link"])
+COL_TEAMS_LNK = pick_col(df, ["Team", "Team Link"])
+COL_CONFIRM   = pick_col(df, ["Confirm", "Confirmation"])
+COL_INFO      = pick_col(df, ["Information", "Info", "Notes", "Note"])
+COL_GRADE     = pick_col(df, ["Age Group (9,10) / Grade (1,2,3)", "Age Group / Grade", "Age Group", "Grade"])
+COL_TERM      = pick_col(df, ["Display Duration", "Term", "Duration"])
 
 def s(colname):
-    return df[colname].astype(str) if colname in df.columns else pd.Series([""] * len(df), dtype=str)
+    if colname and colname in df.columns:
+        return df[colname].astype(str).fillna("")
+    return pd.Series([""] * len(df), dtype=str)
 
 cat_s     = s(COL_CATEGORY)
 act_s     = s(COL_ACTIVITY)
@@ -769,12 +774,12 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
         return sub_df[name].astype(str) if name in sub_df.columns else pd.Series([""] * len(sub_df), dtype=str)
 
     sub_ts    = sub_df[ts_col].astype(str)
-    sub_cat   = sub_col(COL_CATEGORY)
-    sub_act   = sub_col(COL_ACTIVITY)
-    sub_team  = sub_col(COL_TEAM)
-    sub_date  = sub_col(COL_DATE)
-    sub_ven   = sub_col(COL_VENUE)
-    sub_prog  = sub_col(COL_PROGRAMME)
+    sub_cat   = sub_col(COL_CATEGORY) if COL_CATEGORY else pd.Series([""] * len(sub_df), dtype=str)
+    sub_act   = sub_col(COL_ACTIVITY) if COL_ACTIVITY else pd.Series([""] * len(sub_df), dtype=str)
+    sub_team  = sub_col(COL_TEAM) if COL_TEAM else pd.Series([""] * len(sub_df), dtype=str)
+    sub_date  = sub_col(COL_DATE) if COL_DATE else pd.Series([""] * len(sub_df), dtype=str)
+    sub_ven   = sub_col(COL_VENUE) if COL_VENUE else pd.Series([""] * len(sub_df), dtype=str)
+    sub_prog  = sub_col(COL_PROGRAMME) if COL_PROGRAMME else pd.Series([""] * len(sub_df), dtype=str)
     sub_email = sub_col("Email address")
 
     for j in range(len(sub_df)):
@@ -870,7 +875,13 @@ def clear_all_filters():
     st.session_state.search_text = ""
     st.session_state.quick_grade_ui = QUICK_GRADE_PLACEHOLDER
     st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+
+    # ✅ wipe query params AND prevent auto-rewrite on next run
     st.query_params.from_dict({})
+    if "_last_qp_payload" in st.session_state:
+        del st.session_state["_last_qp_payload"]
+    st.session_state._skip_qp_sync_once = True
+
     st.session_state.screen_mode = "Events"
     st.rerun()
 
@@ -943,27 +954,39 @@ def render_filters_main():
     if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
         act_opts = sorted(set(act_opts) | {"Test Breakdown"})
 
+    # ✅ remove hidden/old selections BEFORE rendering
+    st.session_state.act_choice = [a for a in st.session_state.act_choice if a in act_opts]
+
     st.multiselect(
         "Activity/Subject",
         act_opts,
-        default=[a for a in st.session_state.act_choice if a in act_opts],
+        default=st.session_state.act_choice,
         key="act_choice",
     )
 
-    selected_u = st.multiselect(
-        "Age Groups (Sport)",
-        [f"U{i}" for i in range(7, 14)],
-        default=st.session_state.u_choice,
-        key="u_choice",
-    ) if (not wanted or "sport" in wanted) else []
+    u_opts = [f"U{i}" for i in range(7, 14)]
+    if (not wanted or "sport" in wanted):
+        st.session_state.u_choice = [u for u in st.session_state.u_choice if u in u_opts]
+        selected_u = st.multiselect(
+            "Age Groups (Sport)",
+            u_opts,
+            default=st.session_state.u_choice,
+            key="u_choice",
+        )
+    else:
+        selected_u = []
 
     grade_options = [f"Gr {i}" for i in range(1, 8)]
-    selected_gr = st.multiselect(
-        "Grades (Culture/Academics)",
-        grade_options,
-        default=[g for g in st.session_state.gr_choice if g in grade_options],
-        key="gr_choice",
-    ) if (not wanted or "culture" in wanted or "academics" in wanted) else []
+    if (not wanted or "culture" in wanted or "academics" in wanted):
+        st.session_state.gr_choice = [g for g in st.session_state.gr_choice if g in grade_options]
+        selected_gr = st.multiselect(
+            "Grades (Culture/Academics)",
+            grade_options,
+            default=st.session_state.gr_choice,
+            key="gr_choice",
+        )
+    else:
+        selected_gr = []
 
     selected_u_norm = {norm_token(x) for x in set(selected_u)}
     selected_gr_norm = {norm_token(x) for x in set(selected_gr)}
@@ -1015,9 +1038,14 @@ payload = {
     "q": st.session_state.search_text,
     "qg": st.session_state.quick_grade_ui,
 }
-if st.session_state.get("_last_qp_payload") != payload:
-    st.session_state["_last_qp_payload"] = payload
-    qp_set_from_state(payload)
+
+# ✅ do NOT re-write query params immediately after Clear All
+if st.session_state.get("_skip_qp_sync_once", False):
+    st.session_state._skip_qp_sync_once = False
+else:
+    if st.session_state.get("_last_qp_payload") != payload:
+        st.session_state["_last_qp_payload"] = payload
+        qp_set_from_state(payload)
 
 if st.session_state.get("_request_qp_sync"):
     st.session_state._request_qp_sync = False
@@ -1080,11 +1108,11 @@ if st.session_state.screen_mode == "Events":
         d_raw = str(date_s.iloc[i]).strip()
         d_start, d_end = parse_date_range_sa(d_raw)
 
-        # ✅ Past check: only skip if END of range is in the past
+        # Past check: only skip if END of range is in the past
         if d_end and d_end.date() < today:
             continue
 
-        # ✅ Next 7 Days: range overlaps window
+        # Next 7 Days: range overlaps window
         if st.session_state.view_mode == "Next 7 Days":
             if not d_start:
                 continue
@@ -1092,7 +1120,6 @@ if st.session_state.screen_mode == "Events":
             if (d_end or d_start).date() < today or d_start.date() > window_end:
                 continue
 
-        # Term docs logic (unchanged)
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
