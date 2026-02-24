@@ -23,7 +23,9 @@ today = now_dt.date()
 
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
 NEW_UPDATES_DEFAULT_HOURS = 72
-BADGE_ANIMATE_MINUTES = 10
+
+# NEW badge behavior
+BADGE_ANIMATE_MINUTES = 10  # after this, stop pulsing
 
 # =============================
 # QUICK SELECT (clean dropdown)
@@ -212,21 +214,23 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
+
+/* ✅ NEW badge: small + compact */
 .ribbon{
-  position:absolute; right:12px; bottom:12px;
-  background:#FFD400;
-  color:#B00000;
+  position:absolute; right:12px; top:12px;
+  background:#111827;
+  color:#ffffff;
   font-weight:1000;
-  font-size:.78rem;
-  padding:6px 10px;
+  font-size:.70rem;
+  padding:4px 8px;
   border-radius:999px;
-  border:1px solid rgba(176,0,0,0.25);
+  border:1px solid rgba(255,255,255,0.18);
+  display:flex;align-items:center;gap:6px;
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
-  display:flex;align-items:center;gap:8px;
   z-index:5;
 }
-.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
-@keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
+.rDot{width:7px;height:7px;border-radius:999px;background:#22c55e;animation:pulse 1.0s infinite;}
+@keyframes pulse{0%{transform:scale(1);opacity:.35;}50%{transform:scale(1.55);opacity:1;}100%{transform:scale(1);opacity:.35;}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -397,23 +401,70 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING
+# DATE PARSING (✅ supports date ranges)
 # =============================
-def parse_date_sa(s):
+def parse_date_sa_single(s: str):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
     cleaned = re.sub(r"\s+", " ", raw.replace(".", "/").replace("-", "/"))
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(d1): return d1.to_pydatetime()
+    if not pd.isnull(d1):
+        return d1.to_pydatetime()
     d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(d2): return d2.to_pydatetime()
+    if not pd.isnull(d2):
+        return d2.to_pydatetime()
     return None
 
+def parse_date_range_sa(s: str):
+    """
+    Supports:
+      - "27/02/2026"
+      - "27/02/2026 - 28/02/2026"
+      - "27/02/2026–28/02/2026"
+      - "27/02/2026 to 28/02/2026"
+    Returns: (start_dt, end_dt) where end_dt may equal start_dt.
+    """
+    raw = str(s or "").strip()
+    if not raw or raw.lower() in ["nan", "none"]:
+        return (None, None)
+
+    norm = raw.replace("–", "-").replace("—", "-")
+    norm = re.sub(r"\s+", " ", norm).strip()
+
+    parts = re.split(r"\s*(?:-|to|until|till|tot)\s*", norm, flags=re.I)
+    parts = [p.strip() for p in parts if p.strip()]
+
+    if len(parts) >= 2:
+        a = parse_date_sa_single(parts[0])
+        b = parse_date_sa_single(parts[1])
+        if a and b:
+            if b < a:
+                a, b = b, a
+            return (a, b)
+        one = parse_date_sa_single(norm)
+        return (one, one) if one else (None, None)
+
+    one = parse_date_sa_single(norm)
+    return (one, one) if one else (None, None)
+
 def format_date_long_sa(s) -> str:
-    dt = parse_date_sa(s)
-    if not dt: return str(s or "").strip()
-    return f"{dt.day} {dt.strftime('%B %Y')}"
+    """
+    Range display:
+      - Same month/year: "27–28 February 2026"
+      - Different month/year: "27 February 2026 – 2 March 2026"
+      - Single: "27 February 2026"
+    """
+    start_dt, end_dt = parse_date_range_sa(s)
+    if not start_dt:
+        return str(s or "").strip()
+
+    if end_dt and end_dt.date() != start_dt.date():
+        if start_dt.year == end_dt.year and start_dt.month == end_dt.month:
+            return f"{start_dt.day}–{end_dt.day} {start_dt.strftime('%B %Y')}"
+        return f"{start_dt.day} {start_dt.strftime('%B %Y')} – {end_dt.day} {end_dt.strftime('%B %Y')}"
+
+    return f"{start_dt.day} {start_dt.strftime('%B %Y')}"
 
 def parse_form_timestamp(x):
     s = str(x or "").strip()
@@ -429,7 +480,7 @@ def parse_form_timestamp(x):
         return py
 
 # =============================
-# VENUE  ✅ UPDATED (Bondev/Meerkat + Indoor/Outdoor Pool + Hub)
+# VENUE ✅ UPDATED (Bondev/Meerkat + Indoor/Outdoor Pool + Hub)
 # =============================
 VENUE_MAP = {
     "musiekkamer": "Music Room",
@@ -1025,15 +1076,18 @@ if st.session_state.screen_mode == "Events":
                 continue
 
         d_raw = str(date_s.iloc[i]).strip()
-        d_dt = parse_date_sa(d_raw)
+        d_start, d_end = parse_date_range_sa(d_raw)
 
-        if d_dt and d_dt.date() < today:
+        # ✅ Past check: only skip if END of range is in the past
+        if d_end and d_end.date() < today:
             continue
 
+        # ✅ Next 7 Days: keep if range overlaps the window
         if st.session_state.view_mode == "Next 7 Days":
-            if not d_dt:
+            if not d_start:
                 continue
-            if d_dt.date() > (today + timedelta(days=7)):
+            window_end = today + timedelta(days=7)
+            if (d_end or d_start).date() < today or d_start.date() > window_end:
                 continue
 
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
@@ -1088,7 +1142,8 @@ if st.session_state.screen_mode == "Events":
             if needle not in hay:
                 continue
 
-        sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
+        # ✅ Sort by start date of range
+        sort_dt = d_start if d_start else datetime(2099, 1, 1)
         res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
 
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
@@ -1206,13 +1261,14 @@ if st.session_state.screen_mode == "Events":
                     [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
                 ) + "</div>"
 
+            # ✅ NEW badge: small & only says "NEW"
             ribbon = ""
             if item["new"]:
                 created_dt = item.get("created_dt")
                 dot = "<span class='rDot'></span>"
                 if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                    dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
-                ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
+                    dot = "<span style='width:7px;height:7px;border-radius:999px;background:#22c55e;display:inline-block;opacity:.95;'></span>"
+                ribbon = f"<div class='ribbon'>{dot}NEW</div>"
 
             sport_age_line = ""
             grade_line = ""
