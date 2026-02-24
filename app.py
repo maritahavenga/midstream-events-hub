@@ -80,8 +80,6 @@ def ss_init(key, default):
 
 ss_init("screen_mode", "Events")  # Events | Filter
 ss_init("view_mode", "All")
-
-# widget-backed keys (do NOT set these after widgets render)
 ss_init("cat_choice", [])
 ss_init("act_choice", [])
 ss_init("u_choice", [])
@@ -92,17 +90,40 @@ ss_init("quick_grade_ui", QUICK_GRADE_PLACEHOLDER)
 ss_init("_qg_applied", QUICK_GRADE_PLACEHOLDER)
 ss_init("_pending_qg_reset", False)
 
-# control flags
+# ✅ pending actions (run at top, NOT inside callbacks)
 ss_init("_pending_clear_all", False)
-ss_init("_skip_qp_sync_once", False)
-ss_init("_last_qp_payload", None)
-ss_init("_request_rerun", False)
-ss_init("_request_qp_sync", False)
+ss_init("_pending_save_filters", False)
 
 # =============================
-# APPLY PENDING CLEAR (BEFORE WIDGETS RENDER)
+# INITIAL LOAD FROM QUERY PARAMS (ONLY ON FIRST LOAD)
+# =============================
+if "qp_loaded" not in st.session_state:
+    st.session_state.qp_loaded = True
+
+    view = qp_get("view", "")
+    if view in VIEW_OPTIONS:
+        st.session_state.view_mode = view
+
+    cats = qp_get_list("cat")
+    cat_norm_map = {"sport": "Sport", "culture": "Culture", "academics": "Academics", "academic": "Academics"}
+    st.session_state.cat_choice = [cat_norm_map.get(c.lower(), c) for c in cats if c]
+
+    st.session_state.act_choice = qp_get_list("act")
+    st.session_state.u_choice = qp_get_list("u")
+    st.session_state.gr_choice = qp_get_list("gr")
+    st.session_state.search_text = qp_get("q", "")
+
+    qg = qp_get("qg", QUICK_GRADE_PLACEHOLDER)
+    if qg in QUICK_GRADE_OPTIONS:
+        st.session_state.quick_grade_ui = qg
+        st.session_state._qg_applied = QUICK_GRADE_PLACEHOLDER
+
+# =============================
+# APPLY PENDING ACTIONS (MUST BE BEFORE WIDGETS RENDER)
 # =============================
 if st.session_state.get("_pending_clear_all", False):
+    st.session_state["_pending_clear_all"] = False
+
     st.session_state["cat_choice"] = []
     st.session_state["act_choice"] = []
     st.session_state["u_choice"] = []
@@ -110,37 +131,24 @@ if st.session_state.get("_pending_clear_all", False):
     st.session_state["search_text"] = ""
     st.session_state["quick_grade_ui"] = QUICK_GRADE_PLACEHOLDER
     st.session_state["_qg_applied"] = QUICK_GRADE_PLACEHOLDER
-    st.session_state["_pending_clear_all"] = False
 
-    # wipe URL and prevent auto rewrite on this run
     st.query_params.from_dict({})
-    st.session_state["_last_qp_payload"] = None
-    st.session_state["_skip_qp_sync_once"] = True
     st.session_state["screen_mode"] = "Events"
 
-# =============================
-# INITIAL LOAD FROM QUERY PARAMS (ONCE)
-# =============================
-if "qp_loaded" not in st.session_state:
-    st.session_state.qp_loaded = True
+if st.session_state.get("_pending_save_filters", False):
+    st.session_state["_pending_save_filters"] = False
 
-    view = qp_get("view", "")
-    if view in VIEW_OPTIONS:
-        st.session_state["view_mode"] = view
-
-    cats = qp_get_list("cat")
-    cat_norm_map = {"sport": "Sport", "culture": "Culture", "academics": "Academics", "academic": "Academics"}
-    st.session_state["cat_choice"] = [cat_norm_map.get(c.lower(), c) for c in cats if c]
-
-    st.session_state["act_choice"] = qp_get_list("act")
-    st.session_state["u_choice"] = qp_get_list("u")
-    st.session_state["gr_choice"] = qp_get_list("gr")
-    st.session_state["search_text"] = qp_get("q", "")
-
-    qg = qp_get("qg", QUICK_GRADE_PLACEHOLDER)
-    if qg in QUICK_GRADE_OPTIONS:
-        st.session_state["quick_grade_ui"] = qg
-        st.session_state["_qg_applied"] = QUICK_GRADE_PLACEHOLDER
+    payload_now = {
+        "view": st.session_state.get("view_mode", "All"),
+        "cat": st.session_state.get("cat_choice", []),
+        "act": st.session_state.get("act_choice", []),
+        "u": st.session_state.get("u_choice", []),
+        "gr": st.session_state.get("gr_choice", []),
+        "q": st.session_state.get("search_text", ""),
+        "qg": st.session_state.get("quick_grade_ui", QUICK_GRADE_PLACEHOLDER),
+    }
+    qp_set_from_state(payload_now)
+    st.session_state["screen_mode"] = "Events"
 
 # =============================
 # STYLE
@@ -439,7 +447,6 @@ def parse_date_range_sa(s: str):
     txt = raw.replace("—", "–")
     txt = re.sub(r"\s+", " ", txt).strip()
 
-    # Special: 27-28/02/2026 OR 27–28/02/2026
     m = re.search(r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})", txt)
     if m:
         d1 = int(m.group(1)); d2 = int(m.group(2))
@@ -450,7 +457,6 @@ def parse_date_range_sa(s: str):
         except Exception:
             pass
 
-    # Full range: dd/mm/yyyy - dd/mm/yyyy (or en-dash / to)
     m2 = re.search(
         r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})",
         txt,
@@ -464,7 +470,6 @@ def parse_date_range_sa(s: str):
                 a, b = b, a
             return (a, b)
 
-    # Single date anywhere
     m3 = re.search(r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})", txt)
     if m3:
         one = parse_date_sa_single(m3.group(1))
@@ -499,7 +504,7 @@ def parse_form_timestamp(x):
         return py
 
 # =============================
-# VENUE (Bondev/Meerkat + Indoor/Outdoor Pool + Hub + Astros)
+# VENUE (Bondev/Meerkat + Indoor/Outdoor Pool + Hub + Facility map rule)
 # =============================
 VENUE_MAP = {
     "musiekkamer": "Music Room",
@@ -511,17 +516,14 @@ VENUE_MAP = {
     "tennis bane": "Tennis Courts",
     "netbal bane": "Netball Courts",
     "cricket oval": "Cricket Oval",
-
     "bondev field": "Bondev Field",
     "bondevveld": "Bondev Field",
     "meerkat field": "Meerkat Field",
     "meerkatveld": "Meerkat Field",
-
     "indoor pool": "Indoor Pool",
     "binne swembad": "Indoor Pool",
     "outdoor pool": "Outdoor Pool",
     "buite swembad": "Outdoor Pool",
-
     "the hub": "The Hub",
     "lmcp hub": "The Hub",
 }
@@ -536,7 +538,6 @@ def normalize_venue(v: str) -> str:
     if "hub" in sl:
         return "The Hub"
 
-    # Astros: keep astro, but specific if Bondev/Meerkat present
     if "astro" in sl:
         if "bondev" in sl:
             return "Bondev Astro"
@@ -560,20 +561,11 @@ def normalize_venue(v: str) -> str:
 
     return s
 
-CAMPUS_VENUE_LABELS = {
-    "music room", "hall", "auditorium", "field",
-    "bondev field", "meerkat field",
-    "swimming pool", "indoor pool", "outdoor pool",
-    "tennis courts", "netball courts", "cricket oval",
-    "the hub",
-    "bondev astro", "meerkat astro", "astro",
-}
 CAMPUS_VENUE_KEYWORDS = [
     "midstream", "midstream college", "lmcp", "primary", "college",
     "auditorium", "hall", "music room", "field", "bondev", "meerkat",
     "pool", "swimming", "indoor", "outdoor",
     "tennis", "netball", "cricket", "oval",
-    "court", "courts",
     "hub", "astro",
 ]
 
@@ -581,8 +573,6 @@ def is_midstream_campus_venue(ven_norm: str) -> bool:
     v = str(ven_norm or "").strip().lower()
     if not v:
         return False
-    if v in CAMPUS_VENUE_LABELS:
-        return True
     return any(k in v for k in CAMPUS_VENUE_KEYWORDS)
 
 # =============================
@@ -723,7 +713,7 @@ with st.sidebar:
     st.caption("Use the **FILTER** button at the top to set filters.")
 
 # =============================
-# COLUMN RESOLVER (fix header mismatches)
+# COLUMN RESOLVER (fixes header mismatches = dates blank)
 # =============================
 def pick_col(df_: pd.DataFrame, candidates):
     cols = list(df_.columns)
@@ -791,15 +781,15 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
     ts_col = "Timestamp"
 
     def sub_col(name):
-        return sub_df[name].astype(str) if name and name in sub_df.columns else pd.Series([""] * len(sub_df), dtype=str)
+        return sub_df[name].astype(str) if name in sub_df.columns else pd.Series([""] * len(sub_df), dtype=str)
 
     sub_ts    = sub_df[ts_col].astype(str)
-    sub_cat   = sub_col(COL_CATEGORY)
-    sub_act   = sub_col(COL_ACTIVITY)
-    sub_team  = sub_col(COL_TEAM)
-    sub_date  = sub_col(COL_DATE)
-    sub_ven   = sub_col(COL_VENUE)
-    sub_prog  = sub_col(COL_PROGRAMME)
+    sub_cat   = sub_col("Category")
+    sub_act   = sub_col("Activity/Subject Name")
+    sub_team  = sub_col("Team / Assessment")
+    sub_date  = sub_col("Date / Due Date")
+    sub_ven   = sub_col("Venue")
+    sub_prog  = sub_col("Programme / Document Link")
     sub_email = sub_col("Email address")
 
     for j in range(len(sub_df)):
@@ -824,24 +814,23 @@ if st.session_state.get("_pending_qg_reset", False):
 top_left, top_mid, top_right = st.columns([2.2, 1.0, 1.2])
 
 with top_left:
-    if st.session_state["screen_mode"] == "Events":
+    if st.session_state.screen_mode == "Events":
         st.selectbox(
             "Quick select",
             QUICK_GRADE_OPTIONS,
-            index=QUICK_GRADE_OPTIONS.index(st.session_state["quick_grade_ui"])
-            if st.session_state["quick_grade_ui"] in QUICK_GRADE_OPTIONS else 0,
+            index=QUICK_GRADE_OPTIONS.index(st.session_state.quick_grade_ui)
+            if st.session_state.quick_grade_ui in QUICK_GRADE_OPTIONS else 0,
             key="quick_grade_ui",
             label_visibility="collapsed",
         )
 
 with top_mid:
-    if st.session_state["screen_mode"] == "Events":
-        qg = st.session_state["quick_grade_ui"]
-        if qg in QUICK_GRADE_OPTIONS and qg != st.session_state["_qg_applied"]:
+    if st.session_state.screen_mode == "Events":
+        qg = st.session_state.quick_grade_ui
+        if qg in QUICK_GRADE_OPTIONS and qg != st.session_state._qg_applied:
             if qg == QUICK_GRADE_CLEAR:
-                st.session_state["_pending_qg_reset"] = True
+                st.session_state["_pending_clear_all"] = True
                 st.session_state["_qg_applied"] = QUICK_GRADE_CLEAR
-                st.session_state["_request_rerun"] = True
             elif qg == QUICK_GRADE_PLACEHOLDER:
                 st.session_state["_qg_applied"] = qg
             else:
@@ -851,10 +840,9 @@ with top_mid:
                     st.session_state["gr_choice"] = [qg]
                 st.session_state["u_choice"] = GRADE_TO_U_MAP.get(qg, [])
                 st.session_state["_qg_applied"] = qg
-                st.session_state["_request_rerun"] = True
 
 with top_right:
-    if st.session_state["screen_mode"] == "Events":
+    if st.session_state.screen_mode == "Events":
         if st.button("🔎 FILTER", key="go_filter_top", type="primary", use_container_width=True):
             st.session_state["screen_mode"] = "Filter"
             st.rerun()
@@ -876,43 +864,23 @@ st.radio(
 )
 
 # =============================
-# FILTERS (logic vars)
+# FILTER SCREEN (buttons set pending flags)
 # =============================
+def click_save_filters():
+    st.session_state["_pending_save_filters"] = True
+
+def click_clear_filters():
+    st.session_state["_pending_clear_all"] = True
+
+def click_back_no_save():
+    st.session_state["screen_mode"] = "Events"
+
 wanted = set()
 selected_u_norm = set()
 selected_gr_norm = set()
 force_sport = False
 force_grades = False
 new_hours = NEW_UPDATES_DEFAULT_HOURS
-
-# =============================
-# CALLBACKS (no widget-key writes inside filter screen)
-# =============================
-def clear_all_filters_click():
-    # we cannot directly change widget-backed keys after they rendered
-    st.session_state["_pending_clear_all"] = True
-    st.session_state["screen_mode"] = "Events"
-    st.rerun()
-
-def save_and_back_click():
-    payload_now = {
-        "view": st.session_state.get("view_mode", "All"),
-        "cat": st.session_state.get("cat_choice", []),
-        "act": st.session_state.get("act_choice", []),
-        "u": st.session_state.get("u_choice", []),
-        "gr": st.session_state.get("gr_choice", []),
-        "q": st.session_state.get("search_text", ""),
-        "qg": st.session_state.get("quick_grade_ui", QUICK_GRADE_PLACEHOLDER),
-    }
-    qp_set_from_state(payload_now)
-    st.session_state["_last_qp_payload"] = payload_now.copy()
-    st.session_state["_skip_qp_sync_once"] = True
-    st.session_state["screen_mode"] = "Events"
-    st.rerun()
-
-def back_no_save_click():
-    st.session_state["screen_mode"] = "Events"
-    st.rerun()
 
 def render_filters_main():
     global wanted, selected_u_norm, selected_gr_norm, force_sport, force_grades, new_hours
@@ -921,30 +889,17 @@ def render_filters_main():
 
     a1, a2, a3 = st.columns([1, 1, 1])
     with a1:
-        st.button("✅ Save filters & Back to Events", key="save_back_top", type="primary",
-                  use_container_width=True, on_click=save_and_back_click)
+        st.button("✅ Save filters & Back to Events", key="save_back_top", type="primary", use_container_width=True, on_click=click_save_filters)
     with a2:
-        st.button("🧹 Clear all filters", key="clear_all_top", type="secondary",
-                  use_container_width=True, on_click=clear_all_filters_click)
+        st.button("🧹 Clear all filters", key="clear_all_top", type="secondary", use_container_width=True, on_click=click_clear_filters)
     with a3:
-        st.button("⬅ Back (no changes)", key="back_no_save_top", type="secondary",
-                  use_container_width=True, on_click=back_no_save_click)
+        st.button("⬅ Back (no changes)", key="back_no_save_top", type="secondary", use_container_width=True, on_click=click_back_no_save)
 
     st.markdown("---")
 
-    st.multiselect(
-        "Category",
-        ["Sport", "Culture", "Academics"],
-        default=st.session_state.get("cat_choice", []),
-        key="cat_choice",
-    )
+    st.multiselect("Category", ["Sport", "Culture", "Academics"], default=st.session_state.get("cat_choice", []), key="cat_choice")
 
-    st.text_input(
-        "Whole school search",
-        value=st.session_state.get("search_text", ""),
-        placeholder="Type to filter...",
-        key="search_text",
-    )
+    st.text_input("Whole school search", value=st.session_state.get("search_text", ""), placeholder="Type to filter...", key="search_text")
 
     wanted = {c.lower() for c in st.session_state.get("cat_choice", [])} if st.session_state.get("cat_choice") else set()
 
@@ -995,67 +950,38 @@ def render_filters_main():
         new_hours = NEW_UPDATES_DEFAULT_HOURS
 
     st.markdown("---")
-
     b1, b2, b3 = st.columns([1, 1, 1])
     with b1:
-        st.button("✅ Save filters & Back to Events", key="save_back_bottom", type="primary",
-                  use_container_width=True, on_click=save_and_back_click)
+        st.button("✅ Save filters & Back to Events", key="save_back_bottom", type="primary", use_container_width=True, on_click=click_save_filters)
     with b2:
-        st.button("🧹 Clear all filters", key="clear_all_bottom", type="secondary",
-                  use_container_width=True, on_click=clear_all_filters_click)
+        st.button("🧹 Clear all filters", key="clear_all_bottom", type="secondary", use_container_width=True, on_click=click_clear_filters)
     with b3:
-        st.button("⬅ Back (no changes)", key="back_no_save_bottom", type="secondary",
-                  use_container_width=True, on_click=back_no_save_click)
+        st.button("⬅ Back (no changes)", key="back_no_save_bottom", type="secondary", use_container_width=True, on_click=click_back_no_save)
 
-if st.session_state["screen_mode"] == "Filter":
+if st.session_state.screen_mode == "Filter":
     render_filters_main()
+    st.stop()
 
 # =============================
-# DERIVE FILTER STATE (Events screen)
+# EVENTS SCREEN FILTER STATE (stickiness comes from session_state)
 # =============================
-if st.session_state["screen_mode"] == "Events":
-    wanted = {c.lower() for c in st.session_state.get("cat_choice", [])} if st.session_state.get("cat_choice") else set()
-    selected_u_norm = {norm_token(x) for x in set(st.session_state.get("u_choice", []))}
-    grade_options = [f"Gr {i}" for i in range(1, 8)]
-    selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.get("gr_choice", []) if g in grade_options])}
+wanted = {c.lower() for c in st.session_state.get("cat_choice", [])} if st.session_state.get("cat_choice") else set()
+selected_u_norm = {norm_token(x) for x in set(st.session_state.get("u_choice", []))}
+grade_options = [f"Gr {i}" for i in range(1, 8)]
+selected_gr_norm = {norm_token(x) for x in set([g for g in st.session_state.get("gr_choice", []) if g in grade_options])}
 
-    force_sport  = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
-    force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
-    new_hours = NEW_UPDATES_DEFAULT_HOURS
-
-# =============================
-# URL SYNC (✅ only on Events screen; makes filters "stick" in bookmark)
-# =============================
-payload = {
-    "view": st.session_state.get("view_mode", "All"),
-    "cat": st.session_state.get("cat_choice", []),
-    "act": st.session_state.get("act_choice", []),
-    "u": st.session_state.get("u_choice", []),
-    "gr": st.session_state.get("gr_choice", []),
-    "q": st.session_state.get("search_text", ""),
-    "qg": st.session_state.get("quick_grade_ui", QUICK_GRADE_PLACEHOLDER),
-}
-if st.session_state.get("_skip_qp_sync_once", False):
-    st.session_state["_skip_qp_sync_once"] = False
-else:
-    if st.session_state.get("screen_mode") == "Events":
-        if st.session_state.get("_last_qp_payload") != payload:
-            st.session_state["_last_qp_payload"] = payload.copy()
-            qp_set_from_state(payload)
-
-if st.session_state.get("_request_rerun"):
-    st.session_state["_request_rerun"] = False
-    st.rerun()
+force_sport  = (not wanted) and bool(selected_u_norm) and not bool(selected_gr_norm)
+force_grades = (not wanted) and bool(selected_gr_norm) and not bool(selected_u_norm)
+new_hours = NEW_UPDATES_DEFAULT_HOURS
 
 # =============================
 # BUILD RESULTS (Events screen)
 # =============================
 window_start = now_dt - timedelta(hours=new_hours)
 
-if st.session_state["screen_mode"] == "Events":
-    if st.session_state.get("view_mode") == "New Updates" and not sig_to_created:
-        st.warning("New Updates needs the Responses sheet accessible as CSV (Anyone with link = Viewer).")
-        st.stop()
+if st.session_state.get("view_mode") == "New Updates" and not sig_to_created:
+    st.warning("New Updates needs the Responses sheet accessible as CSV (Anyone with link = Viewer).")
+    st.stop()
 
 def cat_ok(i: int) -> bool:
     if not wanted:
@@ -1070,233 +996,212 @@ def cat_ok(i: int) -> bool:
 # =============================
 # EVENTS SCREEN OUTPUT
 # =============================
-if st.session_state["screen_mode"] == "Events":
-    res = []
-    for i in range(len(df)):
-        cn = normalize_category(cat_s.iloc[i])
+res = []
+for i in range(len(df)):
+    cn = normalize_category(cat_s.iloc[i])
 
-        if force_sport and cn != "sport":
-            continue
-        if force_grades and cn == "sport":
-            continue
+    if force_sport and cn != "sport":
+        continue
+    if force_grades and cn == "sport":
+        continue
 
-        if wanted and not cat_ok(i):
-            continue
+    if wanted and not cat_ok(i):
+        continue
 
-        info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
-        row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
+    info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
+    row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
 
-        if st.session_state.get("view_mode") == "Test Breakdown" and not row_is_tb:
-            continue
+    if st.session_state.get("view_mode") == "Test Breakdown" and not row_is_tb:
+        continue
 
-        row_act_key = activity_filter_key(cn, act_s.iloc[i])
-        if st.session_state.get("act_choice"):
-            has_tb_pick = ("Test Breakdown" in st.session_state["act_choice"])
-            subject_match = (row_act_key in st.session_state["act_choice"])
-            tb_match = (has_tb_pick and row_is_tb)
-            if not (subject_match or tb_match):
-                continue
+    row_act_key = activity_filter_key(cn, act_s.iloc[i])
 
-        d_raw = str(date_s.iloc[i]).strip()
-        d_start, d_end = parse_date_range_sa(d_raw)
-
-        # Past check: only skip if END of range is in the past
-        if d_end and d_end.date() < today:
+    if st.session_state.get("act_choice"):
+        has_tb_pick = ("Test Breakdown" in st.session_state.act_choice)
+        subject_match = (row_act_key in st.session_state.act_choice)
+        tb_match = (has_tb_pick and row_is_tb)
+        if not (subject_match or tb_match):
             continue
 
-        # Next 7 Days: range overlaps
-        if st.session_state.get("view_mode") == "Next 7 Days":
-            if not d_start:
-                continue
-            window_end = today + timedelta(days=7)
-            if (d_end or d_start).date() < today or d_start.date() > window_end:
-                continue
+    d_raw = str(date_s.iloc[i]).strip()
+    d_start, d_end = parse_date_range_sa(d_raw)
 
-        act_disp_for_term = display_activity(cn, act_s.iloc[i])
-        term_val = str(term_s.iloc[i]).strip().lower()
-        looks_like_term_doc = any(
-            k in (act_disp_for_term.lower() + " " + str(team_s.iloc[i]).lower() + " " + info_raw_full.lower())
-            for k in ["spelling", "speltoets", "spellys", "assessment schedule", "assessment", "toets", "toetse", "test breakdown"]
-        )
-        term_flag = ("full term" in term_val) or ("term" in term_val) or (looks_like_term_doc and cn == "academics")
+    if d_end and d_end.date() < today:
+        continue
 
-        if st.session_state.get("view_mode") == "Term Documents" and not term_flag:
+    if st.session_state.get("view_mode") == "Next 7 Days":
+        if not d_start:
             continue
-        if st.session_state.get("view_mode") == "Assessment Schedule" and not is_assessment_schedule(act_s.iloc[i], team_s.iloc[i]):
+        window_end = today + timedelta(days=7)
+        if (d_end or d_start).date() < today or d_start.date() > window_end:
             continue
 
-        _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+    _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
 
-        if cn == "sport" and selected_u_norm:
-            if not grp_matches:
-                continue
+    if cn == "sport" and selected_u_norm:
+        if not grp_matches:
+            continue
+        grp_norm = {norm_token(x) for x in grp_matches}
+        if not (selected_u_norm & grp_norm):
+            continue
+
+    if cn in ["culture", "academics"] and selected_gr_norm:
+        if grp_matches:
             grp_norm = {norm_token(x) for x in grp_matches}
-            if not (selected_u_norm & grp_norm):
+            if not (selected_gr_norm & grp_norm):
                 continue
 
-        if cn in ["culture", "academics"] and selected_gr_norm:
-            if grp_matches:
-                grp_norm = {norm_token(x) for x in grp_matches}
-                if not (selected_gr_norm & grp_norm):
-                    continue
+    sig = hashlib.sha256("||".join([
+        normalize_category(cat_s.iloc[i]),
+        norm_token(act_s.iloc[i]),
+        norm_token(team_s.iloc[i]),
+        norm_token(date_s.iloc[i]),
+        norm_token(ven_s.iloc[i]),
+        norm_token(urls_signature_part(prog_s.iloc[i])),
+    ]).encode("utf-8")).hexdigest()
 
-        sig = hashlib.sha256("||".join([
-            normalize_category(cat_s.iloc[i]),
-            norm_token(act_s.iloc[i]),
-            norm_token(team_s.iloc[i]),
-            norm_token(date_s.iloc[i]),
-            norm_token(ven_s.iloc[i]),
-            norm_token(urls_signature_part(prog_s.iloc[i])),
-        ]).encode("utf-8")).hexdigest()
+    created_dt = sig_to_created.get(sig)
+    is_recent = bool(created_dt and (window_start <= created_dt <= now_dt))
 
-        created_dt = sig_to_created.get(sig)
-        is_recent = bool(created_dt and (window_start <= created_dt <= now_dt))
+    if st.session_state.get("view_mode") == "New Updates" and not is_recent:
+        continue
 
-        if st.session_state.get("view_mode") == "New Updates" and not is_recent:
+    title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+
+    if st.session_state.get("search_text"):
+        needle = st.session_state.search_text.lower().replace(" ", "")
+        hay = title.lower().replace(" ", "")
+        if needle not in hay:
             continue
+
+    sort_dt = d_start if d_start else datetime(2099, 1, 1)
+    res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
+
+res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
+
+st.markdown("## 📅 Events")
+pin = "&#128205;"
+
+if not res_sorted:
+    st.warning("No items match your filters. Try FILTER → Clear all filters.")
+else:
+    for item in res_sorted:
+        i = item["i"]
+        cn = normalize_category(cat_s.iloc[i])
+        afr = is_afrikaans_subject(act_s.iloc[i])
 
         title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
+        d_raw = str(date_s.iloc[i]).strip()
+        date_line = format_date_long_sa(d_raw) if d_raw else ""
 
-        if st.session_state.get("search_text"):
-            needle = st.session_state["search_text"].lower().replace(" ", "")
-            hay = title.lower().replace(" ", "")
-            if needle not in hay:
-                continue
+        _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+        ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
-        sort_dt = d_start if d_start else datetime(2099, 1, 1)
-        res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
+        prog_links = extract_urls(prog_s.iloc[i])
+        team_links = extract_urls(teamlnk_s.iloc[i])
+        confirm_links = extract_urls(conf_s.iloc[i])
 
-    res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
+        info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
+        info_text, info_links = split_info_text_and_links(info_raw_full)
 
-    st.markdown("## 📅 Events")
-    pin = "&#128205;"
+        row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
+        assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
 
-    if not res_sorted:
-        st.warning("No items match your filters. Try FILTER → Clear all filters.")
-    else:
-        for item in res_sorted:
-            i = item["i"]
-            cn = normalize_category(cat_s.iloc[i])
-            afr = is_afrikaans_subject(act_s.iloc[i])
+        buttons = []
+        notes_parts = []
 
-            title = build_title(cn, act_s.iloc[i], team_s.iloc[i], grade_s.iloc[i])
-            d_raw = str(date_s.iloc[i]).strip()
-            date_line = format_date_long_sa(d_raw) if d_raw else ""
+        sig2 = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
+        contact_email = (sig_to_email.get(sig2, "") or "").strip()
+        contact_line = ""
+        if contact_email and "@" in contact_email:
+            mail_label = "Mail Teacher" if cn == "academics" else "Mail Organiser"
+            contact_line = (
+                "<div class='meta'>"
+                f"<a href='mailto:{safe_txt(contact_email)}' style='color:#008080;font-weight:900;text-decoration:none;'>"
+                f"{mail_label}</a></div>"
+            )
 
-            _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
-            ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
-
-            prog_links = extract_urls(prog_s.iloc[i])
-            team_links = extract_urls(teamlnk_s.iloc[i])
-            confirm_links = extract_urls(conf_s.iloc[i])
-
-            info_raw_full = str(info_s.iloc[i]).strip().replace("_", " ")
-            info_text, info_links = split_info_text_and_links(info_raw_full)
-
-            row_is_tb = is_test_breakdown_row(act_s.iloc[i], team_s.iloc[i], info_raw_full)
-            assess = is_assessment_schedule(act_s.iloc[i], team_s.iloc[i])
-
-            buttons = []
-            notes_parts = []
-
-            sig2 = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
-            contact_email = (sig_to_email.get(sig2, "") or "").strip()
-            contact_line = ""
-            if contact_email and "@" in contact_email:
-                mail_label = "Mail Teacher" if cn == "academics" else "Mail Organiser"
-                contact_line = (
-                    "<div class='meta'>"
-                    f"<a href='mailto:{safe_txt(contact_email)}' style='color:#008080;font-weight:900;text-decoration:none;'>"
-                    f"{mail_label}</a></div>"
-                )
-
-            if cn == "academics":
-                if row_is_tb:
-                    src_links = info_links if len(info_links) >= 1 else prog_links
-                    if len(src_links) >= 1 and is_http(src_links[0]):
-                        buttons.append(("English", src_links[0]))
-                    if len(src_links) >= 2 and is_http(src_links[1]):
-                        buttons.append(("Afrikaans", src_links[1]))
-                else:
-                    if assess and len(prog_links) >= 1:
-                        if is_http(prog_links[0]):
-                            buttons.append(("English", prog_links[0]))
-                        if len(prog_links) >= 2 and is_http(prog_links[1]):
-                            buttons.append(("Afrikaans", prog_links[1]))
-                    else:
-                        base_docs = "Dokumente" if afr else "Documents"
-                        for idx, lk in enumerate(prog_links, start=1):
-                            if is_http(lk):
-                                buttons.append((base_docs if idx == 1 else f"{base_docs} {idx}", lk))
-
-                    base_info = "Inligting" if afr else "Information"
-                    for idx, lk in enumerate(info_links, start=1):
-                        if is_http(lk):
-                            buttons.append((base_info if idx == 1 else f"{base_info} {idx}", lk))
+        if cn == "academics":
+            if row_is_tb:
+                src_links = info_links if len(info_links) >= 1 else prog_links
+                if len(src_links) >= 1 and is_http(src_links[0]):
+                    buttons.append(("English", src_links[0]))
+                if len(src_links) >= 2 and is_http(src_links[1]):
+                    buttons.append(("Afrikaans", src_links[1]))
             else:
-                for idx, lk in enumerate(prog_links, start=1):
-                    if is_http(lk):
-                        buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
-                for idx, lk in enumerate(team_links, start=1):
-                    if is_http(lk):
-                        buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
-
-                if row_is_tb:
-                    src_links = info_links if len(info_links) >= 1 else prog_links
-                    if len(src_links) >= 1 and is_http(src_links[0]):
-                        buttons.append(("English", src_links[0]))
-                    if len(src_links) >= 2 and is_http(src_links[1]):
-                        buttons.append(("Afrikaans", src_links[1]))
+                if assess and len(prog_links) >= 1:
+                    if is_http(prog_links[0]):
+                        buttons.append(("English", prog_links[0]))
+                    if len(prog_links) >= 2 and is_http(prog_links[1]):
+                        buttons.append(("Afrikaans", prog_links[1]))
                 else:
-                    for idx, lk in enumerate(info_links, start=1):
+                    base_docs = "Dokumente" if afr else "Documents"
+                    for idx, lk in enumerate(prog_links, start=1):
                         if is_http(lk):
-                            buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
+                            buttons.append((base_docs if idx == 1 else f"{base_docs} {idx}", lk))
 
-                for idx, lk in enumerate(confirm_links, start=1):
-                    if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
-                        buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
+                base_info = "Inligting" if afr else "Information"
+                for idx, lk in enumerate(info_links, start=1):
+                    if is_http(lk):
+                        buttons.append((base_info if idx == 1 else f"{base_info} {idx}", lk))
 
-            venue_line = ""
-            if ven_norm == "SEE_PROGRAMME":
-                notes_parts.append("<b>Venue:</b><br>See programme")
-            elif ven_norm:
-                # ✅ School venues open Facilities map; others open Google Maps
-                venue_href = FACILITIES_MAP_URL if is_midstream_campus_venue(ven_norm) else \
-                    f"https://www.google.com/maps/search/?api=1&query={ven_norm.replace(' ', '+')}"
-                venue_line = (
-                    f"<div class='meta'>{pin} "
-                    f"<a href='{venue_href}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
-                    f"{safe_txt(ven_norm).upper()}</a></div>"
-                )
+        else:
+            for idx, lk in enumerate(prog_links, start=1):
+                if is_http(lk):
+                    buttons.append(("Programme" if idx == 1 else f"Programme {idx}", lk))
 
-            if info_text:
-                notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text).replace('\\n','<br>')}")
+            for idx, lk in enumerate(team_links, start=1):
+                if is_http(lk):
+                    buttons.append(("Team" if idx == 1 else f"Team {idx}", lk))
 
-            notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
+            for idx, lk in enumerate(info_links, start=1):
+                if is_http(lk):
+                    buttons.append(("Information" if idx == 1 else f"Information {idx}", lk))
 
-            btn_html = ""
-            if buttons:
-                btn_html = "<div class='btnRow'>" + "".join(
-                    [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
-                ) + "</div>"
+            for idx, lk in enumerate(confirm_links, start=1):
+                if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
+                    buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
-            ribbon = ""
-            if item["new"]:
-                created_dt = item.get("created_dt")
-                dot = "<span class='rDot'></span>"
-                if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                    dot = "<span style='width:7px;height:7px;border-radius:999px;background:#22c55e;display:inline-block;opacity:.95;'></span>"
-                ribbon = f"<div class='ribbon'>{dot}NEW</div>"
+        venue_line = ""
+        if ven_norm == "SEE_PROGRAMME":
+            notes_parts.append("<b>Venue:</b><br>See programme")
+        elif ven_norm:
+            venue_href = FACILITIES_MAP_URL if is_midstream_campus_venue(ven_norm) else \
+                f"https://www.google.com/maps/search/?api=1&query={ven_norm.replace(' ', '+')}"
+            venue_line = (
+                f"<div class='meta'>{pin} "
+                f"<a href='{venue_href}' target='_blank' style='color:#008080;font-weight:900;text-decoration:none;'>"
+                f"{safe_txt(ven_norm).upper()}</a></div>"
+            )
 
-            sport_age_line = ""
-            grade_line = ""
-            if cn == "sport" and grp_matches:
-                sport_age_line = f"<div class='meta'><b>Ages:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
-            if cn in ["culture", "academics"] and grp_matches:
-                grade_line = f"<div class='meta'><b>Grades:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
+        if info_text:
+            notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text).replace('\\n','<br>')}")
 
-            st.markdown(
-                f"""
+        notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
+
+        btn_html = ""
+        if buttons:
+            btn_html = "<div class='btnRow'>" + "".join(
+                [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
+            ) + "</div>"
+
+        ribbon = ""
+        if item["new"]:
+            created_dt = item.get("created_dt")
+            dot = "<span class='rDot'></span>"
+            if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
+                dot = "<span style='width:7px;height:7px;border-radius:999px;background:#22c55e;display:inline-block;opacity:.95;'></span>"
+            ribbon = f"<div class='ribbon'>{dot}NEW</div>"
+
+        sport_age_line = ""
+        grade_line = ""
+        if cn == "sport" and grp_matches:
+            sport_age_line = f"<div class='meta'><b>Ages:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
+        if cn in ["culture", "academics"] and grp_matches:
+            grade_line = f"<div class='meta'><b>Grades:</b> {safe_txt(grp_matches[0])}{'–' + safe_txt(grp_matches[-1]) if len(grp_matches) >= 2 else ''}</div>"
+
+        st.markdown(
+            f"""
 <div class="card">
   {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
@@ -1309,10 +1214,10 @@ if st.session_state["screen_mode"] == "Events":
   {btn_html}
 </div>
 """,
-                unsafe_allow_html=True,
-            )
+            unsafe_allow_html=True,
+        )
 
-    st.markdown(
-        "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
-        unsafe_allow_html=True,
-    )
+st.markdown(
+    "<br><center style='font-size:0.85rem;color:#94a3b8;'>LAERSKOOL MIDSTREAM COLLEGE PRIMARY Digital Hub 2026</center>",
+    unsafe_allow_html=True,
+)
