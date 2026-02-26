@@ -21,7 +21,7 @@ now_dt = datetime.now(TZ)
 today = now_dt.date()
 
 VIEW_OPTIONS = ["All", "Next 7 Days", "Term Documents", "Assessment Schedule", "Test Breakdown", "New Updates"]
-NEW_UPDATES_DEFAULT_HOURS = 72
+NEW_UPDATES_DEFAULT_HOURS = 36
 BADGE_ANIMATE_MINUTES = 10
 
 # =============================
