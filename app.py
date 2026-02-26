@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import requests, io, re, pytz, hashlib
-import html
 from datetime import datetime, timedelta
 from requests.exceptions import RequestException, Timeout
 
@@ -203,7 +202,6 @@ div[data-testid="stBaseButton-secondary"] > button{
   background:rgba(0,128,128,0.08);
   border:1px solid rgba(0,128,128,0.25);
   color:#0f172a;font-size:.95rem;line-height:1.35;
-  white-space:normal;
 }
 .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 .btn{
@@ -212,23 +210,21 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
-
-/* ✅ NEW badge: small + compact */
 .ribbon{
-  position:absolute; right:12px; top:12px;
-  background:#111827;
-  color:#ffffff;
+  position:absolute; right:12px; bottom:12px;
+  background:#FFD400;
+  color:#B00000;
   font-weight:1000;
-  font-size:.70rem;
-  padding:4px 8px;
+  font-size:.78rem;
+  padding:6px 10px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.18);
-  display:flex;align-items:center;gap:6px;
+  border:1px solid rgba(176,0,0,0.25);
   box-shadow:0 8px 16px rgba(0,0,0,0.10);
+  display:flex;align-items:center;gap:8px;
   z-index:5;
 }
-.rDot{width:7px;height:7px;border-radius:999px;background:#22c55e;animation:pulse 1.0s infinite;}
-@keyframes pulse{0%{transform:scale(1);opacity:.35;}50%{transform:scale(1.55);opacity:1;}100%{transform:scale(1);opacity:.35;}}
+.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
+@keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -250,7 +246,7 @@ st.markdown(
 # =============================
 # HELPERS
 # =============================
-URL_RE = re.compile(r"(https?://[^\s<>\"]+)", re.IGNORECASE)
+URL_RE = re.compile(r"(https?://[^\s\)\]\}<>\"']+)", re.IGNORECASE)
 
 def safe_txt(x) -> str:
     s = str(x or "")
@@ -264,22 +260,12 @@ def extract_urls(v: str):
     raw = str(v or "").strip()
     if not raw:
         return []
-    raw_unescaped = html.unescape(raw)
-    found = [u.strip() for u in URL_RE.findall(raw_unescaped) if u.strip()]
-
-    def clean(u: str) -> str:
-        u = u.strip()
-        u = u.rstrip(".,;:!?) ]}>\"'”’")
-        if u.endswith(")") and u.count("(") < u.count(")"):
-            u = u[:-1]
-        return u.strip()
-
+    urls = [u.strip() for u in URL_RE.findall(raw) if u.strip()]
     seen, out = set(), []
-    for u in found:
-        u2 = clean(u)
-        if u2 and u2 not in seen:
-            out.append(u2)
-            seen.add(u2)
+    for u in urls:
+        if u not in seen:
+            out.append(u)
+            seen.add(u)
     return out
 
 def urls_signature_part(v: str) -> str:
@@ -287,25 +273,13 @@ def urls_signature_part(v: str) -> str:
     return "|".join(links[:2])
 
 def split_info_text_and_links(info: str):
-    raw = str(info or "")
-    if not raw.strip():
+    raw = str(info or "").strip()
+    if not raw:
         return "", []
-    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
-    raw_unescaped = html.unescape(raw)
-    links = extract_urls(raw_unescaped)
-
-    text_unescaped = raw_unescaped
-    for u in links:
-        text_unescaped = re.sub(re.escape(u), "", text_unescaped)
-
-    lines = []
-    for line in text_unescaped.split("\n"):
-        ln = line.replace("\t", " ")
-        ln = re.sub(r"[ ]{2,}", " ", ln).strip(" -|")
-        if ln.strip():
-            lines.append(ln)
-
-    return "\n".join(lines).strip(), links
+    links = URL_RE.findall(raw)
+    text = URL_RE.sub("", raw)
+    text = re.sub(r"\s{2,}", " ", text).strip(" -\n\t|")
+    return text, links
 
 def norm_token(x: str) -> str:
     return str(x or "").lower().replace(" ", "").strip()
@@ -391,92 +365,23 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (✅ fixed for 27-28/02/2026 + normal formats)
+# DATE PARSING
 # =============================
-def parse_date_sa_single(s: str):
+def parse_date_sa(s):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
-    # Let pandas handle -, /, .
-    cleaned = re.sub(r"\s+", " ", raw.replace(".", "/")).strip()
-    dt = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
-    if not pd.isnull(dt):
-        return dt.to_pydatetime()
-    dt2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
-    if not pd.isnull(dt2):
-        return dt2.to_pydatetime()
+    cleaned = re.sub(r"\s+", " ", raw.replace(".", "/").replace("-", "/"))
+    d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
+    if not pd.isnull(d1): return d1.to_pydatetime()
+    d2 = pd.to_datetime(cleaned, dayfirst=False, errors="coerce")
+    if not pd.isnull(d2): return d2.to_pydatetime()
     return None
 
-def parse_date_range_sa(s: str):
-    """
-    Extracts dates even if extra text is inside the cell.
-    Supports:
-      - 27-28/02/2026
-      - 27/02/2026 - 28/02/2026
-      - 27/02/2026
-      - 27-02-2026
-      - 2026-02-27
-    Returns (start_dt, end_dt).
-    """
-    raw = str(s or "").strip()
-    if not raw or raw.lower() in ["nan", "none"]:
-        return (None, None)
-
-    txt = raw.replace("—", "–")
-    txt = re.sub(r"\s+", " ", txt).strip()
-
-    # ✅ 1) Special: 27-28/02/2026 (day range, same month/year)
-    # allow extra text before/after
-    m = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*(\d{4})", txt)
-    if m:
-        d1 = int(m.group(1))
-        d2 = int(m.group(2))
-        mm = int(m.group(3))
-        yy = int(m.group(4))
-        lo, hi = sorted([d1, d2])
-        try:
-            a = datetime(yy, mm, lo)
-            b = datetime(yy, mm, hi)
-            return (a, b)
-        except Exception:
-            pass
-
-    # ✅ 2) Full range: dd/mm/yyyy - dd/mm/yyyy (or with en-dash / "to")
-    m2 = re.search(
-        r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})\s*(?:\s-\s|–|—|\bto\b|\buntil\b|\btill\b|\btot\b)\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})",
-        txt,
-        flags=re.I
-    )
-    if m2:
-        a = parse_date_sa_single(m2.group(1))
-        b = parse_date_sa_single(m2.group(2))
-        if a and b:
-            if b < a:
-                a, b = b, a
-            return (a, b)
-
-    # ✅ 3) Single date: first date-looking token anywhere
-    m3 = re.search(r"(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})", txt)
-    if m3:
-        one = parse_date_sa_single(m3.group(1))
-        return (one, one) if one else (None, None)
-
-    # fallback: try whole string
-    one = parse_date_sa_single(txt)
-    return (one, one) if one else (None, None)
-
 def format_date_long_sa(s) -> str:
-    start_dt, end_dt = parse_date_range_sa(s)
-    if not start_dt:
-        # show whatever the teacher typed if we can't parse it
-        return str(s or "").strip()
-
-    if end_dt and end_dt.date() != start_dt.date():
-        if start_dt.year == end_dt.year and start_dt.month == end_dt.month:
-            return f"{start_dt.day}–{end_dt.day} {start_dt.strftime('%B %Y')}"
-        return f"{start_dt.day} {start_dt.strftime('%B %Y')} – {end_dt.day} {end_dt.strftime('%B %Y')}"
-
-    return f"{start_dt.day} {start_dt.strftime('%B %Y')}"
+    dt = parse_date_sa(s)
+    if not dt: return str(s or "").strip()
+    return f"{dt.day} {dt.strftime('%B %Y')}"
 
 def parse_form_timestamp(x):
     s = str(x or "").strip()
@@ -492,7 +397,7 @@ def parse_form_timestamp(x):
         return py
 
 # =============================
-# VENUE ✅ UPDATED (Bondev/Meerkat + Indoor/Outdoor Pool + Hub)
+# VENUE
 # =============================
 VENUE_MAP = {
     "musiekkamer": "Music Room",
@@ -500,74 +405,32 @@ VENUE_MAP = {
     "saal": "Hall",
     "ouditorium": "Auditorium",
     "veld": "Field",
+    "bondev": "Bondev Field",
     "swembad": "Swimming Pool",
     "tennis bane": "Tennis Courts",
     "netbal bane": "Netball Courts",
     "cricket oval": "Cricket Oval",
-
-    "bondev field": "Bondev Field",
-    "bondevveld": "Bondev Field",
-    "meerkat field": "Meerkat Field",
-    "meerkatveld": "Meerkat Field",
-
-    "indoor pool": "Indoor Pool",
-    "binne swembad": "Indoor Pool",
-    "outdoor pool": "Outdoor Pool",
-    "buite swembad": "Outdoor Pool",
-
-    "the hub": "The Hub",
-    "lmcp hub": "The Hub",
 }
 
 def normalize_venue(v: str) -> str:
     s = re.sub(r"\s+", " ", str(v or "").strip().replace("_", " "))
     sl = s.lower()
-
     if "see programme" in sl or "see program" in sl or "sien program" in sl or "sien programme" in sl:
         return "SEE_PROGRAMME"
-
-    if "hub" in sl:
-        return "The Hub"
-
-    if "astro" in sl:
-        if "bondev" in sl:
-            return "Bondev Astro"
-        if "meerkat" in sl:
-            return "Meerkat Astro"
-        return "Astro"
-
-    if "bondev field" in sl or "bondevveld" in sl:
-        return "Bondev Field"
-    if "meerkat field" in sl or "meerkatveld" in sl:
-        return "Meerkat Field"
-
-    if "indoor pool" in sl or "binne swembad" in sl:
-        return "Indoor Pool"
-    if "outdoor pool" in sl or "buite swembad" in sl:
-        return "Outdoor Pool"
-
     for k, vv in VENUE_MAP.items():
         if k in sl:
             return vv
-
     return s
 
 CAMPUS_VENUE_LABELS = {
-    "music room", "hall", "auditorium", "field",
-    "bondev field", "meerkat field",
-    "swimming pool", "indoor pool", "outdoor pool",
-    "tennis courts", "netball courts", "cricket oval",
-    "the hub",
-    "bondev astro", "meerkat astro", "astro",
+    "music room", "hall", "auditorium", "field", "bondev field", "swimming pool",
+    "tennis courts", "netball courts", "cricket oval"
 }
-
 CAMPUS_VENUE_KEYWORDS = [
     "midstream", "midstream college", "lmcp", "primary", "college",
-    "auditorium", "hall", "music room", "field", "bondev", "meerkat",
-    "pool", "swimming", "indoor", "outdoor",
-    "tennis", "netball", "cricket", "oval",
-    "court", "courts",
-    "hub", "astro",
+    "auditorium", "hall", "music room", "field", "bondev",
+    "pool", "swimming", "tennis", "netball", "cricket", "oval",
+    "court", "courts"
 ]
 
 def is_midstream_campus_venue(ven_norm: str) -> bool:
@@ -667,7 +530,10 @@ def build_title(cat_norm: str, act_val: str, team_val: str, grade_val: str) -> s
     if cat_norm == "academics":
         g_disp, g_list = group_for_row("academics", grade_val, team_val)
         if g_list:
-            g_disp = f"{g_list[0]}–{g_list[-1]}" if len(g_list) >= 2 else g_list[0]
+            if len(g_list) >= 2:
+                g_disp = f"{g_list[0]}–{g_list[-1]}"
+            else:
+                g_disp = g_list[0]
         if g_disp:
             return f"{base} ({g_disp})".strip()
     return base
@@ -781,8 +647,10 @@ if not sub_df.empty and "Timestamp" in sub_df.columns:
         created_dt = parse_form_timestamp(sub_ts.iloc[j])
         if not created_dt:
             continue
-        sig = row_signature(sub_cat.iloc[j], sub_act.iloc[j], sub_team.iloc[j],
-                            sub_date.iloc[j], sub_ven.iloc[j], sub_prog.iloc[j])
+        sig = row_signature(
+            sub_cat.iloc[j], sub_act.iloc[j], sub_team.iloc[j],
+            sub_date.iloc[j], sub_ven.iloc[j], sub_prog.iloc[j]
+        )
         prev = sig_to_created.get(sig)
         if (prev is None) or (created_dt > prev):
             sig_to_created[sig] = created_dt
@@ -861,6 +729,8 @@ selected_gr_norm = set()
 force_sport = False
 force_grades = False
 new_hours = NEW_UPDATES_DEFAULT_HOURS
+
+TARGET_GRADES_MATH = {"gr4", "gr5", "gr6", "gr7"}
 
 def clear_all_filters():
     st.session_state.cat_choice = []
@@ -941,7 +811,7 @@ def render_filters_main():
     })
 
     if (not wanted) or ("academics" in wanted) or ("culture" in wanted):
-        act_opts = sorted(set(act_opts) | {"Test Breakdown"})
+        act_opts = sorted(set(act_opts) | {"Mathematics", "Test Breakdown"})
 
     st.multiselect(
         "Activity/Subject",
@@ -1078,21 +948,17 @@ if st.session_state.screen_mode == "Events":
                 continue
 
         d_raw = str(date_s.iloc[i]).strip()
-        d_start, d_end = parse_date_range_sa(d_raw)
+        d_dt = parse_date_sa(d_raw)
 
-        # ✅ Past check: only skip if END of range is in the past
-        if d_end and d_end.date() < today:
+        if d_dt and d_dt.date() < today:
             continue
 
-        # ✅ Next 7 Days: range overlaps window
         if st.session_state.view_mode == "Next 7 Days":
-            if not d_start:
+            if not d_dt:
                 continue
-            window_end = today + timedelta(days=7)
-            if (d_end or d_start).date() < today or d_start.date() > window_end:
+            if d_dt.date() > (today + timedelta(days=7)):
                 continue
 
-        # Term docs logic (unchanged)
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
         term_val = str(term_s.iloc[i]).strip().lower()
         looks_like_term_doc = any(
@@ -1122,15 +988,7 @@ if st.session_state.screen_mode == "Events":
                 if not (selected_gr_norm & grp_norm):
                     continue
 
-        sig = hashlib.sha256("||".join([
-            normalize_category(cat_s.iloc[i]),
-            norm_token(act_s.iloc[i]),
-            norm_token(team_s.iloc[i]),
-            norm_token(date_s.iloc[i]),
-            norm_token(ven_s.iloc[i]),
-            norm_token(urls_signature_part(prog_s.iloc[i])),
-        ]).encode("utf-8")).hexdigest()
-
+        sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
         created_dt = sig_to_created.get(sig)
         is_recent = bool(created_dt and (window_start <= created_dt <= now_dt))
 
@@ -1145,7 +1003,7 @@ if st.session_state.screen_mode == "Events":
             if needle not in hay:
                 continue
 
-        sort_dt = d_start if d_start else datetime(2099, 1, 1)
+        sort_dt = d_dt if d_dt else datetime(2099, 1, 1)
         res.append({"i": i, "dt": sort_dt, "title": title.lower(), "new": is_recent, "created_dt": created_dt})
 
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
@@ -1166,6 +1024,7 @@ if st.session_state.screen_mode == "Events":
             date_line = format_date_long_sa(d_raw) if d_raw else ""
 
             _, grp_matches = group_for_row(cn, grade_s.iloc[i], team_s.iloc[i])
+
             ven_norm = normalize_venue(str(ven_s.iloc[i]).strip())
 
             prog_links = extract_urls(prog_s.iloc[i])
@@ -1181,8 +1040,9 @@ if st.session_state.screen_mode == "Events":
             buttons = []
             notes_parts = []
 
-            sig2 = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
-            contact_email = (sig_to_email.get(sig2, "") or "").strip()
+            # ✅ Mail label depends on category
+            sig = row_signature(cat_s.iloc[i], act_s.iloc[i], team_s.iloc[i], date_s.iloc[i], ven_s.iloc[i], prog_s.iloc[i])
+            contact_email = (sig_to_email.get(sig, "") or "").strip()
             contact_line = ""
             if contact_email and "@" in contact_email:
                 mail_label = "Mail Teacher" if cn == "academics" else "Mail Organiser"
@@ -1192,7 +1052,9 @@ if st.session_state.screen_mode == "Events":
                     f"{mail_label}</a></div>"
                 )
 
+            # ---------------- BUTTONS ----------------
             if cn == "academics":
+                # ✅ Test Breakdown: ONLY English + Afrikaans (from Information, fallback Programme)
                 if row_is_tb:
                     src_links = info_links if len(info_links) >= 1 else prog_links
                     if len(src_links) >= 1 and is_http(src_links[0]):
@@ -1200,6 +1062,7 @@ if st.session_state.screen_mode == "Events":
                     if len(src_links) >= 2 and is_http(src_links[1]):
                         buttons.append(("Afrikaans", src_links[1]))
                 else:
+                    # Assessment Schedule
                     if assess and len(prog_links) >= 1:
                         if is_http(prog_links[0]):
                             buttons.append(("English", prog_links[0]))
@@ -1240,6 +1103,7 @@ if st.session_state.screen_mode == "Events":
                     if is_http(lk) and ("forms.gle" in lk.lower() or "docs.google.com/forms" in lk.lower()):
                         buttons.append(("Confirm" if idx == 1 else f"Confirm {idx}", lk))
 
+            # Venue line
             venue_line = ""
             if ven_norm == "SEE_PROGRAMME":
                 notes_parts.append("<b>Venue:</b><br>See programme")
@@ -1253,7 +1117,7 @@ if st.session_state.screen_mode == "Events":
                 )
 
             if info_text:
-                notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text).replace('\\n','<br>')}")
+                notes_parts.append(f"<b>Note:</b><br>{safe_txt(info_text)}")
 
             notes_block = f"<div class='noteBlock'>{'<br><br>'.join(notes_parts)}</div>" if notes_parts else ""
 
@@ -1268,8 +1132,8 @@ if st.session_state.screen_mode == "Events":
                 created_dt = item.get("created_dt")
                 dot = "<span class='rDot'></span>"
                 if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                    dot = "<span style='width:7px;height:7px;border-radius:999px;background:#22c55e;display:inline-block;opacity:.95;'></span>"
-                ribbon = f"<div class='ribbon'>{dot}NEW</div>"
+                    dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
+                ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
             sport_age_line = ""
             grade_line = ""
