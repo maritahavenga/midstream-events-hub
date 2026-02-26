@@ -210,21 +210,20 @@ div[data-testid="stBaseButton-secondary"] > button{
   text-decoration:none;font-size:.90rem;
 }
 .btn:hover{opacity:.92;}
-/* Updated New Badge Styling */
-.new-badge{
-  display:inline-flex;
-  align-items:center;
+.ribbon{
+  position:absolute; right:12px; bottom:12px;
   background:#FFD400;
   color:#B00000;
   font-weight:1000;
-  font-size:.70rem;
-  padding:2px 8px;
+  font-size:.78rem;
+  padding:6px 10px;
   border-radius:999px;
   border:1px solid rgba(176,0,0,0.25);
-  margin-left: 8px;
-  vertical-align: middle;
+  box-shadow:0 8px 16px rgba(0,0,0,0.10);
+  display:flex;align-items:center;gap:8px;
+  z-index:5;
 }
-.rDot{width:6px;height:6px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;margin-right:4px;}
+.rDot{width:8px;height:8px;border-radius:999px;background:#B00000;animation:pulse 1.0s infinite;}
 @keyframes pulse{0%{transform:scale(1);opacity:.4;}50%{transform:scale(1.7);opacity:1;}100%{transform:scale(1);opacity:.4;}}
 </style>
 """,
@@ -251,7 +250,7 @@ URL_RE = re.compile(r"(https?://[^\s\)\]\}<>\"']+)", re.IGNORECASE)
 
 def safe_txt(x) -> str:
     s = str(x or "")
-    return s.replace("&", "&").replace("<", "<").replace(">", ">").strip()
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").strip()
 
 def is_http(u: str) -> bool:
     s = str(u or "").strip().lower()
@@ -366,20 +365,12 @@ def activity_filter_key(cat_norm: str, activity_raw: str) -> str:
     return display_activity(cat_norm, activity_raw)
 
 # =============================
-# DATE PARSING (Range Support)
+# DATE PARSING
 # =============================
 def parse_date_sa(s):
     raw = str(s or "").strip()
     if not raw or raw.lower() in ["nan", "none"]:
         return None
-    # Support "27-28/02/2026"
-    m_range = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})/(\d{1,2})/(\d{4})", raw)
-    if m_range:
-        # We return the first day for sorting/filtering purposes in the main loop
-        # But we will handle the range logic specifically for result generation
-        d1 = f"{m_range.group(1)}/{m_range.group(3)}/{m_range.group(4)}"
-        return pd.to_datetime(d1, dayfirst=True, errors="coerce").to_pydatetime()
-    
     cleaned = re.sub(r"\s+", " ", raw.replace(".", "/").replace("-", "/"))
     d1 = pd.to_datetime(cleaned, dayfirst=True, errors="coerce")
     if not pd.isnull(d1): return d1.to_pydatetime()
@@ -388,28 +379,9 @@ def parse_date_sa(s):
     return None
 
 def format_date_long_sa(s) -> str:
-    raw = str(s or "").strip()
-    # Check for Range: 27-28/02/2026
-    m_range = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})/(\d{1,2})/(\d{4})", raw)
-    if m_range:
-        day1, day2, month, year = m_range.groups()
-        dt1 = datetime(int(year), int(month), int(day1))
-        dt2 = datetime(int(year), int(month), int(day2))
-        return f"{dt1.day} {dt1.strftime('%B %Y')} and {dt2.day} {dt2.strftime('%B %Y')}"
-    
     dt = parse_date_sa(s)
-    if not dt: return raw
+    if not dt: return str(s or "").strip()
     return f"{dt.day} {dt.strftime('%B %Y')}"
-
-def get_row_dates(s):
-    """Returns a list of all datetime objects for a row (supporting ranges)."""
-    raw = str(s or "").strip()
-    m_range = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})/(\d{1,2})/(\d{4})", raw)
-    if m_range:
-        day1, day2, month, year = m_range.groups()
-        return [datetime(int(year), int(month), int(day1)), datetime(int(year), int(month), int(day2))]
-    dt = parse_date_sa(s)
-    return [dt] if dt else []
 
 def parse_form_timestamp(x):
     s = str(x or "").strip()
@@ -534,7 +506,7 @@ def strip_group_tokens(text: str) -> str:
     return re.sub(r"\s{2,}", " ", t).strip(" -–|,")
 
 def tidy_team_text(s: str) -> str:
-    t = str(s or "").strip().replace("&", "&")
+    t = str(s or "").strip().replace("&amp;", "&")
     if not t:
         return ""
     t = re.sub(r"\bU\s+(\d{1,2})\b", r"U\1", t, flags=re.I)
@@ -976,22 +948,15 @@ if st.session_state.screen_mode == "Events":
                 continue
 
         d_raw = str(date_s.iloc[i]).strip()
-        row_dates = get_row_dates(d_raw) # Supports Range
-        
-        # Filtering logic for ranges: Row stays if ANY date in range is >= today
-        if not row_dates:
-            d_dt = None
-        else:
-            # Check if any date in range is in the past
-            if all(d.date() < today for d in row_dates):
-                continue
-            d_dt = row_dates[0] # Primary sort date
+        d_dt = parse_date_sa(d_raw)
+
+        if d_dt and d_dt.date() < today:
+            continue
 
         if st.session_state.view_mode == "Next 7 Days":
-            if not row_dates:
+            if not d_dt:
                 continue
-            # If ANY date in the range falls within next 7 days
-            if not any(today <= d.date() <= (today + timedelta(days=7)) for d in row_dates):
+            if d_dt.date() > (today + timedelta(days=7)):
                 continue
 
         act_disp_for_term = display_activity(cn, act_s.iloc[i])
@@ -1044,7 +1009,7 @@ if st.session_state.screen_mode == "Events":
     res_sorted = sorted(res, key=lambda x: (x["dt"], x["title"]))
 
     st.markdown("## 📅 Events")
-    pin = "📍"
+    pin = "&#128205;"
 
     if not res_sorted:
         st.warning("No items match your filters. Try FILTER → Clear all filters.")
@@ -1162,14 +1127,13 @@ if st.session_state.screen_mode == "Events":
                     [f"<a class='btn' href='{u}' target='_blank'>{safe_txt(lbl)}</a>" for lbl, u in buttons[:4]]
                 ) + "</div>"
 
-            # NEW LOGIC: Inline Badge
-            new_tag = ""
+            ribbon = ""
             if item["new"]:
                 created_dt = item.get("created_dt")
-                dot_style = "rDot"
+                dot = "<span class='rDot'></span>"
                 if created_dt and (now_dt - created_dt) > timedelta(minutes=BADGE_ANIMATE_MINUTES):
-                    dot_style = "dot-static" # We define a static circle in HTML if needed or just use rDot
-                new_tag = f"<span class='new-badge'><span class='rDot'></span>NEW</span>"
+                    dot = "<span style='width:8px;height:8px;border-radius:999px;background:#B00000;display:inline-block;opacity:.9;'></span>"
+                ribbon = f"<div class='ribbon'>{dot}NEW UPDATE</div>"
 
             sport_age_line = ""
             grade_line = ""
@@ -1181,8 +1145,9 @@ if st.session_state.screen_mode == "Events":
             st.markdown(
                 f"""
 <div class="card">
+  {ribbon}
   <div class="card-title">{safe_txt(title)}</div>
-  <div class="meta">📅 <b>{safe_txt(date_line)}</b>{new_tag}</div>
+  {f"<div class='meta'>📅 <b>{safe_txt(date_line)}</b></div>" if date_line else ""}
   {contact_line}
   {sport_age_line}
   {grade_line}
